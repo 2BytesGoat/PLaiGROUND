@@ -1,6 +1,5 @@
 import argparse
 
-import cv2
 import numpy as np
 from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
@@ -59,31 +58,6 @@ def main():
 
         # EXECUTE THE ACTIONS INSIDE THE ENVIRONMENT
         obs, reward, done, info = env.step(actions)
-
-        width = info[0]["frame"]["width"]
-        height = info[0]["frame"]["height"]
-
-        import time
-        import json
-
-        stime = time.time()
-
-        # image_as_lst = image_as_str[1:-1].split(", ")[: width * height]
-        # image_as_lst = ["1"] * (width * height)
-
-        # np.array(image_as_str[1:-1].split(", "), dtype=np.uint8).reshape(800, 600, 3)
-        # np.array(json.loads(image_as_str)).reshape(800, 600, 3)
-
-        for i, image_as_str in enumerate(info):
-            image = np.fromstring(
-                image_as_str["frame"]["data"][1:-1], dtype=int, sep=", "
-            ).reshape(height, width, 3)
-            cv2.imwrite(f"test_{i}.png", image)
-
-        print(time.time() - stime)
-        # image = np.reshape(image_as_lst, (width, height))
-
-        # break
 
         # IF ANY OF THE AGENTS FINISHES OR TIME EXPIRES END THE LOOP
         if any(done):
