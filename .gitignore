@@ -1,0 +1,8 @@
+# Junk
+*.DS_Store
+
+.venv
+
+# ENV Files
+*.app
+*.command
