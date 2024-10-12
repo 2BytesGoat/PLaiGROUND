@@ -1,6 +1,5 @@
 import argparse
 
-import cv2
 import numpy as np
 from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
@@ -32,6 +31,16 @@ parser.add_argument(
 )
 
 
+def format_frame(frame):
+    return np.array(
+        [
+            [np.fromstring(row[1:-1], sep=",", dtype=int) for row in channel]
+            for channel in frame
+        ],
+        dtype=int,
+    )
+
+
 def main():
     args, extras = parser.parse_known_args()
 
@@ -59,15 +68,6 @@ def main():
 
         # EXECUTE THE ACTIONS INSIDE THE ENVIRONMENT
         obs, reward, done, info = env.step(actions)
-
-        width = info[0]["frame"]["width"]
-        height = info[0]["frame"]["height"]
-
-        for i, image_as_str in enumerate(info):
-            image = np.fromstring(
-                image_as_str["frame"]["data"][1:-1], dtype=int, sep=", "
-            ).reshape(height, width, 4)
-            cv2.imwrite(f"test_{i}.png", image)
 
         # IF ANY OF THE AGENTS FINISHES OR TIME EXPIRES END THE LOOP
         if any(done):
