@@ -5,3 +5,5 @@
 - [ ] make a basic if / else AI 
 - [ ] update readme / docs to show how to setup everything
 - [ ] find a place to store the environment at
+- [ ] update godot library to support input configurations
+- [ ] commit library changes to git
