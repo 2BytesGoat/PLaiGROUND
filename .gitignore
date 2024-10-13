@@ -1,8 +1,9 @@
 # Junk
 *.DS_Store
 
+# Python stuff
 .venv
 
 # ENV Files
-*.app
-*.command
+environments/*
+!.gitkeep
