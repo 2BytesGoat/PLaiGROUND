@@ -47,7 +47,7 @@ pip install -r requirements.txt
 
 ## Running the project
 
-You'll need to download the environment files that correspond to your Operating System [from here](https://github.com/2BytesGoat/ENV-DragonJump/actions/runs/11308886001). Those files could be placed inside the `./environments` after unpacking them.
+You'll need to download the environment files that correspond to your Operating System [from here](https://github.com/2BytesGoat/ENV-DragonJump/releases). Those files could be placed inside the `./environments` after unpacking them.
 
 To check that everything works as expected run the following command, after you **activated your virtual environment**.
 
