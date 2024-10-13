@@ -3,6 +3,9 @@
 PLaiGROUND (name may change) is a repository for learning Machine Learning by training Game AIs. 
 
 ## Table of Contents
+
+Here are some nifty links to navigate this huge README file
+
 - [Setup the project](#setup) - What you need to do after you just clonned the repo
 - [Running the project](#running-the-project) - How to start your first random agent
 - [What's to come](#whats-to-come) - A short ToDo for people to know that's comming
@@ -61,9 +64,9 @@ The game will automatically stop after the Agent has done 1000 steps. In case yo
 ## What's to come:
 
 - [x] ~~find a place to store the environment files at~~
-- [ ] add a link to download the env files from
+- [x] ~~add a link to download the env files from~~
 - [ ] update godot library to support input configurations
-- [ ] commit library changes to git
+- [ ] do a PR for godot library changes on official library git
 
 ## The GOATs
 
