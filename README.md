@@ -2,7 +2,7 @@
 
 PLaiGROUND (name may change) is a repository for learning Machine Learning by training Game AIs. 
 
-## Table of Contents
+## 🍽️ Table of Contents
 
 Here are some nifty links to navigate this huge README file
 
@@ -12,7 +12,7 @@ Here are some nifty links to navigate this huge README file
 - [The GOATs](#the-goats) - A shoutout to all the people that helped along the way
 - [Contact](#contact) - In case you have any issues or just want to chat
 
-## Setup the project
+## 👷 Setup the project
 ### 0. Install Python
 This project uses **[Python 3.11](https://www.python.org/downloads/release/python-31110/)**. You can try a older verion of Python, but you may have compatibility issues.
 
@@ -48,27 +48,46 @@ The project has several dependencies that were stored inside the `requirements.t
 pip install -r requirements.txt
 ```
 
-## Running the project
+## 🏃‍➡️ Running the project
 
+### 1. Downloading the executable
 You'll need to download the environment files that correspond to your Operating System [from here](https://github.com/2BytesGoat/ENV-DragonJump/releases). Those files could be placed inside the `./environments` after unpacking them.
 
+
+### 2. Running the random agent script
 To check that everything works as expected run the following command, after you **activated your virtual environment**.
 
 ```
 # Start random agent
-python 00_random_agent.py --env_path ./environments/DragonJump/ENV-DragonJump
+python 00_random_agent.py --env_path ./environments/ENV-DragonJump
 ```
 
 The game will automatically stop after the Agent has done 1000 steps. In case you want to continue after the Agent is done, checkout the code and reset the environment.
 
-## What's to come:
+### 3. Troubleshooting
+
+**Corrupted application on MacOS** - the application was not signed during the build process because I didn't want to pay 99$ to apple. Because of that the OS will say that the application is corrupted. To fix this, you'll need to run the followin commands:
+
+```
+# Navigate to the location of you .app file
+cd ./environments/
+
+# Add a certificate to the app
+xattr -c ENV-DragonJump.app
+
+# Go back to the root of the project
+cd ../
+```
+After that the application should run smoothly.
+
+## 📋 What's to come:
 
 - [x] ~~find a place to store the environment files at~~
 - [x] ~~add a link to download the env files from~~
 - [ ] update godot library to support input configurations
 - [ ] do a PR for godot library changes on official library git
 
-## The GOATs
+## 🐐 The GOATs
 
 This repo is basically a amalgamation of information I gathered from multiple smart and passionate people. Without them making their work publicly available for free, this repo wouldn't exist.
 
@@ -78,7 +97,7 @@ This repo is basically a amalgamation of information I gathered from multiple sm
 
 And for this, I thank you from the bottom of my heart 🙇‍♂️
 
-## Contact
+## 🤙 Contact
 
 For questions regarding this repo and environments 
 * 2BytesGoat - [Discord](https://discord.gg/FsKQPupcVs)
