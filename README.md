@@ -6,11 +6,11 @@ PLaiGROUND (name may change) is a repository for learning Machine Learning by tr
 
 Here are some nifty links to navigate this huge README file
 
-- [Setup the project](#setup) - What you need to do after you just cloned the repo
-- [Running the project](#running-the-project) - How to start your first random agent
-- [What's to come](#whats-to-come) - A short ToDo for people to know that's coming
-- [The GOATs](#the-goats) - A shout out to all the people that helped along the way
-- [Contact](#contact) - In case you have any issues or just want to chat
+- [Setup the project](#-setup-the-project) - What you need to do after you just cloned the repo
+- [Running the project](#️-running-the-project) - How to start your first random agent
+- [What's to come](#-whats-to-come) - A short ToDo for people to know that's coming
+- [The GOATs](#-the-goats) - A shout out to all the people that helped along the way
+- [Contact](#-contact) - In case you have any issues or just want to chat
 
 ## 👷 Setup the project
 ### 0. Install Python
