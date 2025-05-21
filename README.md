@@ -14,6 +14,8 @@ Here are some nifty links to navigate this huge README file
 - 🤙 [Contact](#-contact) - In case you have any issues or just want to chat
 
 
+Choose either of these two ways of setting up your environment. No need to do both Docker and Local setup.
+
 ## 🐋 Docker Setup
 ### 0. Download and Install Docker
 Docker is a application that's used to make sure you don't have OS compatibility issues when setting up environments. You can download [Docker Desktop](https://www.docker.com/) from their official website.
@@ -28,7 +30,7 @@ Think of a Docker image like a installation kit that you'll need to setup the pr
 ### 2. Creating a Docker Container
 Once the image is created, we'll want to create a container where the code will run.
 ```shell
-docker run -P -v $(pwd):/app jupyter-env
+docker run -p 8888:8888 -p 11008:11008 -v $(pwd):/app jupyter-env
 ```
 
 ### 3. Check Setup
@@ -52,6 +54,25 @@ python3 -m pip install venv
 # Create a virtual environment inside the current folder
 python3 -m venv .venv
 ```
+
+### ⚠️ Troubleshooting
+
+**On Windows** - Can't install the numpy library because of of missing compilers.
+
+Go to the official Visual Studio download page: 
+👉 https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+Install the Build Tools
+* Launch the installer.
+* Select:
+    * "C++ build tools"
+* In the right panel, make sure the following are selected:
+    * MSVC v14.x (latest version)
+    * Windows 10/11 SDK
+    * CMake tools for Windows
+    * C++ CMake tools for Windows
+
+
 
 ### 2. Activate the virtual environment
 
