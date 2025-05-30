@@ -17,11 +17,11 @@ Here are some nifty links to navigate this huge README file
 Choose either of these two ways of setting up your environment. No need to do both Docker and Local setup.
 
 ## 🐋 Docker Setup
-### 0. Download and Install Docker
-Docker is a application that's used to make sure you don't have OS compatibility issues when setting up environments. You can download [Docker Desktop](https://www.docker.com/) from their official website.
+### 1. Download and Install Docker
+Docker is an application that's used to make sure you don't have OS compatibility issues when setting up environments. You can download [Docker Desktop](https://www.docker.com/) from their official website.
 
-### 1. Creating a Docker Image
-Once Docker is installed, you can use our Docker script that's going to run all the commands for you:
+### 2. Creating a Docker Image
+Once Docker is installed, you can use our Docker script that will run all the commands for you:
 ```
 # make the script executable
 chmod +x run_docker.sh
@@ -30,18 +30,26 @@ chmod +x run_docker.sh
 ./run_docker.sh
 ```
 
-### 3. Check Setup
-If everything went well, you should be able to access the plAIground by navigating to
+After running this script, Docker will:
+1. Build a Docker image with all necessary dependencies
+2. Start a container with Jupyter Lab running inside it
+3. Map port 8888 on your machine to the container's Jupyter server
+
+The container will continue running until you stop it with Ctrl+C in the terminal where you ran the script.
+
+### 3. Access Jupyter Lab
+If everything went well, you should be able to access the plAIground by navigating to:
 ```
 http://127.0.0.1:8888/lab?token=plaiground
 ```
 
+Here you can browse the notebooks, run code, and interact with the game environments.
 
 ## 👷 Local Setup
-### 0. Download and Install Python
+### 1. Download and Install Python
 This project uses **[Python 3.13](https://www.python.org/downloads/release/python-3131/)**. You can try an older version of Python, but you may have compatibility issues.
 
-### 1. Create a virtual environment 
+### 2. Create a virtual environment 
 
 By default Python will install a project's dependencies (requirements) globally. This may cause compatibility issues if you have multiple Python projects on your PC. In order to avoid this, you will need to use a virtual environment that will store a project's dependencies separately.
 ```
@@ -70,7 +78,7 @@ Install the Build Tools
     * C++ CMake tools for Windows
 
 
-### 2. Activate the virtual environment
+### 3. Activate the virtual environment
 
 Depending on your operating system, you will need to run a specific command to step into the virtual environment.
 ```
@@ -82,7 +90,7 @@ source ./.venv/bin/activate
 ```
 You'll know the command worked if the command line you'll see `(.venv)` at the beginning of the line.
 
-### 3. Install dependencies
+### 4. Install dependencies
 
 The project has several dependencies that were stored inside the `requirements.txt` file which are needed to run the code.
 
@@ -95,19 +103,20 @@ pip install --no-cache-dir -r requirements.txt
 
 ### 1. Downloading the game
 Go to Steam and request access to the Open Playtest here:
-* 👉 [Dragon Jump](https://store.steampowered.com/app/2471710/Dragon_Jump/) - One-button input precission platformer - similar to SuperMeatBoy
+* 👉 [Dragon Jump](https://store.steampowered.com/app/2471710/Dragon_Jump/) - One-button input precision platformer - similar to SuperMeatBoy
 
-Once you've donwnloaded the game, you'll need to boot it up and open the developer console using the `~` (tilda) key and type in the following command.
+Once you've downloaded the game, you'll need to boot it up and open the developer console using the `~` (tilda) key and type in the following command:
 ```
 learning on
 ```
-That will activate the AI Settings menu within the game when you select a level.
+
+This command enables the AI interface in the game, which allows external programs (like our agents) to control the game character. The AI Settings menu will appear whenever you select a level, allowing you to configure how the AI interacts with the game and monitor its performance.
 
 ### 2. Running the random agent script
 A random agent is the most basic form of AI. 
 
 #### 2.1. 🐋 With Docker
-You'll need to open the jupyter notebook that contains the basic logic for an AI that takes random actions.
+You'll need to open the jupyter notebook that contains the basic logic for an AI that takes random actions:
 ```
 http://127.0.0.1:8888/lab/tree/notebooks/00_random_agent.ipynb
 ```
@@ -115,25 +124,28 @@ You can run individual code snippets by pressing `SHIFT + ENTER`
 
 #### 2.2. 👷‍♂️ With Local Setup
 
+There are two ways to run the agent locally. Both methods achieve the same result - running an AI agent that takes random actions in the game:
+
 #### **Method 1**
-Once you activated the virtual environment, you'll need to run the script that starts the AI that takes random actions.
+With this method, you need to have the game running with the AI interface enabled (using the `learning on` command). The agent will connect to the running game.
+
 ```
 python scripts/00_random_agent.py
 ```
 
 #### **Method 2**
-Alternatively, when running locally you can pass the path to the game directory, without needing to start the game beforehand.
+This method launches the game automatically from your script. You don't need to have the game running beforehand, but you do need to provide the path to the game directory:
+
 ```
 python scripts/00_random_agent.py --env_path game_directory --env_name DragonJump
 ```
-You can find out your game_directory by using the `~` (tilda) inside the game and typing `path`
 
-
+You can find out your game_directory by opening the game, using the `~` (tilda) key to open the console, and typing `path`.
 
 ## 📋 What's to come:
 
 - [ ] add notebook for how to build an If-Else agent
-- [ ] add notebook for how to build a Decission Tree
+- [ ] add notebook for how to build a Decision Tree
 
 ## 🐐 The GOATs
 
