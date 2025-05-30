@@ -1,8 +1,12 @@
 # Junk
 *.DS_Store
+.vscode
 
 # Python stuff
 .venv
+__pycache__
+.ipynb_checkpoints
+.Trash*
 
 # ENV Files
 environments/*

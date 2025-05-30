@@ -21,16 +21,13 @@ Choose either of these two ways of setting up your environment. No need to do bo
 Docker is a application that's used to make sure you don't have OS compatibility issues when setting up environments. You can download [Docker Desktop](https://www.docker.com/) from their official website.
 
 ### 1. Creating a Docker Image
-Once Docker is installed, you'll want to create a Docker image for this project.
-```shell
-docker build --no-cache -t jupyter-env .
+Once Docker is installed, you can use our Docker script that's going to run all the commands for you:
 ```
-Think of a Docker image like a installation kit that you'll need to setup the project.
+# make the script executable
+chmod +x run_docker.sh
 
-### 2. Creating a Docker Container
-Once the image is created, we'll want to create a container where the code will run.
-```shell
-docker run -p 8888:8888 -p 11008:11008 -v $(pwd):/app jupyter-env
+# run the script that does the docker setup for you
+./run_docker.sh
 ```
 
 ### 3. Check Setup
@@ -71,7 +68,6 @@ Install the Build Tools
     * Windows 10/11 SDK
     * CMake tools for Windows
     * C++ CMake tools for Windows
-
 
 
 ### 2. Activate the virtual environment
@@ -118,10 +114,20 @@ http://127.0.0.1:8888/lab/tree/notebooks/00_random_agent.ipynb
 You can run individual code snippets by pressing `SHIFT + ENTER`
 
 #### 2.2. 👷‍♂️ With Local Setup
+
+#### **Method 1**
 Once you activated the virtual environment, you'll need to run the script that starts the AI that takes random actions.
 ```
 python scripts/00_random_agent.py
 ```
+
+#### **Method 2**
+Alternatively, when running locally you can pass the path to the game directory, without needing to start the game beforehand.
+```
+python scripts/00_random_agent.py --env_path game_directory --env_name DragonJump
+```
+You can find out your game_directory by using the `~` (tilda) inside the game and typing `path`
+
 
 
 ## 📋 What's to come:

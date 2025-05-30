@@ -28,8 +28,4 @@ EXPOSE 8888
 ENV JUPYTER_ENABLE_LAB=yes
 ENV JUPYTER_TOKEN=plaiground
 
-# Declare volume for mounting the current directory
-VOLUME ["/app"]
-
-# Start Jupyter notebook server
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
