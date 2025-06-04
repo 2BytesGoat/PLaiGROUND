@@ -1,7 +1,8 @@
+import os
 import argparse
 
-import os
 import numpy as np
+
 from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
 
@@ -32,7 +33,7 @@ parser.add_argument(
 
 
 def main():
-    args, extras = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     env_path = os.path.join(args.env_path, args.env_name)
 

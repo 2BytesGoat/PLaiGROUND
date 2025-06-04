@@ -11,3 +11,7 @@ __pycache__
 # ENV Files
 environments/*
 !.gitkeep
+
+# Data
+data/*
+!data/sample_recording.json
