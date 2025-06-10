@@ -35,7 +35,9 @@ parser.add_argument(
 def main():
     args, _ = parser.parse_known_args()
 
-    env_path = os.path.join(args.env_path, args.env_name)
+    env_path = None
+    if args.env_path:
+        env_path = os.path.join(args.env_path, args.env_name)
 
     env = StableBaselinesGodotEnv(
         env_path=env_path,
@@ -43,6 +45,7 @@ def main():
         seed=args.seed,
         speedup=args.speedup,
         nb_agents=args.nb_agents,
+        host_binding=True
     )
 
     # GET THE INITIAL STATE OF THE GAME
