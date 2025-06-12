@@ -29,6 +29,9 @@ parser.add_argument(
 parser.add_argument(
     "--speedup", default=1, type=int, help="Whether to speed up the physics in the env"
 )
+parser.add_argument(
+    "--level", default="1-1", type=str, help="The level to play"
+)
 
 
 def if_else_agent(observation, step_number):
@@ -66,7 +69,7 @@ def main():
         seed=args.seed,
         speedup=args.speedup,
         nb_agents=args.nb_agents,
-        host_binding=True
+        level=args.level
     )
 
     # GET THE INITIAL STATE OF THE GAME

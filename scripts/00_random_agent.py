@@ -22,13 +22,16 @@ parser.add_argument(
 parser.add_argument("--seed", type=int, default=42, help="seed of the experiment")
 parser.add_argument(
     "--nb_agents",
-    default=10,
+    default=1,
     type=int,
     help="How many agents to launch in the environment. "
     "Requires --nb_agents to be set if > 1.",
 )
 parser.add_argument(
     "--speedup", default=1, type=int, help="Whether to speed up the physics in the env"
+)
+parser.add_argument(
+    "--level", default="1-1", type=str, help="The level to play"
 )
 
 
@@ -45,7 +48,7 @@ def main():
         seed=args.seed,
         speedup=args.speedup,
         nb_agents=args.nb_agents,
-        host_binding=True
+        level=args.level
     )
 
     # GET THE INITIAL STATE OF THE GAME
