@@ -47,7 +47,7 @@ def if_else_agent(observation, step_number):
 
         forward_sensor = sensors[8]
 
-        if forward_sensor > 0.7:
+        if forward_sensor > 0.8:
             action = 1
 
     return np.array([action])
