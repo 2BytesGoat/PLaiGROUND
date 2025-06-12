@@ -31,7 +31,7 @@ parser.add_argument(
 )
 
 
-def if_else_agent(sensors, step_number):
+def if_else_agent(observation, step_number):
     action = 0
     
     # JUMP FOR FIRST 3 STEPS TO START THE GAME
@@ -39,8 +39,17 @@ def if_else_agent(sensors, step_number):
         action = step_number % 2
 
     # JUMP IF YOU ARE CLOSER THAN 1.2 UNITS TO A WALL
-    elif sensors[8] + sensors[9] > 1:
-        action = 1
+    else:
+        # split the observation into the different components
+        distance, goal_x, goal_y, velocity_x, velocity_y = observation[:5]
+        sensors = observation[5:37]
+        sensors_collision = observation[37:]
+
+        forward_sensor = sensors[8]
+
+        if forward_sensor > 0.7:
+            action = 1
+
     return np.array([action])
 
 
