@@ -28,9 +28,6 @@ def describe_observation(observation):
 def is_object_near(observation: list[float], previous_observation: list[float], object_type: str, direction: str, threshold: float, **args) -> bool:
     """Checks if there is a wall in the given direction within a distance threshold."""
     description = describe_observation(observation)
-    # print(direction)
-    # print(description["sensors"][direction]["distance"], threshold)
-    # print(description["sensors"][direction]["object_type"], object_type)
     distance = description["sensors"][direction]["distance"]
     is_close = distance >= threshold
     is_same_type = description["sensors"][direction]["object_type"] == object_type
@@ -39,9 +36,6 @@ def is_object_near(observation: list[float], previous_observation: list[float], 
 def is_object_far(observation: list[float], previous_observation: list[float], object_type: str, direction: str, threshold: float, **args) -> bool:
     """Checks if there is no wall in the given direction within a distance threshold."""
     description = describe_observation(observation)
-    print(direction)
-    print(description["sensors"][direction]["distance"], threshold)
-    print(description["sensors"][direction]["object_type"], object_type)
     distance = description["sensors"][direction]["distance"]
     is_far = distance <= threshold
     is_same_type = description["sensors"][direction]["object_type"] == object_type
@@ -64,6 +58,4 @@ def changed_direction(observation: list[float], previous_observation: list[float
     
     previous_description = describe_observation(previous_observation)
     description = describe_observation(observation)
-    print("CHECK DIRECTION CHANGE")
-    print(previous_description["velocity_vector"][0], description["velocity_vector"][0])
     return sign(previous_description["velocity_vector"][0]) != sign(description["velocity_vector"][0])

@@ -38,18 +38,49 @@ class Agent:
         return np.array([self.action])
         
     
-    def wait_until(self, observation: list[float], condition_name: str, *args):
-        condition = CONDITIONS[condition_name]
+    def evaluate_condition(self, observation: list[float], previous_observation: list[float], condition_spec):
+        """
+        Evaluate a single condition or a compound condition with logical operators.
+        """
+        if "operator" in condition_spec:
+            # Handle compound conditions with logical operators
+            operator = condition_spec["operator"].upper()
+            conditions = condition_spec["conditions"]
+            
+            if operator == "AND":
+                return all(self.evaluate_condition(observation, previous_observation, cond) for cond in conditions)
+            elif operator == "OR":
+                return any(self.evaluate_condition(observation, previous_observation, cond) for cond in conditions)
+            else:
+                raise ValueError(f"Unknown logical operator: {operator}")
+        else:
+            # Handle simple condition
+            condition_name = condition_spec["condition"]
+            condition_arguments = condition_spec.get("args", [])
+            condition_func = CONDITIONS[condition_name]
+            return condition_func(observation, previous_observation, *condition_arguments)
+
+    
+    def wait_until(self, observation: list[float], condition_spec):
+        """
+        Wait until a condition (simple or compound) is met.
+        """
         previous_observation = None if not self.observation_history else self.observation_history[-1]
-        if condition(observation, previous_observation, *args):
+        
+        # Handle legacy format for backward compatibility
+        if isinstance(condition_spec, str):
+            condition_spec = {"condition": condition_spec}
+        
+        if self.evaluate_condition(observation, previous_observation, condition_spec):
             self.current_step_index += 1
 
 
     def update_action(self, action_name: str):
+        """
+        Update the action that must be taken
+        """
         if action_name not in ACTIONS:
             raise ValueError(f"Unknown action: {action_name}")
-        
-        print(action_name)
         
         match action_name:
             case 'jump':
@@ -67,10 +98,8 @@ class Agent:
         step = self.plan[self.current_step_index]
 
         if 'wait_until' in step:
-            cond = step['wait_until']
-            condition_name = cond['condition']
-            condition_arguments = cond.get('args', [])
-            self.wait_until(observation, condition_name, *condition_arguments)
+            condition_spec = step['wait_until']
+            self.wait_until(observation, condition_spec)
         elif 'action' in step:
             self.update_action(step['action'])
             self.traceback_cutoff = len(self.observation_history)
