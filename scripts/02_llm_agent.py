@@ -50,7 +50,8 @@ def main():
         speedup=args.speedup,
         nb_agents=args.nb_agents,
         level=args.level,
-        action_repeat=5,
+        action_repeat=3, # the number of times an action is repeated
+        max_steps=1000,
     )
 
     # GET THE INITIAL STATE OF THE GAME
@@ -60,21 +61,13 @@ def main():
 
     # GET NUMBER OF CONCURENT AGENTS IN ONE ENVIRONMENT
     nb_agents = len(obs["obs"])
+    nb_steps = 255
 
     with open('scripts/llm_agent/agent_plan.yml', 'r') as f:
         plan = yaml.safe_load(f)["plan"]
     llm_agent = Agent(plan)
     
-    step_number = 0
-    while True:
-        # JUMP FOR FIRST 3 STEPS TO START THE GAME
-        if step_number < 3:
-            action = int(step_number % 2)
-            actions = np.array([[action]] * nb_agents, dtype=np.int64)
-            env.step(actions)
-            step_number += 1
-            continue
-
+    for i in range(nb_steps):
         # TAKE AN ACTION FOR EACH AGENT
         actions = [llm_agent.act(obs["obs"][i], reward, done) for i in range(nb_agents)]
         
@@ -83,11 +76,14 @@ def main():
 
         # EXECUTE THE ACTIONS INSIDE THE ENVIRONMENT
         obs, reward, done, info = env.step(actions)
-        step_number += 1
 
         # IF ANY OF THE AGENTS FINISHES OR TIME EXPIRES END THE LOOP
         if any(done):
             break
+    
+    if not done:
+        report = llm_agent.generate_report()
+        print(report)
 
     env.close()
 

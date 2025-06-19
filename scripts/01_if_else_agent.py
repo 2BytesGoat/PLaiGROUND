@@ -34,24 +34,18 @@ parser.add_argument(
 )
 
 
-def if_else_agent(observation, step_number):
+def if_else_agent(observation):
     action = 0
-    
-    # JUMP FOR FIRST 3 STEPS TO START THE GAME
-    if step_number < 3:
-        action = step_number % 2
 
-    # JUMP IF YOU ARE CLOSER THAN 1.2 UNITS TO A WALL
-    else:
-        # split the observation into the different components
-        distance, goal_x, goal_y, velocity_x, velocity_y = observation[:5]
-        sensors = observation[5:37]
-        sensors_collision = observation[37:]
+    # split the observation into the different components
+    distance, goal_x, goal_y, velocity_x, velocity_y = observation[:5]
+    sensors = observation[5:37]
+    sensors_collision = observation[37:]
 
-        forward_sensor = sensors[8]
+    forward_sensor = sensors[8]
 
-        if forward_sensor > 0.8:
-            action = 1
+    if forward_sensor > 0.8:
+        action = 1
 
     return np.array([action])
 
@@ -78,10 +72,9 @@ def main():
     # GET NUMBER OF CONCURENT AGENTS IN ONE ENVIRONMENT
     nb_agents = len(obs["obs"])
     
-    step_number = 0
     while True:
         # TAKE AN ACTION FOR EACH AGENT
-        actions = [if_else_agent(obs["obs"][i], step_number) for i in range(nb_agents)]
+        actions = [if_else_agent(obs["obs"][i]) for i in range(nb_agents)]
         
         # FORMAT THE ACTIONS AS A NUMPY ARRAY
         actions = np.array(actions, dtype=np.int64)
@@ -92,8 +85,6 @@ def main():
         # IF ANY OF THE AGENTS FINISHES OR TIME EXPIRES END THE LOOP
         if any(done):
             break
-
-        step_number += 1
 
     env.close()
 
