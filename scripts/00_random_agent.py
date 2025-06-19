@@ -9,7 +9,7 @@ from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 parser = argparse.ArgumentParser(allow_abbrev=False)
 parser.add_argument(
     "--env_path",
-    default=None,
+    default="/Users/gianistatie/Library/Application Support/Steam/steamapps/common/Dragon Jump Playtest",
     type=str,
     help="The path to the Godot game directory (get this by typing 'path' in the game's developer console)",
 )

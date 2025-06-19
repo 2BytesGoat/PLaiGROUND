@@ -1,0 +1,5 @@
+plan:
+  - wait_until: 
+      condition: is_object_near
+      args: [WALL, RIGHT, 0.8]
+  - action: jump

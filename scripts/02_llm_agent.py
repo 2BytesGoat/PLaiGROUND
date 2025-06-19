@@ -1,14 +1,16 @@
 import os
 import argparse
+import yaml
 
 import numpy as np
 from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
+from llm_agent.agent import Agent
 
 parser = argparse.ArgumentParser(allow_abbrev=False)
 parser.add_argument(
     "--env_path",
-    default=None,
+    default="/Users/gianistatie/Library/Application Support/Steam/steamapps/common/Dragon Jump Playtest",
     type=str,
     help="The path to the Godot game directory (get this by typing 'path' in the game's developer console)",
 )
@@ -21,7 +23,7 @@ parser.add_argument(
 parser.add_argument("--seed", type=int, default=42, help="seed of the experiment")
 parser.add_argument(
     "--nb_agents",
-    default=10,
+    default=1,
     type=int,
     help="How many agents to launch in the environment. "
     "Requires --nb_agents to be set if > 1.",
@@ -32,28 +34,6 @@ parser.add_argument(
 parser.add_argument(
     "--level", default="1-1", type=str, help="The level to play"
 )
-
-
-def if_else_agent(observation, step_number):
-    action = 0
-    
-    # JUMP FOR FIRST 3 STEPS TO START THE GAME
-    if step_number < 3:
-        action = step_number % 2
-
-    # JUMP IF YOU ARE CLOSER THAN 1.2 UNITS TO A WALL
-    else:
-        # split the observation into the different components
-        distance, goal_x, goal_y, velocity_x, velocity_y = observation[:5]
-        sensors = observation[5:37]
-        sensors_collision = observation[37:]
-
-        forward_sensor = sensors[8]
-
-        if forward_sensor > 0.8:
-            action = 1
-
-    return np.array([action])
 
 
 def main():
@@ -69,31 +49,45 @@ def main():
         seed=args.seed,
         speedup=args.speedup,
         nb_agents=args.nb_agents,
-        level=args.level
+        level=args.level,
+        action_repeat=5,
     )
 
     # GET THE INITIAL STATE OF THE GAME
     obs = env.reset()
+    reward = 0
+    done = False
 
     # GET NUMBER OF CONCURENT AGENTS IN ONE ENVIRONMENT
     nb_agents = len(obs["obs"])
+
+    with open('scripts/llm_agent/agent_plan.yml', 'r') as f:
+        plan = yaml.safe_load(f)["plan"]
+    llm_agent = Agent(plan)
     
     step_number = 0
     while True:
+        # JUMP FOR FIRST 3 STEPS TO START THE GAME
+        if step_number < 3:
+            action = int(step_number % 2)
+            actions = np.array([[action]] * nb_agents, dtype=np.int64)
+            env.step(actions)
+            step_number += 1
+            continue
+
         # TAKE AN ACTION FOR EACH AGENT
-        actions = [if_else_agent(obs["obs"][i], step_number) for i in range(nb_agents)]
+        actions = [llm_agent.act(obs["obs"][i], reward, done) for i in range(nb_agents)]
         
         # FORMAT THE ACTIONS AS A NUMPY ARRAY
         actions = np.array(actions, dtype=np.int64)
 
         # EXECUTE THE ACTIONS INSIDE THE ENVIRONMENT
         obs, reward, done, info = env.step(actions)
+        step_number += 1
 
         # IF ANY OF THE AGENTS FINISHES OR TIME EXPIRES END THE LOOP
         if any(done):
             break
-
-        step_number += 1
 
     env.close()
 
