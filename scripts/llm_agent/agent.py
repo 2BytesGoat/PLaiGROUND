@@ -24,9 +24,6 @@ class Agent:
         self.action = 0 # 0: do nothing, 1: jump
         self.current_step_index = 0
 
-        # variables used to generate the report
-        self.traceback_cutoff = 0
-
 
     def act(self, observation: list[float], reward: float, done: bool) -> int:
         if done:
@@ -102,21 +99,14 @@ class Agent:
             self.wait_until(observation, condition_spec)
         elif 'action' in step:
             self.update_action(step['action'])
-            self.traceback_cutoff = len(self.observation_history)
         else:
             raise ValueError(f"Unknown step format: {step}")
-        
     
     def generate_report(self):
-        valid_step_index = max(0, self.current_step_index - 1)
-        step = self.plan[valid_step_index]
-        formatted_observation_history = [
-            describe_observation(observation) 
-            for observation in self.observation_history[self.traceback_cutoff:self.traceback_cutoff+5]
-        ]
-        report = {
-            'traceback': formatted_observation_history,
-            'last_step': step,
+        traceback_cutoff = max(0, self.current_step_index - 1)
+
+        return {
+            'traceback': [describe_observation(obs) for obs in self.observation_history[traceback_cutoff:traceback_cutoff+3]],
+            'last_step': self.plan[traceback_cutoff],
             'action': ACTIONS[self.action]
         }
-        return report

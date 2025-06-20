@@ -51,3 +51,38 @@ plan:
       args: [WALL, RIGHT, 0.8]
   - action: jump
 """
+
+PROMPTS["next_steps"] = """
+This is a 2D precision platformer controlled with a single input.
+
+Core Mechanics:
+Jumping: Pressing space makes the character jump. You need to release the jump button in order to be able to jump again.
+
+Wall Interaction:
+When touching a wall, the character turns to face away from it.
+Once the character touches the wall, it slides slowly downward.
+Pressing space while sliding on a wall triggers a wall jump in the opposite direction.
+
+Auto-Fall: 
+If space is held too long mid-air, the character will stop jumping and fall automatically.
+No directional control: The player cannot move left/right directly; direction changes only by wall contact.
+
+Objective:
+Navigate through levels using well-timed jumps and wall interactions to reach the goal. Precision and timing are key.
+
+Your role is to analyze the state of the game and come up with a series of checks and actions to perform in order for an AI agent to get to the end.
+
+Your answer should be in the following format, with nothing else:
+
+plan:
+- do_nothing 
+- wait_until there is a wall close to your right
+- jump
+
+plan:
+- jump
+- wait_until there is a wall far from your down
+- do_nothing
+
+{trace}
+"""

@@ -10,7 +10,7 @@ from llm_agent.agent import Agent
 parser = argparse.ArgumentParser(allow_abbrev=False)
 parser.add_argument(
     "--env_path",
-    default="/Users/gianistatie/Library/Application Support/Steam/steamapps/common/Dragon Jump Playtest",
+    default="/Users/gianistatie/Documents/personal/DragonJump/builds/osx",
     type=str,
     help="The path to the Godot game directory (get this by typing 'path' in the game's developer console)",
 )

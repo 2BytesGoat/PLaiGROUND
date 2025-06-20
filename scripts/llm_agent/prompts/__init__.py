@@ -1,0 +1,7 @@
+from .game_description import PROMPTS as GAME_DESCRIPTION_PROMPTS
+from .game_planner import PROMPTS as GAME_PLANNER_PROMPTS
+
+PROMPTS = {
+    **GAME_DESCRIPTION_PROMPTS,
+    **GAME_PLANNER_PROMPTS,
+}
