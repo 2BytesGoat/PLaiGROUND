@@ -18,12 +18,12 @@ ACTIONS = [
 
 
 class Agent:
-    def __init__(self, plan_path: str):
-        self.plan = self.load_plan(plan_path)
-        
+    def __init__(self, plan_path: str = None):
         self.observation_history = []
         self.action = 0 # 0: do nothing, 1: jump
         self.current_step_index = 0
+
+        self.plan = self.load_plan(plan_path) if plan_path else []
 
 
     def act(self, observation: list[float], reward: float, done: bool) -> int:
@@ -31,8 +31,6 @@ class Agent:
             return False
         
         self.check_plan(observation)
-        self.observation_history.append(observation)
-
         return np.array([self.action])
         
     
@@ -94,6 +92,7 @@ class Agent:
             return
         
         step = self.plan[self.current_step_index]
+        self.observation_history.append(observation)
 
         if 'wait_until' in step:
             condition_spec = step['wait_until']
@@ -106,15 +105,16 @@ class Agent:
 
     def load_plan(self, plan_path: str):
         with open(plan_path, 'r') as f:
-            plan = yaml.safe_load(f)["plan"]
-        return plan
+            self.plan = yaml.safe_load(f)["plan"]
+        return self.plan
 
 
     def generate_report(self):
         traceback_cutoff = max(0, self.current_step_index - 1)
+        relevant_observations = self.observation_history[traceback_cutoff:traceback_cutoff+3]
 
         return {
-            'traceback': [describe_observation(obs) for obs in self.observation_history[traceback_cutoff:traceback_cutoff+3]],
+            'traceback': [describe_observation(obs) for obs in relevant_observations],
             'last_step': self.plan[traceback_cutoff],
             'action': ACTIONS[self.action]
         }

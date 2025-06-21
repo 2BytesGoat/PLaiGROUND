@@ -49,4 +49,8 @@ Task: The next task to perform.
 Here's an example of a valid response:
 Reasoning: The character has hit the wall while running and has changed direction. The wall is jumpable because UP-RIGHT is NOTHING. The character should jump over the wall.
 Task: REPEAT last_step until WALL RIGHT distance is GREATHER than 0.5 then JUMP
+
+{report}
+
+{plan}
 """
