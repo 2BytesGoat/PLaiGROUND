@@ -7,6 +7,7 @@ OBJECT_TYPES = [
     "NOTHING", "WALL", "SPIKES", "DISOLVE-BLOCK", "BOUNCE-PAD", "DOUBLE-JUMP"
 ]
 
+
 def describe_observation(observation):
     distance, goal_x, goal_y, velocity_x, velocity_y = observation[:5]
     signal_shift = 5 # the signal info starts at index 5
@@ -25,6 +26,7 @@ def describe_observation(observation):
         }, 
     }
 
+
 def is_object_near(observation: list[float], previous_observation: list[float], object_type: str, direction: str, threshold: float, **args) -> bool:
     """Checks if there is a wall in the given direction within a distance threshold."""
     description = describe_observation(observation)
@@ -32,6 +34,7 @@ def is_object_near(observation: list[float], previous_observation: list[float], 
     is_close = distance >= threshold
     is_same_type = description["sensors"][direction]["object_type"] == object_type
     return is_close and is_same_type
+
 
 def is_object_far(observation: list[float], previous_observation: list[float], object_type: str, direction: str, threshold: float, **args) -> bool:
     """Checks if there is no wall in the given direction within a distance threshold."""
@@ -41,12 +44,14 @@ def is_object_far(observation: list[float], previous_observation: list[float], o
     is_same_type = description["sensors"][direction]["object_type"] == object_type
     return is_far and is_same_type
 
+
 def is_on_wall(observation: list[float], previous_observation: list[float], **args) -> bool:
     """Checks if the character is on a wall."""
     description = describe_observation(observation)
     return (description["sensors"]["LEFT"]["distance"] > 0.8 or \
         description["sensors"]["RIGHT"]["distance"] > 0.8) and \
         description["velocity_vector"][0] < 0.1
+
 
 def changed_direction(observation: list[float], previous_observation: list[float] | None, **args) -> bool:
     """Checks if the character changed direction."""
