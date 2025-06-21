@@ -1,3 +1,4 @@
+import yaml
 import numpy as np
 
 from processing.tools import is_object_near, is_object_far, is_on_wall, changed_direction, describe_observation
@@ -17,10 +18,10 @@ ACTIONS = [
 
 
 class Agent:
-    def __init__(self, plan: list[dict]):
-        self.plan = plan
+    def __init__(self, plan_path: str):
+        self.plan = self.load_plan(plan_path)
+        
         self.observation_history = []
-
         self.action = 0 # 0: do nothing, 1: jump
         self.current_step_index = 0
 
@@ -102,6 +103,13 @@ class Agent:
         else:
             raise ValueError(f"Unknown step format: {step}")
     
+
+    def load_plan(self, plan_path: str):
+        with open(plan_path, 'r') as f:
+            plan = yaml.safe_load(f)["plan"]
+        return plan
+
+
     def generate_report(self):
         traceback_cutoff = max(0, self.current_step_index - 1)
 

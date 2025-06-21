@@ -1,17 +1,11 @@
-import yaml
 import numpy as np
 
 from utils import setup_environment
 from planning_agent.agent import Agent
 
 
-def load_plan(plan_path):
-    with open(plan_path, 'r') as f:
-        plan = yaml.safe_load(f)["plan"]
-    return plan
-
-
 def main():
+    # SETUP THE ENVIRONMENT
     env = setup_environment()
 
     # GET THE INITIAL STATE OF THE GAME
@@ -22,8 +16,8 @@ def main():
     # GET NUMBER OF CONCURENT AGENTS IN ONE ENVIRONMENT
     nb_agents = len(obs["obs"])
     
-    plan = load_plan('scripts/planning_agent/agent_plan.yml')
-    planning_agent = Agent(plan)
+    # INITIALIZE THE PLANNING AGENT
+    planning_agent = Agent('scripts/planning_agent/agent_plan.yml')
     
     while True:
         # TAKE AN ACTION FOR EACH AGENT
