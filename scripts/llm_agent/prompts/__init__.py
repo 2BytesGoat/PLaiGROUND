@@ -1,6 +1,6 @@
 from .game_description import PROMPTS as GAME_DESCRIPTION_PROMPTS
-from .planner_ai import PROMPTS as GAME_PLANNER_PROMPTS
-from .critic_ai import PROMPTS as GAME_CRITIC_PROMPTS
+from .ai_planner import PROMPTS as GAME_PLANNER_PROMPTS
+from .ai_critic import PROMPTS as GAME_CRITIC_PROMPTS
 
 
 GAME_CRITIC_PROMPTS["game_critic"] = GAME_CRITIC_PROMPTS["game_critic"].replace("{environment_description}", GAME_DESCRIPTION_PROMPTS["environment_description"])

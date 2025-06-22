@@ -27,5 +27,5 @@ Current plan:
 Trace of the plan:
 {trace}
 
-Answer only with the JSON object and nothing else.
+Answer only with the JSON object and nothing else. The plan is ment to solve the current level and it should not be general purpose. Only update the plan based on conclusions drawn from the observations and not supposition.
 """

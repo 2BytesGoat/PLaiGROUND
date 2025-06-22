@@ -1,16 +1,18 @@
 plan:
-- action: release_jump
-- wait_until:
-    condition: is_object_near
-    args: [WALL, RIGHT, 0.3]
 - action: jump
 - wait_until:
+    condition: is_object_near
+    args: [WALL, RIGHT, 0.5]
+- action: release_jump
+- wait_until:
     condition: is_object_far
+    args: [WALL, DOWN-LEFT, 0.7]
+- action: jump
+- wait_until:
+    condition: is_object_near
     args: [WALL, UP, 0.5]
 - action: release_jump
 - wait_until:
-    condition: is_object_near
-    args: [SPIKES, DOWN, 0.2]
+    condition: is_object_far
+    args: [WALL, DOWN, 0.7]
 - action: jump
-- wait_until:
-    condition: changed_direction

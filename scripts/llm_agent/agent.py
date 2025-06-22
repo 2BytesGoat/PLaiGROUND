@@ -59,10 +59,10 @@ class Agent:
 
         critic_response = self.critique_plan(report)
         self.update_history.append(critic_response)
-        # print(critic_response)
+        print(critic_response)
 
         updated_plan = self.update_plan(critic_response, self.planning_agent.plan)
-        # print(updated_plan)
+        print(updated_plan)
 
         self.planning_agent.load_plan_from_yaml(updated_plan)
         self.planning_agent.reset()

@@ -38,13 +38,13 @@ The character can perform the following checks:
 - is_object_far(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object further than the threshold
 - changed_direction() -> bool - checks if the character changed direction
 
+The character can perform the following actions:
+- release_jump() -> None - releases the jump
+- jump() -> None - jumps
+
 The objects are:
 - NOTHING
 - WALL
-- SPIKES
-- DISSOLVE-BLOCK
-- BOUNCE-PAD
-- DOUBLE-JUMP
 
 The directions are:
 - UP
