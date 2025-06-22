@@ -13,6 +13,7 @@ CONDITIONS = {
 ACTIONS = [
     'release_jump',
     'jump',
+    'do_nothing',
 ]
 
 
@@ -20,9 +21,9 @@ class Agent:
     def __init__(self, plan_path: str = None):
         self.action = 0 # 0: do nothing, 1: jump
         self.current_step_index = 0
-        self.step_traceback = []
+        self.step_traceback = {}
 
-        self.plan = self.load_plan_from_file(plan_path) if plan_path else []
+        self.plan = [] if not plan_path else self.load_plan_from_file(plan_path)
 
 
     def act(self, observation: list[float], reward: float, done: bool) -> int:
@@ -32,14 +33,15 @@ class Agent:
         self.check_plan(observation)
 
         step_index = min(self.current_step_index, len(self.plan) - 1)
-        self.step_traceback.append(
-            {
-                'step': self.plan[step_index],
-                'step_number': step_index,
-                'action': ACTIONS[self.action],
-                'observations': observation
-            }
-        )
+
+        if step_index not in self.step_traceback:
+            self.step_traceback[step_index] = []
+
+        self.step_traceback[step_index].append({
+            'step': self.plan[step_index],
+            'action': ACTIONS[self.action],
+            'observations': observation
+        })
 
         return np.array([self.action])
         
@@ -47,7 +49,7 @@ class Agent:
     def reset(self):
         self.action = 0
         self.current_step_index = 0
-        self.step_traceback = []
+        self.step_traceback = {}
 
 
     def evaluate_condition(self, observation: list[float], previous_observation: list[float], condition_spec):
@@ -76,8 +78,25 @@ class Agent:
     def wait_until(self, observation: list[float], condition_spec):
         """
         Wait until a condition (simple or compound) is met.
+        plan:
+        - action: do_nothing
+        - wait_until:
+            operator: OR
+            conditions:
+                - operator: OR
+                conditions:
+                    - condition: is_object_near
+                    args: [WALL, RIGHT, 0.5]
+                    - condition: is_object_far
+                    args: [WALL, UP, 0.2]
+                - condition: is_sliding_on_wall
+        - action: jump
         """
-        previous_observation = None if len(self.step_traceback) == 0 else self.step_traceback[-1]["observations"]
+        current_step_traceback = self.step_traceback.get(self.current_step_index)
+        if not current_step_traceback:
+            previous_observation = None
+        else:
+            previous_observation = current_step_traceback[-1]["observations"]
         
         # Handle legacy format for backward compatibility
         if isinstance(condition_spec, str):
@@ -139,8 +158,15 @@ class Agent:
         return self.plan
 
 
-    def generate_report(self, cutoff: int = 3):
-        traceback = self.step_traceback[-cutoff:].copy()
-        for step in traceback:
-            step['observations'] = describe_observation(step['observations'])
-        return traceback
+    def generate_report(self, samples: int = 3):
+        # save the last samples observations for each step
+        relevant_step = list(self.step_traceback.keys())[-1]
+        
+        full_traceback = []
+        trace = self.step_traceback[relevant_step]
+        for sample in trace[:samples]:
+            sample['step_number'] = relevant_step
+            sample['observations'] = describe_observation(sample['observations'])
+            full_traceback.append(sample)
+
+        return full_traceback

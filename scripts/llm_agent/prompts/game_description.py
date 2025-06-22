@@ -39,8 +39,8 @@ The character can perform the following checks:
 - changed_direction() -> bool - checks if the character changed direction
 
 The character can perform the following actions:
-- release_jump() -> None - releases the jump
-- jump() -> None - jumps
+- release_jump() -> None - releases the jump. need to release the jump button to fall. need to release the jump button to jump again.
+- jump() -> None - jumps. holding jump will make the character jump higher. holding the jump too long will make the character fall.
 
 The objects are:
 - NOTHING

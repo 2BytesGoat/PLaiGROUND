@@ -17,8 +17,8 @@ def main():
     nb_agents = len(obs["obs"])
     
     # INITIALIZE THE PLANNING AGENT
-    planning_agent = Agent(env)
-    planning_agent.load_plan('scripts/planning_agent/agent_plan.yml')
+    planning_agent = Agent()
+    planning_agent.load_plan_from_file('scripts/planning_agent/agent_plan.yml')
     
     while True:
         # TAKE AN ACTION FOR EACH AGENT

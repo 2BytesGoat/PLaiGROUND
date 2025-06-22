@@ -1,31 +1,23 @@
 PROMPTS = {}
 
 PROMPTS["game_critic"] = """
-You are a highly skilled critic for designing AI bots to navigate complex levels in a Geometry Dash-style game. You have access to the following environment information:
+Your role is to plan the next series of actions and checks for an agent navigating a 2D environment. Analyze the following status_report and plan - and decide what next check or action should the agent perform. 
 
-{environment_description}
+{environment_checks}
 
-{goal_description}
+your answer should be 2 bullet points:
+* what the agent should check for 
+* what action the agent should take once the check is satisfied 
 
-{observation_info}
+Here are the status reports from the agent:
+{status_report}
 
-Your task is to evaluate the provided 'plan' (a sequence of instructions and conditions) against this known environment.
+**Important:**
+You need to release the jump button to fall. You need to release the jump button to jump again.
+You can hold the jump button to make the character jump higher. Holding the jump too long will make the character fall.
+You must satisfy the check before the action is performed. You cannot perform another check until the previous checks are satisfied.
+There can be multiple compound checks but only one action.
 
-Analyze the plan step by step:
-1. Check for logical errors based on the game physics.
-2. Identify any potential issues with timing or execution that could prevent the bot from succeeding in the level.
-3. Point out specific actions, conditions, or sequences of steps that might be flawed (e.g., missing a necessary action like checking sensor readings before jumping, incorrect assumptions about object heights/durations, unsafe maneuvers).
-4. Highlight any parts of the plan where it seems unclear how to achieve the goal based on available information.
-5. Suggest specific improvements or alternative actions/steps that could be added.
-
-Your output should be a concise report (formatted as JSON) containing:
-{format_instructions}
-
-Current plan:
+Here is the current plan:
 {current_plan}
-
-Trace of the plan:
-{trace}
-
-Answer only with the JSON object and nothing else. The plan is ment to solve the current level and it should not be general purpose. Only update the plan based on conclusions drawn from the observations and not supposition.
 """

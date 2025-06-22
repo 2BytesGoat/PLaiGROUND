@@ -1,7 +1,5 @@
 import dotenv
 import numpy as np
-from typing import Optional
-from pydantic import BaseModel, Field
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -9,12 +7,6 @@ from langchain_core.output_parsers import PydanticOutputParser
 
 from planning_agent.agent import Agent as PlanningAgent
 from llm_agent.prompts import PROMPTS
-
-class CriticFeedback(BaseModel):
-    severity: Optional[str] = Field(None, description="Severity level of the issue: 'low', 'medium', or 'high'")
-    description: str = Field(..., description="Description of what is wrong with the plan in plain English")
-    location_in_plan: int = Field(..., description="Index where the issue occurs in the plan (-1 for general flaws)")
-    suggested_improvement: Optional[str] = Field(None, description="Specific alternative action or condition to fix the issue")
 
 
 class Agent:
@@ -24,6 +16,7 @@ class Agent:
         self.planning_agent = PlanningAgent(base_plan)
         self.environment = environment
 
+        self.llm_observer = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         self.llm_critic = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         self.llm_planner = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
@@ -55,40 +48,52 @@ class Agent:
             if done:
                 return
 
-        report = self.planning_agent.generate_report(cutoff=5)
+        report = self.planning_agent.generate_report(samples=3)
 
-        critic_response = self.critique_plan(report)
+        report_description = self.observe_environment(report)
+        print(report_description)
+
+        critic_response = self.critique_plan(report_description, self.planning_agent.get_plan_as_yaml())
         self.update_history.append(critic_response)
         print(critic_response)
 
-        updated_plan = self.update_plan(critic_response, self.planning_agent.plan)
+        updated_plan = self.update_plan(critic_response)
         print(updated_plan)
 
-        self.planning_agent.load_plan_from_yaml(updated_plan)
+        self.planning_agent.add_steps_to_plan(updated_plan)
         self.planning_agent.reset()
         self.learn(steps_per_episode)
 
+
+    def observe_environment(self, report: dict):
+        prompt = ChatPromptTemplate.from_template(PROMPTS["game_observer"])
+        observer_chain = prompt | self.llm_observer
+        observer_response = observer_chain.invoke({
+            "traceback": report
+        })
+        return observer_response.content
+
     
-    def critique_plan(self, report: dict):
+    def critique_plan(self, report_description: str, current_plan: str):
         prompt = ChatPromptTemplate.from_template(PROMPTS["game_critic"])
-        parser = PydanticOutputParser(pydantic_object=CriticFeedback)
-        prompt = prompt.partial(format_instructions=parser.get_format_instructions())
         critic_chain = prompt | self.llm_critic
         critic_response = critic_chain.invoke({
-            "current_plan": self.planning_agent.get_plan_as_yaml(),
-            "trace": report
+            "current_plan": current_plan,
+            "status_report": report_description
         })
         with open("critic_input.txt", "w") as f:
-            f.write(prompt.format_prompt(current_plan=self.planning_agent.get_plan_as_yaml(), trace=report).to_string())
+            f.write(prompt.format_prompt(
+                current_plan=current_plan, 
+                status_report=report_description).to_string())
         return critic_response.content
 
-    def update_plan(self, critique: str, plan: dict):
+
+    def update_plan(self, critique: str):
         prompt = ChatPromptTemplate.from_template(PROMPTS["game_planner"])
         planner_chain = prompt | self.llm_planner
         planner_response = planner_chain.invoke({
             "critic_feedback": critique,
-            "current_plan": self.planning_agent.get_plan_as_yaml(),
         })
         with open("planner_input.txt", "w") as f:
-            f.write(prompt.format_prompt(critic_feedback=critique, current_plan=self.planning_agent.get_plan_as_yaml()).to_string())
+            f.write(prompt.format_prompt(critic_feedback=critique).to_string())
         return planner_response.content.replace("```", "").replace("```yaml", "").replace("```", "")

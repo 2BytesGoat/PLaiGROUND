@@ -1,36 +1,37 @@
 PROMPTS = {}
 
 PROMPTS["game_planner"] = """
-You are a highly skilled parser and planner for Geometry Dash-style game levels. You have access to the following environment information:
+Your role is to create a check and action to the plan based on the critic's feedback. You must checks and actions from the list bellow. You cannot add new checks or actions. You must follow the critic instructions to the letter, without adding any other chekcs or actions which were not mentioned.
 
-{environment_description}
-
-{goal_description}
-
-You have access to the following environment checks:
 {environment_checks}
 
-Your task is twofold:
-1.  **Critique:** Evaluate the provided 'plan' against this known environment using the guidelines outlined in the critic prompt.
-2.  **Refine:** Improve upon the plan based on the feedback received from the critic.
-
 **Input:**
-- `current_plan`: A YAML object containing the current plan, formatted as:
-{current_plan}
-
-- `critic_feedback`: A JSON object containing the feedback from the critic.
+- `critic_feedback`: A list of checks and actions to add to the plan.
 {critic_feedback}
 
-**Example:**
-- action: release_jump
+**Here's an example of a simple plan:**
+plan:
   - wait_until:
-      condition: changed_direction
+      condition: is_object_near
+      args: [WALL, RIGHT, 0.5]
+  - action: jump
+
+**Here's an example of how you can combine multiple checks:**
+plan:
+  - action: do_nothing
   - wait_until:
-      condition: is_object_far
-      args: [WALL, DOWN-LEFT, 0.7]
+      operator: OR
+      conditions:
+        - operator: OR
+          conditions:
+            - condition: is_object_near
+              args: [WALL, RIGHT, 0.5]
+            - condition: is_object_far
+              args: [WALL, UP, 0.2]
+        - condition: is_sliding_on_wall
   - action: jump
 
 **Output:**
-A single string representing an improved plan. The format must be identical to the input 'current_plan' but with corrections and additions based on the critic's feedback.
+A single string representing the checks and action. Do not add any other checks that were not mentioned in the critic's feedback.
 Answer only with the plan as a YAML object and nothing else. Do not use any markdown formatting, code blocks, or backticks (```). Return only the raw YAML content without any wrapper formatting.
 """
