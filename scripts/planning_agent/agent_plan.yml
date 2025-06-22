@@ -1,13 +1,32 @@
 plan:
-  - action: do_nothing
   - wait_until:
-      operator: OR
-      conditions:
-        - operator: OR
-          conditions:
-            - condition: is_object_near
-              args: [WALL, RIGHT, 0.5]
-            - condition: is_object_far
-              args: [WALL, UP, 0.2]
-        - condition: is_sliding_on_wall
+      condition: is_object_near
+      args: [WALL, RIGHT, 0.8]
   - action: jump
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, DOWN, 0.8]
+  - action: release_jump 
+  - wait_until:
+      condition: is_object_far
+      args: [WALL, DOWN-RIGHT, 0.7]
+  - action: jump
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, DOWN, 0.8]
+  - action: release_jump
+  - wait_until:
+      condition: is_object_far
+      args: [WALL, DOWN-RIGHT, 0.7]
+  - action: jump
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, DOWN, 0.8]
+  - action: release_jump
+  - wait_until:
+      condition: changed_direction
+  - wait_until:
+      condition: is_object_far
+      args: [WALL, DOWN-LEFT, 0.7]
+  - action: jump
+  
