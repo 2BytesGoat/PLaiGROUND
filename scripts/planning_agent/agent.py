@@ -21,19 +21,29 @@ class Agent:
     def __init__(self, plan_path: str = None):
         self.observation_history = []
         self.action = 0 # 0: do nothing, 1: jump
+        self.plan_observation_indexes = []
         self.current_step_index = 0
 
-        self.plan = self.load_plan(plan_path) if plan_path else []
+        self.plan = self.load_plan_from_file(plan_path) if plan_path else []
 
 
     def act(self, observation: list[float], reward: float, done: bool) -> int:
         if done:
             return False
         
+        self.observation_history.append(observation)
+        
         self.check_plan(observation)
         return np.array([self.action])
         
     
+    def reset(self):
+        self.observation_history = []
+        self.action = 0
+        self.plan_observation_indexes = []
+        self.current_step_index = 0
+
+
     def evaluate_condition(self, observation: list[float], previous_observation: list[float], condition_spec):
         """
         Evaluate a single condition or a compound condition with logical operators.
@@ -69,6 +79,7 @@ class Agent:
         
         if self.evaluate_condition(observation, previous_observation, condition_spec):
             self.current_step_index += 1
+            self.plan_observation_indexes.append(len(self.observation_history) - 1)
 
 
     def update_action(self, action_name: str):
@@ -85,6 +96,7 @@ class Agent:
                 self.action = 0
         
         self.current_step_index += 1
+        self.plan_observation_indexes.append(len(self.observation_history) - 1)
 
     
     def check_plan(self, observation: list[float]):
@@ -92,7 +104,6 @@ class Agent:
             return
         
         step = self.plan[self.current_step_index]
-        self.observation_history.append(observation)
 
         if 'wait_until' in step:
             condition_spec = step['wait_until']
@@ -103,18 +114,24 @@ class Agent:
             raise ValueError(f"Unknown step format: {step}")
     
 
-    def load_plan(self, plan_path: str):
+    def load_plan_from_file(self, plan_path: str):
         with open(plan_path, 'r') as f:
             self.plan = yaml.safe_load(f)["plan"]
         return self.plan
+    
+    
+    def load_plan_from_yaml(self, plan_yaml: str):
+        self.plan = yaml.safe_load(plan_yaml)["plan"]
+        return self.plan
 
 
-    def generate_report(self):
-        traceback_cutoff = max(0, self.current_step_index - 1)
-        relevant_observations = self.observation_history[traceback_cutoff:traceback_cutoff+3]
+    def generate_report(self, cutoff: int = 3):
+        traceback = []
+        for i in self.plan_observation_indexes:
+            print("observation index - ", i)
+            traceback.append({
+                'step': self.plan[i],
+                'observations': [describe_observation(obs) for obs in self.observation_history[i:i+cutoff]]
+            })
 
-        return {
-            'traceback': [describe_observation(obs) for obs in relevant_observations],
-            'last_step': self.plan[traceback_cutoff],
-            'action': ACTIONS[self.action]
-        }
+        return traceback

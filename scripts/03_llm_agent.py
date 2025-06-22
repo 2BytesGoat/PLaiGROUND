@@ -9,7 +9,7 @@ def main():
     # INITIALIZE THE LLM AGENT
     llm_agent = Agent(env)
     
-    llm_agent.learn(steps_per_episode=10)
+    llm_agent.learn(steps_per_episode=100)
 
     env.close()
 

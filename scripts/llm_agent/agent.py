@@ -43,17 +43,33 @@ class Agent:
             if done:
                 return
 
-        report = self.planning_agent.generate_report()
+        report = self.planning_agent.generate_report(cutoff=5)
 
-        self.critique_plan(report)
+        critic_response = self.critique_plan(report)
+        print(critic_response)
+
+        updated_plan = self.update_plan(critic_response, self.planning_agent.plan)
+        print(updated_plan)
+
+        self.planning_agent.load_plan_from_yaml(updated_plan)
+        self.planning_agent.reset()
         self.learn(steps_per_episode)
 
     
     def critique_plan(self, report: dict):
-        prompt = ChatPromptTemplate.from_template(PROMPTS["game_planner"])
+        prompt = ChatPromptTemplate.from_template(PROMPTS["game_critic"])
         critic_chain = prompt | self.llm_critic
         critic_response = critic_chain.invoke({
             "report": report,
             "plan": self.planning_agent.plan,
         })
-        print(critic_response.content)
+        return critic_response.content
+
+    def update_plan(self, critique: str, plan: dict):
+        prompt = ChatPromptTemplate.from_template(PROMPTS["game_planner"])
+        planner_chain = prompt | self.llm_planner
+        planner_response = planner_chain.invoke({
+            "critique": critique,
+            "plan": plan,
+        })
+        return planner_response.content
