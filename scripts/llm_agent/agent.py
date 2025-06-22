@@ -16,6 +16,8 @@ class Agent:
 
         self.llm_critic = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         self.llm_planner = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+        self.update_history = []
         
 
     def learn(self, steps_per_episode: int):
@@ -46,6 +48,7 @@ class Agent:
         report = self.planning_agent.generate_report(cutoff=5)
 
         critic_response = self.critique_plan(report)
+        self.update_history.append(critic_response)
         print(critic_response)
 
         updated_plan = self.update_plan(critic_response, self.planning_agent.plan)
@@ -61,8 +64,10 @@ class Agent:
         critic_chain = prompt | self.llm_critic
         critic_response = critic_chain.invoke({
             "report": report,
-            "plan": self.planning_agent.plan,
+            "plan": self.planning_agent.get_plan_as_yaml()
         })
+        with open("critic_input.txt", "w") as f:
+            f.write(prompt.format_prompt(report=report, plan=self.planning_agent.get_plan_as_yaml()).to_string())
         return critic_response.content
 
     def update_plan(self, critique: str, plan: dict):
@@ -70,6 +75,8 @@ class Agent:
         planner_chain = prompt | self.llm_planner
         planner_response = planner_chain.invoke({
             "critique": critique,
-            "plan": plan,
+            "plan": self.planning_agent.get_plan_as_yaml(),
         })
+        with open("planner_input.txt", "w") as f:
+            f.write(prompt.format_prompt(critique=critique, plan=self.planning_agent.get_plan_as_yaml()).to_string())
         return planner_response.content

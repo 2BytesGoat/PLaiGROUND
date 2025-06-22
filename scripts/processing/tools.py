@@ -45,7 +45,7 @@ def is_object_far(observation: list[float], previous_observation: list[float], o
     return is_far and is_same_type
 
 
-def is_on_wall(observation: list[float], previous_observation: list[float], **args) -> bool:
+def is_sliding_on_wall(observation: list[float], previous_observation: list[float], **args) -> bool:
     """Checks if the character is on a wall."""
     description = describe_observation(observation)
     return (description["sensors"]["LEFT"]["distance"] > 0.8 or \

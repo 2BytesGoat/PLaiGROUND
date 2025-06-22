@@ -9,6 +9,7 @@ GAME_PLANNER_PROMPTS["game_planner"] = GAME_PLANNER_PROMPTS["game_planner"].repl
 
 GAME_CRITIC_PROMPTS["game_critic"] = GAME_CRITIC_PROMPTS["game_critic"].replace("{environment_description}", GAME_DESCRIPTION_PROMPTS["environment_description"])
 GAME_CRITIC_PROMPTS["game_critic"] = GAME_CRITIC_PROMPTS["game_critic"].replace("{goal_description}", GAME_DESCRIPTION_PROMPTS["goal_description"]) 
+GAME_CRITIC_PROMPTS["game_critic"] = GAME_CRITIC_PROMPTS["game_critic"].replace("{environment_checks}", GAME_DESCRIPTION_PROMPTS["environment_checks"])
 
 
 PROMPTS = {

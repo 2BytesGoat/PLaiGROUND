@@ -6,7 +6,7 @@ plan:
   - wait_until:
       condition: is_object_near
       args: [WALL, DOWN, 0.8]
-  - action: do_nothing 
+  - action: release_jump 
   - wait_until:
       condition: is_object_far
       args: [WALL, DOWN-RIGHT, 0.7]
@@ -14,7 +14,7 @@ plan:
   - wait_until:
       condition: is_object_near
       args: [WALL, DOWN, 0.8]
-  - action: do_nothing
+  - action: release_jump
   - wait_until:
       condition: is_object_far
       args: [WALL, DOWN-RIGHT, 0.7]
@@ -22,7 +22,7 @@ plan:
   - wait_until:
       condition: is_object_near
       args: [WALL, DOWN, 0.8]
-  - action: do_nothing
+  - action: release_jump
   - wait_until:
       condition: changed_direction
   - wait_until:
