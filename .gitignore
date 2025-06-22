@@ -1,6 +1,7 @@
 # Junk
 *.DS_Store
 .vscode
+.env
 
 # Python stuff
 .venv
