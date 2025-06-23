@@ -1,0 +1,58 @@
+Human: 
+Your role is to create a check and action to the plan based on the critic's feedback. You must checks and actions from the list bellow. You cannot add new checks or actions. You must follow the critic instructions to the letter, without adding any other chekcs or actions which were not mentioned.
+
+
+The character can perform the following checks:
+- is_object_near(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object closer than the threshold
+- is_object_far(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object further than the threshold
+- changed_direction() -> bool - checks if the character changed direction
+
+The character can perform the following actions:
+- release_jump() -> None - releases the jump. need to release the jump button to fall. need to release the jump button to jump again.
+- jump() -> None - jumps. holding jump will make the character jump higher. holding the jump too long will make the character fall.
+
+The objects are:
+- NOTHING
+- WALL
+
+The directions are:
+- UP
+- UP-RIGHT
+- RIGHT
+- DOWN-RIGHT
+- DOWN
+- DOWN-LEFT
+- LEFT
+- UP-LEFT
+
+
+**Input:**
+- `critic_feedback`: A list of checks and actions to add to the plan.
+* The agent should check if there is any wall object far in the UP-RIGHT direction (is_object_far('WALL', 'UP-RIGHT', 1.0)).
+* Once the check is satisfied, the agent should jump (jump()).
+
+**Here's an example of a simple plan:**
+plan:
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, RIGHT, 0.5]
+  - action: jump
+
+**Here's an example of how you can combine multiple checks:**
+plan:
+  - action: do_nothing
+  - wait_until:
+      operator: OR
+      conditions:
+        - operator: OR
+          conditions:
+            - condition: is_object_near
+              args: [WALL, RIGHT, 0.5]
+            - condition: is_object_far
+              args: [WALL, UP, 0.2]
+        - condition: is_sliding_on_wall
+  - action: jump
+
+**Output:**
+A single string representing the checks and action. Do not add any other checks that were not mentioned in the critic's feedback.
+Answer only with the plan as a YAML object and nothing else. Do not use any markdown formatting, code blocks, or backticks (```). Return only the raw YAML content without any wrapper formatting.

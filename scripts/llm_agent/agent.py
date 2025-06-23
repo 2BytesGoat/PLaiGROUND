@@ -48,7 +48,7 @@ class Agent:
             if done:
                 return
 
-        report = self.planning_agent.generate_report(samples=3)
+        report = self.planning_agent.generate_report(samples=1)
 
         report_description = self.observe_environment(report)
         print(report_description)
@@ -71,6 +71,9 @@ class Agent:
         observer_response = observer_chain.invoke({
             "traceback": report
         })
+        with open("observer_input.txt", "w") as f:
+            f.write(prompt.format_prompt(
+                traceback=report).to_string())
         return observer_response.content
 
     

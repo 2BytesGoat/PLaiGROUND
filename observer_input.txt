@@ -1,6 +1,4 @@
-PROMPTS = {}
-
-PROMPTS["game_observer"] = """
+Human: 
 You are an observation analyst for an agent navigating an environment. Your task is to extract purely observational insights from a sequence of agent states. Do not provide feedback, advice, or action recommendations.
 
 You will be given a sequence of agent states, each containing:
@@ -35,5 +33,4 @@ Step [step_number]:
 - Only report what is explicitly supported by the observations.
 
 **Input:**  
-{traceback}
-"""
+[{'description': {'closeness_to_goal': 0.0, 'goal_direction': 'UP-RIGHT', 'movement_direction': 'DOWN-RIGHT', 'is_sliding_on_wall': False, 'is_in_air': True, 'changed_direction': False, 'sensors': {'UP': {'closeness': 0.0, 'object_type': 'NOTHING', 'is_close': False, 'is_far': True}, 'UP-RIGHT': {'closeness': 0.0, 'object_type': 'NOTHING', 'is_close': False, 'is_far': True}, 'RIGHT': {'closeness': 0.0645462036132813, 'object_type': 'WALL', 'is_close': False, 'is_far': True}, 'DOWN-RIGHT': {'closeness': 0.70525764465332, 'object_type': 'WALL', 'is_close': True, 'is_far': False}, 'DOWN': {'closeness': 0.792949066162109, 'object_type': 'WALL', 'is_close': True, 'is_far': False}, 'DOWN-LEFT': {'closeness': 0.709088802337646, 'object_type': 'WALL', 'is_close': True, 'is_far': False}, 'LEFT': {'closeness': 0.73542818069458, 'object_type': 'WALL', 'is_close': True, 'is_far': False}, 'UP-LEFT': {'closeness': 0.628270645141602, 'object_type': 'WALL', 'is_close': True, 'is_far': False}}}}]
