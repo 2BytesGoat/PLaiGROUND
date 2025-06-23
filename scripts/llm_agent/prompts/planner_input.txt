@@ -1,11 +1,13 @@
 Human: 
-Your role is to create a check and action to the plan based on the critic's feedback. You must checks and actions from the list bellow. You cannot add new checks or actions. You must follow the critic instructions to the letter, without adding any other chekcs or actions which were not mentioned.
+You are a helpful assistant the will create a check and an action for an AI agent to execute. The goal of the AI agent is to navigate a 2D environment and reach the goal. Do your best to understand the critic's feedback and to create a plan for the agent to follow.
 
 
 The character can perform the following checks:
-- is_object_near(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object closer than the threshold
-- is_object_far(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object further than the threshold
+- is_object_near(object_type: str [see objects above], direction: str [see directions above], closeness: float [0.0 - 1.0]) -> bool - checks if there is any object closer than the threshold
+- is_object_far(object_type: str [see objects above], direction: str [see directions above], closeness: float [0.0 - 1.0]) -> bool - checks if there is any object further than the threshold
 - changed_direction() -> bool - checks if the character changed direction
+
+- closeness means how close the object is to the character. 0.0 means the object is far away, 1.0 means the object is close to the character.
 
 The character can perform the following actions:
 - release_jump() -> None - releases the jump. need to release the jump button to fall. need to release the jump button to jump again.
@@ -28,8 +30,8 @@ The directions are:
 
 **Input:**
 - `critic_feedback`: A list of checks and actions to add to the plan.
-* The agent should check if there is any wall object far in the UP-RIGHT direction (is_object_far('WALL', 'UP-RIGHT', 1.0)).
-* Once the check is satisfied, the agent should jump (jump()).
+- **Check for:** is_object_near("WALL", "UP-RIGHT", 0.8) to determine if there is a wall blocking the path towards the goal in the UP-RIGHT direction.
+- **Action to take:** jump, to gain height and potentially navigate over the walls blocking the path to the goal.
 
 **Here's an example of a simple plan:**
 plan:

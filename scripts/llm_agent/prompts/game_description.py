@@ -21,12 +21,12 @@ Each observation provides information about the current situation or result of a
 
 1.  **Action:** Indicates the last action you performed, such as 'release_jump'.
 2.  **Observations:**
-    *   `distance`: Represents the distance traveled by the character since the previous observation (likely in a horizontal direction).
+    *   `closeness`: Represents the closeness of the character to the goal.
     *   `goal_direction`: A vector `[x, y]` indicating the relative position of the exit portal to your current location. Positive x means it's generally to the right or ahead; negative x means left/behind; similarly for y.
     *   `velocity_vector`: A vector `[vx, vy]` representing the character's velocity (speed and direction) in that time step since the last observation.
-3.  **Sensors:** Provides distance readings (`distance`) and object type (`object_type`) information for eight directions relative to your character:
+3.  **Sensors:** Provides closeness readings (`closeness`) and object type (`object_type`) information for eight directions relative to your character:
     *   The sensor names describe the direction you are looking ('UP', 'RIGHT', etc.) or scanning ('UP-RIGHT' scans diagonally).
-    *   `distance`: A numerical value representing how far away an obstacle (or lack thereof) is in that specific direction. Closer objects have a lower distance.
+    *   `closeness`: A numerical value representing how far away an obstacle (or lack thereof) is in that specific direction. Closer objects have a lower closeness.
     *   `object_type`: A string indicating the type of object detected by the sensor, if any. Possible values include 'NOTHING', 'WALL', 'SPIKE', 'DISSOLVING_WALL', 'POWERUP', etc.
 
 This observation format allows you to track your movement, know where the goal is relative to you, understand your current velocity, and crucially, perceive nearby obstacles or features (like walls) in different directions. Use this information strategically to navigate the environment, avoid hazards, interact with objects (walls, powerups), manage jumps, and reach the exit portal.
@@ -34,9 +34,11 @@ This observation format allows you to track your movement, know where the goal i
 
 PROMPTS["environment_checks"] = """
 The character can perform the following checks:
-- is_object_near(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object closer than the threshold
-- is_object_far(object_type: str [see objects above], direction: str [see directions above], distance: float [0.0 - 1.0]) -> bool - checks if there is any object further than the threshold
+- is_object_near(object_type: str [see objects above], direction: str [see directions above], closeness: float [0.0 - 1.0]) -> bool - checks if there is any object closer than the threshold
+- is_object_far(object_type: str [see objects above], direction: str [see directions above], closeness: float [0.0 - 1.0]) -> bool - checks if there is any object further than the threshold
 - changed_direction() -> bool - checks if the character changed direction
+
+- closeness means how close the object is to the character. 0.0 means the object is far away, 1.0 means the object is close to the character.
 
 The character can perform the following actions:
 - release_jump() -> None - releases the jump. need to release the jump button to fall. need to release the jump button to jump again.
