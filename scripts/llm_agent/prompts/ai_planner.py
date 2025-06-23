@@ -1,7 +1,7 @@
 PROMPTS = {}
 
 PROMPTS["game_planner"] = """
-Your role is to create a check and action to the plan based on the critic's feedback. You must checks and actions from the list bellow. You cannot add new checks or actions. You must follow the critic instructions to the letter, without adding any other chekcs or actions which were not mentioned.
+You are a helpful assistant the will create a check and an action for an AI agent to execute. The goal of the AI agent is to navigate a 2D environment and reach the goal. Do your best to understand the critic's feedback and to create a plan for the agent to follow.
 
 {environment_checks}
 

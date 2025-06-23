@@ -44,12 +44,27 @@ class Agent:
         })
 
         return np.array([self.action])
-        
+
     
     def reset(self):
         self.action = 0
         self.current_step_index = 0
         self.step_traceback = {}
+
+    
+    def check_plan(self, observation: list[float]):
+        if self.current_step_index >= len(self.plan):
+            return
+        
+        step = self.plan[self.current_step_index]
+
+        if 'wait_until' in step:
+            condition_spec = step['wait_until']
+            self.wait_until(observation, condition_spec)
+        elif 'action' in step:
+            self.update_action(step['action'])
+        else:
+            raise ValueError(f"Unknown step format: {step}")
 
 
     def evaluate_condition(self, observation: list[float], previous_observation: list[float], condition_spec):
@@ -120,21 +135,6 @@ class Agent:
                 self.action = 0
         
         self.current_step_index += 1
-
-    
-    def check_plan(self, observation: list[float]):
-        if self.current_step_index >= len(self.plan):
-            return
-        
-        step = self.plan[self.current_step_index]
-
-        if 'wait_until' in step:
-            condition_spec = step['wait_until']
-            self.wait_until(observation, condition_spec)
-        elif 'action' in step:
-            self.update_action(step['action'])
-        else:
-            raise ValueError(f"Unknown step format: {step}")
     
 
     def get_plan_as_yaml(self):
@@ -143,7 +143,7 @@ class Agent:
 
     def load_plan_from_file(self, plan_path: str):
         with open(plan_path, 'r') as f:
-            self.plan = yaml.safe_load(f)["plan"]
+            self.load_plan_from_yaml(f.read())
         return self.plan
     
     
@@ -162,11 +162,15 @@ class Agent:
         # save the last samples observations for each step
         relevant_step = list(self.step_traceback.keys())[-1]
         
-        full_traceback = []
+        traceback_description = []
         trace = self.step_traceback[relevant_step]
-        for sample in trace[:samples]:
-            sample['step_number'] = relevant_step
-            sample['observations'] = describe_observation(sample['observations'])
-            full_traceback.append(sample)
 
-        return full_traceback
+        prev_sample = {"observations": None}
+        for sample in trace[:samples]:
+            traceback_description.append({
+                "description": describe_observation(sample['observations'], prev_sample['observations'])
+            })
+            
+            prev_sample = sample
+
+        return traceback_description
