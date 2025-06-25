@@ -1,2 +1,31 @@
 plan:
-- action: do_nothing
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, RIGHT, 0.8]
+  - action: jump
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, UP-RIGHT, 0.3]
+  - action: release_jump 
+  - wait_until:
+      condition: is_object_far
+      args: [WALL, DOWN-RIGHT, 0.7]
+  - action: jump
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, DOWN, 0.8]
+  - action: release_jump
+  - wait_until:
+      condition: is_object_far
+      args: [WALL, DOWN-RIGHT, 0.7]
+  - action: jump
+  - wait_until:
+      condition: is_object_near
+      args: [WALL, DOWN, 0.8]
+  - action: release_jump
+  - wait_until:
+      condition: changed_direction
+  - wait_until:
+      condition: is_object_far
+      args: [WALL, DOWN-LEFT, 0.7]
+  - action: jump

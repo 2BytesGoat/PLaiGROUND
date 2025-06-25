@@ -48,12 +48,11 @@ class Agent:
             if done:
                 return
 
-        report = self.planning_agent.generate_report(samples=1)
+        report = self.planning_agent.generate_report(samples=3)
+        last_step_report = self.get_last_step_report(report)
+        current_plan = self.planning_agent.get_plan_as_yaml()
 
-        report_description = self.observe_environment(report)
-        print(report_description)
-
-        critic_response = self.critique_plan(report_description, self.planning_agent.get_plan_as_yaml())
+        critic_response = self.critique_plan(last_step_report, current_plan)
         self.update_history.append(critic_response)
         print(critic_response)
 
@@ -81,14 +80,18 @@ class Agent:
         prompt = ChatPromptTemplate.from_template(PROMPTS["game_critic"])
         critic_chain = prompt | self.llm_critic
         critic_response = critic_chain.invoke({
-            "current_plan": current_plan,
-            "status_report": report_description
-        })
+            "current_plan": current_plan
+        }, {"input": report_description})
         with open("critic_input.txt", "w") as f:
             f.write(prompt.format_prompt(
                 current_plan=current_plan, 
-                status_report=report_description).to_string())
+                report_description=report_description).to_string())
         return critic_response.content
+
+
+    def get_last_step_report(self, report: dict):
+        keys = [key for key in report.keys() if "step" in key]
+        return report[keys[-1]]
 
 
     def update_plan(self, critique: str):

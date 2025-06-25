@@ -21,6 +21,7 @@ class Agent:
     def __init__(self, plan_path: str = None):
         self.action = 0 # 0: do nothing, 1: jump
         self.current_step_index = 0
+        self.observation_history = []
         self.step_traceback = {}
 
         self.plan = [] if not plan_path else self.load_plan_from_file(plan_path)
@@ -31,17 +32,7 @@ class Agent:
             return False
         
         self.check_plan(observation)
-
-        step_index = min(self.current_step_index, len(self.plan) - 1)
-
-        if step_index not in self.step_traceback:
-            self.step_traceback[step_index] = []
-
-        self.step_traceback[step_index].append({
-            'step': self.plan[step_index],
-            'action': ACTIONS[self.action],
-            'observations': observation
-        })
+        self.update_step_traceback(observation)
 
         return np.array([self.action])
 
@@ -107,11 +98,7 @@ class Agent:
                 - condition: is_sliding_on_wall
         - action: jump
         """
-        current_step_traceback = self.step_traceback.get(self.current_step_index)
-        if not current_step_traceback:
-            previous_observation = None
-        else:
-            previous_observation = current_step_traceback[-1]["observations"]
+        previous_observation = None if len(self.observation_history) == 0 else self.observation_history[-1]
         
         # Handle legacy format for backward compatibility
         if isinstance(condition_spec, str):
@@ -157,20 +144,33 @@ class Agent:
         self.plan.extend(steps)
         return self.plan
 
+    def update_step_traceback(self, observation: list[float]):
+        step_index = min(self.current_step_index, len(self.plan) - 1)
+
+        if step_index not in self.step_traceback:
+            self.step_traceback[step_index] = {
+            'step': self.plan[step_index],
+            'action': ACTIONS[self.action],
+            'observation_start': len(self.observation_history)
+        }
+
+        self.observation_history.append(observation)
 
     def generate_report(self, samples: int = 3):
+        full_report = {}
         # save the last samples observations for each step
-        relevant_step = list(self.step_traceback.keys())[-1]
-        
-        traceback_description = []
-        trace = self.step_traceback[relevant_step]
+        for trace_i, trace in self.step_traceback.items():
+            traceback_description = []
+            prev_observation = None
+            start_index = trace["observation_start"] + 1
+            end_index = start_index + samples
+            for i, observation in enumerate(self.observation_history[start_index:end_index]):
+                description = describe_observation(observation, prev_observation)
+                traceback_description.append({
+                    f"timestamp_{i}": description
+                })
+                prev_observation = observation
+            full_report[f"step_{trace_i}"] = traceback_description
+            full_report[f"plan_{trace_i}"] = self.plan[trace_i]
 
-        prev_sample = {"observations": None}
-        for sample in trace[:samples]:
-            traceback_description.append({
-                "description": describe_observation(sample['observations'], prev_sample['observations'])
-            })
-            
-            prev_sample = sample
-
-        return traceback_description
+        return full_report
