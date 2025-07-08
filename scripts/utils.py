@@ -4,7 +4,7 @@ import dotenv
 from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
 
-def setup_environment():
+def setup_environment(nb_agents=None, level=None):
     dotenv.load_dotenv(dotenv_path="scripts/.config", override=True)
     
     env_path = None
@@ -16,8 +16,8 @@ def setup_environment():
     
     seed = os.getenv("SEED", 42)
     speedup = os.getenv("SPEEDUP", 1)
-    nb_agents = os.getenv("NB_AGENTS", 1)
-    level = os.getenv("LEVEL", "1-1")
+    nb_agents = nb_agents if nb_agents else os.getenv("NB_AGENTS", 1)
+    level = level if level else os.getenv("LEVEL", "1-1")
     action_repeat = os.getenv("ACTION_REPEAT", 5)
 
     env = StableBaselinesGodotEnv(
