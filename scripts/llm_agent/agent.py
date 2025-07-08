@@ -3,7 +3,6 @@ import numpy as np
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
 
 from planning_agent.agent import Agent as PlanningAgent
 from llm_agent.prompts import PROMPTS

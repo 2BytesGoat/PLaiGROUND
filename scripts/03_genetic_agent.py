@@ -1,46 +1,12 @@
-import numpy as np
-
-from utils import setup_environment
-
-
-class GeneticAgent:
-    def __init__(self):
-        pass
-
-    def act(self, obs, reward, done):
-        pass
+from genetic_agent.agent import Agent
 
 
 def main():
-    # SETUP THE ENVIRONMENT
-    env = setup_environment()
-
-    # GET THE INITIAL STATE OF THE GAME
-    reward = 0
-    done = False
-    obs = env.reset()
-
-    # GET NUMBER OF CONCURENT AGENTS IN ONE ENVIRONMENT
-    nb_agents = len(obs["obs"])
-    
     # INITIALIZE THE GENETIC AGENT
-    genetic_agent = GeneticAgent()
+    genetic_agent = Agent()
     
-    while True:
-        # TAKE AN ACTION FOR EACH AGENT
-        actions = [genetic_agent.act(obs["obs"][i], reward, done) for i in range(nb_agents)]
-        
-        # FORMAT THE ACTIONS AS A NUMPY ARRAY
-        actions = np.array(actions, dtype=np.int64)
-
-        # EXECUTE THE ACTIONS INSIDE THE ENVIRONMENT
-        obs, reward, done, info = env.step(actions)
-
-        # IF ANY OF THE AGENTS FINISHES OR TIME EXPIRES END THE LOOP
-        if any(done):
-            break
-
-    env.close()
+    # TRAIN THE GENETIC AGENT
+    genetic_agent.learn()
 
 
 if __name__ == "__main__":
