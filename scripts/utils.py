@@ -19,10 +19,12 @@ def setup_environment(nb_agents=None, level=None):
     nb_agents = nb_agents if nb_agents else os.getenv("NB_AGENTS", 1)
     level = level if level else os.getenv("LEVEL", "1-1")
     action_repeat = os.getenv("ACTION_REPEAT", 5)
+    show_window = os.getenv("SHOW_WINDOW", "True").lower() == "true"
+    print(show_window)
 
     env = StableBaselinesGodotEnv(
         env_path=env_path,
-        show_window=True, # can't get 2d observation without rendering
+        show_window=show_window,
         seed=seed,
         speedup=speedup,
         nb_agents=nb_agents,

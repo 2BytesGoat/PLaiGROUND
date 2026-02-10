@@ -77,6 +77,7 @@ Install the Build Tools
     * CMake tools for Windows
     * C++ CMake tools for Windows
 
+You may also want to try: `python -m pip install meson ninja cython pybind11`
 
 ### 3. Activate the virtual environment
 
