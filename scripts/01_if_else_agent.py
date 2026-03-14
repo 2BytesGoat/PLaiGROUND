@@ -2,7 +2,7 @@ import numpy as np
 from utils import setup_environment
 
 
-def if_else_agent(observation):
+def agent_brain(observation):
     action = 0
 
     distance, goal_x, goal_y, velocity_x, velocity_y = observation[:5]
@@ -30,7 +30,7 @@ def main():
     
     while True:
         # TAKE AN ACTION FOR EACH AGENT
-        actions = [if_else_agent(obs["obs"][i]) for i in range(nb_agents)]
+        actions = [agent_brain(obs["obs"][i]) for i in range(nb_agents)]
 
         # FORMAT THE ACTIONS AS A NUMPY ARRAY
         actions = np.array(actions, dtype=np.int64)

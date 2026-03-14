@@ -1,7 +1,7 @@
 import os
 import dotenv
 
-from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
+from wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
 
 def setup_environment(nb_agents=None, level=None):
