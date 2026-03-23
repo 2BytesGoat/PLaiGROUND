@@ -16,6 +16,9 @@ Here are some nifty links to navigate this huge README file
 
 Choose either of these two ways of setting up your environment. No need to do both Docker and Local setup.
 
+> **Important:** Local setup is currently supported on **Linux/Windows only**.  
+> On **macOS**, please use the Docker setup.
+
 ## 🐋 Docker Setup
 ### 1. Download and Install Docker
 Docker is an application that's used to make sure you don't have OS compatibility issues when setting up environments. You can download [Docker Desktop](https://www.docker.com/) from their official website.
@@ -26,14 +29,18 @@ Once Docker is installed, you can use our Docker script that will run all the co
 # make the script executable
 chmod +x run_docker.sh
 
+# Dragon Jump page
+export DRAGON_JUMP_PAGE_URL="http://2bytesgoat.itch.io/dragon-jump"
+
 # run the script that does the docker setup for you
 ./run_docker.sh
 ```
 
 After running this script, Docker will:
 1. Build a Docker image with all necessary dependencies
-2. Start a container with Jupyter Lab running inside it
-3. Map port 8888 on your machine to the container's Jupyter server
+2. Download and unpack the Linux game build when `DRAGON_JUMP_URL` (direct zip URL) is provided
+3. Start a container with Jupyter Lab running inside it
+4. Map port 8888 on your machine to the container's Jupyter server
 
 The container will continue running until you stop it with Ctrl+C in the terminal where you ran the script.
 
@@ -46,28 +53,61 @@ http://127.0.0.1:8888/lab?token=plaiground
 Here you can browse the notebooks, run code, and interact with the game environments.
 
 ## 👷 Local Setup
-### 1. Download and Install Python
-This project uses **[Python 3.13](https://www.python.org/downloads/release/python-3131/)**. You can try an older version of Python, but you may have compatibility issues.
+### 1. Supported operating systems
+Local setup is currently supported on:
+- Linux
+- Windows
 
-### 2. Create a virtual environment 
+For macOS, use the Docker setup above.
 
-By default Python will install a project's dependencies (requirements) globally. This may cause compatibility issues if you have multiple Python projects on your PC. In order to avoid this, you will need to use a virtual environment that will store a project's dependencies separately.
+### 2. Download and Install Python
+This project uses **[Python 3.13](https://www.python.org/downloads/release/python-3131/)**.
+
+### 3. Create a virtual environment
+
+Create a local virtual environment in the project folder:
 ```
-# Install the virtualenv library globally
-python3 -m pip install venv
-
-# Create a virtual environment inside the current folder
-python3 -m venv .venv
+python -m venv .venv
 ```
 
-### ⚠️ Troubleshooting
+### 4. Activate the virtual environment
 
-**On Windows** - Can't install the numpy library because of of missing compilers.
+Depending on your OS:
+```
+# On Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
 
-Go to the official Visual Studio download page: 
+# On Windows (cmd)
+.\.venv\Scripts\activate.bat
+
+# On Linux
+source .venv/bin/activate
+```
+
+### 5. Install Poetry inside the virtual environment
+
+With the virtual environment activated:
+```
+python -m pip install --upgrade pip
+python -m pip install poetry
+poetry --version
+```
+
+### 6. Install dependencies with Poetry
+
+Run:
+```
+poetry install
+```
+
+### ⚠️ Troubleshooting (Windows)
+
+Can't install the numpy library because of missing compilers?
+
+Go to the official Visual Studio download page:
 👉 https://visualstudio.microsoft.com/visual-cpp-build-tools/
 
-Install the Build Tools
+Install the Build Tools:
 * Launch the installer.
 * Select:
     * "C++ build tools"
@@ -77,41 +117,21 @@ Install the Build Tools
     * CMake tools for Windows
     * C++ CMake tools for Windows
 
-You may also want to try: `python -m pip install meson ninja cython pybind11`
-
-### 3. Activate the virtual environment
-
-Depending on your operating system, you will need to run a specific command to step into the virtual environment.
+You may also want to try:
 ```
-# On Windows
-./.venv/Scripts/activate
-
-# On Linux and MacOS
-source ./.venv/bin/activate
-```
-You'll know the command worked if the command line you'll see `(.venv)` at the beginning of the line.
-
-### 4. Install dependencies
-
-The project has several dependencies that were stored inside the `requirements.txt` file which are needed to run the code.
-
-```
-# Install the dependencies inside the virtual environment
-pip install --no-cache-dir -r requirements.txt
+python -m pip install meson ninja cython pybind11
 ```
 
 ## 🏃‍➡️ Running the project
 
 ### 1. Downloading the game
-Go to Steam and request access to the Open Playtest here:
-* 👉 [Dragon Jump](https://store.steampowered.com/app/2471710/Dragon_Jump/) - One-button input precision platformer - similar to SuperMeatBoy
+For local setup, get Dragon Jump from itch:
+* 👉 [Dragon Jump on itch.io](http://2bytesgoat.itch.io/dragon-jump)
 
-Once you've downloaded the game, you'll need to boot it up and open the developer console using the `~` (tilda) key and type in the following command:
-```
-learning on
-```
-
-This command enables the AI interface in the game, which allows external programs (like our agents) to control the game character. The AI Settings menu will appear whenever you select a level, allowing you to configure how the AI interacts with the game and monitor its performance.
+For the current local workflow, download/clone the Dragon Jump game repository, then:
+1. Open the game project
+2. Launch the multiplayer scene manually
+3. Keep the scene running before starting the Python agent
 
 ### 2. Running the random agent script
 A random agent is the most basic form of AI. 
@@ -128,20 +148,18 @@ You can run individual code snippets by pressing `SHIFT + ENTER`
 There are two ways to run the agent locally. Both methods achieve the same result - running an AI agent that takes random actions in the game:
 
 #### **Method 1**
-With this method, you need to have the game running with the AI interface enabled (using the `learning on` command). The agent will connect to the running game.
+With this method, you need to have the game repository running and the multiplayer scene launched manually. The agent will connect to that running scene.
 
 ```
-python scripts/00_random_agent.py
+poetry run python scripts/00_random_agent.py
 ```
 
 #### **Method 2**
 This method launches the game automatically from your script. You don't need to have the game running beforehand, but you do need to provide the path to the game directory:
 
 ```
-python scripts/00_random_agent.py --env_path game_directory --env_name DragonJump
+poetry run python scripts/00_random_agent.py --env_path game_directory --env_name DragonJump
 ```
-
-You can find out your game_directory by opening the game, using the `~` (tilda) key to open the console, and typing `path`.
 
 ## 📋 What's to come:
 
