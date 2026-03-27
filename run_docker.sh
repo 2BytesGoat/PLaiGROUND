@@ -6,17 +6,9 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-DRAGON_JUMP_PAGE_URL="http://2bytesgoat.itch.io/dragon-jump"
-
-# DRAGON_JUMP_URL must be a direct file URL to dragon-jump-linux.zip
-if [ -z "${DRAGON_JUMP_URL}" ]; then
-    echo "No DRAGON_JUMP_URL set. Open ${DRAGON_JUMP_PAGE_URL} and copy the direct link to dragon-jump-linux.zip."
-fi
-
 # Build the Docker image
 echo "Building Docker image..."
 docker build \
-    --build-arg DRAGON_JUMP_URL="${DRAGON_JUMP_URL}" \
     -t jupyter-env .
 
 # Run the Docker container with the RL environment mounted

@@ -75,6 +75,7 @@ class GodotEnv:
                 **kwargs,
             )
         else:
+            print(env_path)
             print("No game binary has been provided, please press PLAY in the Godot editor")
 
         self.port = port
