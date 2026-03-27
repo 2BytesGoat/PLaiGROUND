@@ -138,7 +138,7 @@ Here you can browse the notebooks, run code, and interact with the game environm
 ## 🏃‍➡️ Running the project
 
 ### 👷‍♂️ With Local Setup
-* Download Dragon Jump from 👉 [itch.io](http://2bytesgoat.itch.io/dragon-jump)
+* Download 👉 [Dragon Jump from itch.io](http://2bytesgoat.itch.io/dragon-jump)
 * Place the game executable inside the `./environments` folder
 * Activate your virtual environment
 ```
@@ -154,7 +154,7 @@ python scripts/00_random_agent.py
 ```
 
 #### 🐋 With Docker
-* Download the Linux version of Dragon Jump from 👉 [itch.io](http://2bytesgoat.itch.io/dragon-jump)
+* Download the **Linux version** of 👉 [Dragon Jump from itch.io](http://2bytesgoat.itch.io/dragon-jump)
 * Unzip the game executables inside the `./environments` folder
 * Test the setup by running the random_agent notebook
 ```

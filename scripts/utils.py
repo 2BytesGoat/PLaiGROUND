@@ -5,12 +5,14 @@ from wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
 
 def setup_environment(nb_agents=None, level=None):
-    config_path = os.path.join(os.getcwd(), ".config")
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(current_directory, ".config")
     load_dotenv(config_path, override=True)
+    print(f"Loaded environment variables from {config_path}")
     
     env_path = None
-    env_dir = os.getenv("ENV_PATH", "../environments")
-    env_name = os.getenv("ENV_NAME", "DragonJump")
+    env_dir = os.getenv("ENV_PATH")
+    env_name = os.getenv("ENV_NAME")
 
     if env_dir:
         env_path = os.path.join(env_dir, env_name)

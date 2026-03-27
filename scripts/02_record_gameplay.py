@@ -43,9 +43,10 @@ def on_release(key):
 def save_to_disk(buffer, filename):
     if not buffer:
         return
-    with open(filename, "a") as f:
-        for entry in buffer:
-            f.write(json.dumps(entry) + "\n")
+    with open(filename, "a", encoding="utf-8") as f:
+        for frame in buffer:
+            f.write(json.dumps(frame))
+            f.write("\n")
     print(f"--- Saved {len(buffer)} frames to {filename} ---")
 
 def main():
