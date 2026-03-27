@@ -122,9 +122,8 @@ chmod +x run_docker.sh
 
 After running this script, Docker will:
 1. Build a Docker image with all necessary dependencies
-2. Download and unpack the Linux game build when `DRAGON_JUMP_URL` (direct zip URL) is provided
-3. Start a container with Jupyter Lab running inside it
-4. Map port 8888 on your machine to the container's Jupyter server
+2. Start a container with Jupyter Lab running inside it
+3. Map port 8888 on your machine to the container's Jupyter server
 
 The container will continue running until you stop it with Ctrl+C in the terminal where you ran the script.
 
@@ -155,29 +154,13 @@ python scripts/00_random_agent.py
 ```
 
 #### 🐋 With Docker
-You'll need to open the jupyter notebook that contains the basic logic for an AI that takes random actions:
+* Download the Linux version of Dragon Jump from 👉 [itch.io](http://2bytesgoat.itch.io/dragon-jump)
+* Unzip the game executables inside the `./environments` folder
+* Test the setup by running the random_agent notebook
 ```
 http://127.0.0.1:8888/lab/tree/notebooks/00_random_agent.ipynb
 ```
 You can run individual code snippets by pressing `SHIFT + ENTER`
-
-#### 2.2. 
-
-There are two ways to run the agent locally. Both methods achieve the same result - running an AI agent that takes random actions in the game:
-
-#### **Method 1**
-With this method, you need to have the game repository running and the multiplayer scene launched manually. The agent will connect to that running scene.
-
-```
-poetry run python scripts/00_random_agent.py
-```
-
-#### **Method 2**
-This method launches the game automatically from your script. You don't need to have the game running beforehand, but you do need to provide the path to the game directory:
-
-```
-poetry run python scripts/00_random_agent.py --env_path game_directory --env_name DragonJump
-```
 
 ## 📋 What's to come:
 

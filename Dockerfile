@@ -29,6 +29,6 @@ EXPOSE 8888
 
 # Set environment variables
 ENV JUPYTER_ENABLE_LAB=yes
-ENV JUPYTER_TOKEN=""
+ENV JUPYTER_TOKEN=plaiground
 
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
