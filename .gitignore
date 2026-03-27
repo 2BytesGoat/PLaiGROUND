@@ -15,5 +15,3 @@ environments/*
 
 # Data
 data/*
-!data/sample_recording.json
-!data/sample_first_jump.json

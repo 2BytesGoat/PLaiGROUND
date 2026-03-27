@@ -1,11 +1,14 @@
 import os
-import dotenv
+from dotenv import load_dotenv
 
-from godot_rl.wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
+from wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 
 
 def setup_environment(nb_agents=None, level=None):
-    dotenv.load_dotenv(dotenv_path="scripts/.config", override=True)
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(current_directory, ".config")
+    load_dotenv(config_path, override=True)
+    print(f"Loaded environment variables from {config_path}")
     
     env_path = None
     env_dir = os.getenv("ENV_PATH")
@@ -19,10 +22,11 @@ def setup_environment(nb_agents=None, level=None):
     nb_agents = nb_agents if nb_agents else os.getenv("NB_AGENTS", 1)
     level = level if level else os.getenv("LEVEL", "1-1")
     action_repeat = os.getenv("ACTION_REPEAT", 5)
+    show_window = os.getenv("SHOW_WINDOW", "False").lower() == "true"
 
     env = StableBaselinesGodotEnv(
         env_path=env_path,
-        show_window=True, # can't get 2d observation without rendering
+        show_window=show_window,
         seed=seed,
         speedup=speedup,
         nb_agents=nb_agents,

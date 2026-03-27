@@ -8,7 +8,8 @@ fi
 
 # Build the Docker image
 echo "Building Docker image..."
-docker build -t jupyter-env .
+docker build \
+    -t jupyter-env .
 
 # Run the Docker container with the RL environment mounted
 echo "Starting Docker container with mounted RL environment..."

@@ -2,7 +2,7 @@ import numpy as np
 from utils import setup_environment
 
 
-def random_agent(observation):
+def agent_brain(observation):
     action = np.random.randint(0, 2)
     return [action]
 
@@ -19,7 +19,7 @@ def main():
 
     while True:
         # TAKE AN ACTION FOR EACH AGENT
-        actions = [random_agent(obs["obs"][i]) for i in range(nb_agents)]
+        actions = [agent_brain(obs["obs"][i]) for i in range(nb_agents)]
 
         # FORMAT THE ACTIONS AS A NUMPY ARRAY
         actions = np.array(actions, dtype=np.int64)
