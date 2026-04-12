@@ -1,6 +1,7 @@
 import json
 from collections import defaultdict
-from scripts.processing.frame_visualizer import FrameVisualizer
+
+from processing.frame_visualizer import FrameVisualizer
 
 
 def load_observations_by_session(data_path: str) -> dict[int, list[dict]]:

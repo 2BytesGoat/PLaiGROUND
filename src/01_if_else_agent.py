@@ -1,5 +1,5 @@
-import time
 import numpy as np
+
 from utils import setup_environment
 from processing.frame_visualizer import FrameVisualizer
 

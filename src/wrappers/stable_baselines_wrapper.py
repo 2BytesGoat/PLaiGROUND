@@ -12,8 +12,8 @@ minor modifications or adaptations for my specific use case.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-import gymnasium as gym
 import numpy as np
+import gymnasium as gym
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
 from wrappers.godot_env import GodotEnv
