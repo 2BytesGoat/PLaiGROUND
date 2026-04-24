@@ -14,7 +14,12 @@ def compute_can_jump(sensor_values: dict, session_info: dict) -> float:
     return float(has_powerup or (on_floor and not jump_pressed))
 
 
-def compute_object_sensors(grid: np.ndarray, object_index: int, player_cell: tuple[int, int] = (3, 3)) -> list[float]:
+def compute_object_sensors(
+    grid: np.ndarray,
+    object_index: int,
+    player_cell: tuple[int, int] = (3, 3),
+    max_steps: int = 4,
+) -> list[float]:
     directions = [
         (0, 1),   # right
         (0, -1),  # left
@@ -31,6 +36,7 @@ def compute_object_sensors(grid: np.ndarray, object_index: int, player_cell: tup
             object_index=object_index,
             player_cell=player_cell,
             direction=direction,
+            max_steps=max_steps,
         )
         for direction in directions
     ]
@@ -41,7 +47,7 @@ def _distance_to_object_in_direction(
     object_index: int,
     player_cell: tuple[int, int],
     direction: tuple[int, int],
-    max_steps: int = 3,
+    max_steps: int = 4,
 ) -> float:
     row, col = player_cell
     d_row, d_col = direction
