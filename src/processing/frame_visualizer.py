@@ -74,6 +74,14 @@ class FrameVisualizer:
             "unique_ids": unique_ids,
             "sensor_values": dict(zip(self.sensor_labels, extras.tolist())),
         }
+    
+
+    def get_class_index(self, class_name: str) -> int:
+        """Helper to get class index by name, with error handling."""
+        for idx, name in self.class_names.items():
+            if name == class_name:
+                return idx
+        raise ValueError(f"Class name '{class_name}' not found in class_names.")
 
 
     def extract_frame_info(self, frame: dict) -> dict:
