@@ -150,7 +150,7 @@ source .venv/bin/activate
 ```
 * Test the setup by running the random_agent script
 ```
-python scripts/00_random_agent.py
+python src/00_random_agent.py
 ```
 
 #### 🐋 With Docker

@@ -18,7 +18,24 @@ def setup_environment(nb_agents=None, level=None):
     env_name = os.getenv("ENV_NAME")
 
     if env_dir:
-        env_path = os.path.join(env_dir, env_name)
+        if os.path.isabs(env_dir):
+            resolved_env_dir = env_dir
+        else:
+            config_directory = os.path.dirname(config_path)
+            repo_directory = os.path.dirname(config_directory)
+            search_dirs = [
+                os.getcwd(),
+                config_directory,
+                repo_directory,
+            ]
+            resolved_env_dir = env_dir
+            for base_dir in search_dirs:
+                candidate = os.path.abspath(os.path.join(base_dir, env_dir))
+                if os.path.exists(candidate):
+                    resolved_env_dir = candidate
+                    break
+
+        env_path = os.path.join(resolved_env_dir, env_name)
     
     seed = os.getenv("SEED", 42)
     speedup = os.getenv("SPEEDUP", 1)

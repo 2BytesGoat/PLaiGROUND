@@ -1,8 +1,3 @@
-"""Decision-tree agent trained on recorded state/action pairs.
-
-Record sessions with ``python src/02_record_gameplay.py`` (from the repo root)
-so you have ``*.jsonl`` under ``data/`` before training.
-"""
 from pathlib import Path
 
 import numpy as np
