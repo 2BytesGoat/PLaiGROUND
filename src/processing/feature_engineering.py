@@ -1,94 +1,17 @@
-import numpy as np
+from ml_forge.game.features import (  # noqa: F401
+    DIRECTIONS,
+    JUMP_ACTION_ID,
+    FeatureEngineer,
+    compute_can_jump,
+    compute_object_sensors,
+    compute_raycast_sensors,
+)
 
-DIRECTIONS = [
-        (-1, 0),  # up
-        (-1, 1),  # up-right
-        (0, 1),   # right
-        (1, 1),   # down-right
-        (1, 0),   # down
-        (1, -1),  # down-left
-        (0, -1),  # left
-        (-1, -1), # up-left
-    ]
-
-
-def compute_can_jump(sensor_values: dict, session_info: dict) -> float:
-    """
-    The player can jump if:
-      - After jumping, it released the jump button and touched the floor
-      - After jumping, it released the jump button and has a powerup
-    """
-    on_floor = bool(sensor_values["on_floor"])
-    has_powerup = bool(sensor_values["has_powerup"])
-    jump_pressed = int(session_info["prev_action"]) == 1  # jump action id
-    
-    return float(has_powerup or (on_floor and not jump_pressed))
-
-
-def compute_object_sensors(
-    grid: np.ndarray,
-    object_index: int,
-    player_cell: tuple[int, int] = (3, 3),
-    max_steps: int = 4,
-) -> list[float]:
-    return [
-        _distance_to_object_in_direction(
-            grid=grid,
-            object_index=object_index,
-            player_cell=player_cell,
-            direction=direction,
-            max_steps=max_steps,
-        )
-        for direction in DIRECTIONS
-    ]
-
-
-def compute_raycast_sensors(
-    grid: np.ndarray,
-    player_cell: tuple[int, int] = (3, 3),
-    max_steps: int = 4,
-) -> list[float]:
-    raycasts, object_types = zip(*[
-        _raycast_in_direction(grid, player_cell, direction, max_steps)
-        for direction in DIRECTIONS
-    ])
-    return list(raycasts), list(object_types)
-
-
-def _distance_to_object_in_direction(
-    grid: np.ndarray,
-    object_index: int,
-    player_cell: tuple[int, int],
-    direction: tuple[int, int],
-    max_steps: int = 4,
-) -> float:
-    row, col = player_cell
-    d_row, d_col = direction
-
-    for step in range(0, max_steps):
-        next_row = row + d_row * step
-        next_col = col + d_col * step
-        if not (0 <= next_row < grid.shape[0] and 0 <= next_col < grid.shape[1]):
-            break # out of bounds
-        if grid[next_row, next_col] == object_index:
-            return step * 0.25 # found object
-    return 1.0 # no object found
-
-
-def _raycast_in_direction(
-    grid: np.ndarray,
-    player_cell: tuple[int, int],
-    direction: tuple[int, int],
-    max_steps: int = 4,
-) -> tuple[float, int]:
-    row, col = player_cell
-    d_row, d_col = direction
-
-    for step in range(0, max_steps):
-        next_row = row + d_row * step
-        next_col = col + d_col * step
-        if not (0 <= next_row < grid.shape[0] and 0 <= next_col < grid.shape[1]):
-            break # out of bounds
-        if grid[next_row, next_col] != 0:
-            return step * 0.25, grid[next_row, next_col] # found object
-    return 1.0, 0 # no object found
+__all__ = [
+    "DIRECTIONS",
+    "JUMP_ACTION_ID",
+    "FeatureEngineer",
+    "compute_can_jump",
+    "compute_object_sensors",
+    "compute_raycast_sensors",
+]

@@ -3,85 +3,32 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
 
+from ml_forge.game.observation import (
+    CLASS_COLORS,
+    CLASS_NAMES,
+    DEFAULT_COLOR,
+    SENSOR_LABELS,
+    ObservationParser,
+)
+
 
 class FrameVisualizer:
     def __init__(self, extra_features: int = 8):
+        self.parser = ObservationParser(extra_features=extra_features)
         self.extra_features = extra_features
-        self.sensor_labels = [
-            "dir_x",
-            "dir_y",
-            "vel_x",
-            "vel_y",
-            "on_floor",
-            "on_wall",
-            "perc_to_peak",
-            "has_powerup",
-        ]
-        self.class_names = {
-            0: "Empty",
-            1: "Wall",
-            2: "Player",
-            3: "Spikes",
-            4: "Exit",
-            5: "Reset Block",
-            6: "Bounce Pad",
-            7: "Ice",
-            8: "Dissolve Block",
-            9: "Double Jump (Powerup)",
-            10: "Stomp (Powerup)",
-            11: "Dash (Powerup)",
-            12: "Grapple (Powerup)",
-        }
-        self.default_color = "#f8f9fa"
-        self.class_colors = {
-            0: "#f8f9fa",   # Empty
-            1: "#2f9e44",   # Wall
-            2: "#f08c00",   # Player
-            3: "#e03131",   # Spikes
-            4: "#1971c2",   # Exit
-            5: "#6741d9",   # Reset Block
-            6: "#f76707",   # Bounce Pad
-            7: "#74c0fc",   # Ice
-            8: "#868e96",   # Dissolve Block
-            9: "#ffd43b",   # Double Jump
-            10: "#ff922b",  # Stomp
-            11: "#ff6b6b",  # Dash
-            12: "#20c997",  # Grapple
-        }
+        self.sensor_labels = list(SENSOR_LABELS)
+        self.class_names = dict(CLASS_NAMES)
+        self.default_color = DEFAULT_COLOR
+        self.class_colors = dict(CLASS_COLORS)
 
 
     def parse_observation(self, observation) -> dict:
-        """Parse a raw observation vector into grid + sensor components."""
-        state = np.asarray(observation, dtype=float).tolist()
-        grid_flat = state[:-self.extra_features]
-        extras = np.asarray(state[-self.extra_features:], dtype=float)
+        return self.parser.parse_observation(observation)
 
-        pixel_count = len(grid_flat)
-        side = int(np.sqrt(pixel_count))
-        if side * side != pixel_count:
-            raise ValueError(
-                f"Cannot reshape grid of length {pixel_count} into a square grid. "
-                "Check extra_features or provide explicit grid dimensions."
-            )
-
-        grid = np.asarray(grid_flat, dtype=int).reshape(side, side)
-        unique_ids = sorted(np.unique(grid).tolist())
-
-        return {
-            "grid": grid,
-            "side": side,
-            "extras": extras,
-            "unique_ids": unique_ids,
-            "sensor_values": dict(zip(self.sensor_labels, extras.tolist())),
-        }
-    
 
     def get_class_index(self, class_name: str) -> int:
         """Helper to get class index by name, with error handling."""
-        for idx, name in self.class_names.items():
-            if name == class_name:
-                return idx
-        raise ValueError(f"Class name '{class_name}' not found in class_names.")
+        return self.parser.get_class_index(class_name)
 
 
     def extract_frame_info(self, frame: dict) -> dict:
@@ -95,25 +42,7 @@ class FrameVisualizer:
 
     def format_observation_text(self, observation, include_grid: bool = False) -> str:
         """Create a readable text summary for intros/debugging."""
-        frame_info = self.parse_observation(observation)
-        sensor_values = frame_info["sensor_values"]
-        sensor_lines = [
-            f"- {label}: {sensor_values[label]:.3f}" for label in self.sensor_labels
-        ]
-
-        sections = [
-            "Observation summary",
-            f"- grid_size: {frame_info['side']}x{frame_info['side']}",
-            f"- classes_seen: {frame_info['unique_ids']}",
-            "Sensors:",
-            *sensor_lines,
-        ]
-
-        if include_grid:
-            sections.append("Grid:")
-            sections.append(np.array2string(frame_info["grid"], separator=", "))
-
-        return "\n".join(sections)
+        return self.parser.format_observation_text(observation, include_grid=include_grid)
 
     def plot_frame_info(
         self,

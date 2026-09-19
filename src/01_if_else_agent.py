@@ -1,14 +1,15 @@
 import numpy as np
 
+from ml_forge.game.observation import ObservationParser
 from utils import setup_environment
-from processing.frame_visualizer import FrameVisualizer
 
 
-def agent_brain(observation, step_count):
+def agent_brain(observation, step_count, parser=None):
     # TODO: define this object once, outside the function
-    visualizer = FrameVisualizer()
+    if parser is None:
+        parser = ObservationParser()
 
-    parsed = visualizer.parse_observation(observation)
+    parsed = parser.parse_observation(observation)
     grid = parsed["grid"]
 
     # Example heuristic: jump whenyou see a wall on your right.
@@ -29,11 +30,13 @@ def main():
 
     # GET NUMBER OF CONCURENT AGENTS IN ONE ENVIRONMENT
     nb_agents = len(obs["obs"])
-    
+
+    parser = ObservationParser()
+
     step_count = 0
     while True:
         # TAKE AN ACTION FOR EACH AGENT
-        actions = [agent_brain(obs["obs"][i], step_count) for i in range(nb_agents)]
+        actions = [agent_brain(obs["obs"][i], step_count, parser) for i in range(nb_agents)]
 
         # FORMAT THE ACTIONS AS A NUMPY ARRAY
         actions = np.array(actions, dtype=np.int64)
@@ -52,4 +55,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -4,6 +4,7 @@ import numpy as np
 from sklearn import tree
 from sklearn.model_selection import train_test_split
 
+from ml_forge.game.recording import load_all_sessions
 from utils import load_observations_by_session, setup_environment
 
 
@@ -11,11 +12,7 @@ DEFAULT_DATA_DIR = "./data"
 
 
 def load_training_xy(data_dir: str = DEFAULT_DATA_DIR):
-    all_data = {}
-    for i, file in enumerate(sorted(Path(data_dir).glob("*.jsonl"))):
-        observations_by_session = load_observations_by_session(file)
-        for session_id, all_steps in observations_by_session.items():
-            all_data[f"{i}_{session_id}"] = all_steps
+    all_data = load_all_sessions(data_dir)
 
     X, y = [], []
     for _session_id, all_steps in all_data.items():

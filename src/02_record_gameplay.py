@@ -1,20 +1,18 @@
 import os
-import json
 import time
-from datetime import datetime
 
 import numpy as np
 from pynput import keyboard
 
+from ml_forge.game.recording import build_frame_record, make_session_file, save_frames_to_disk
 from utils import setup_environment
 
 SAVE_FOLDER = "data/"
 SAVE_FILE_NAME = "recorded_session"
 os.makedirs(SAVE_FOLDER, exist_ok=True)
 
-def make_session_file() -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return os.path.join(SAVE_FOLDER, f"{SAVE_FILE_NAME}_{ts}.jsonl")
+def make_session_file_path() -> str:
+    return make_session_file(save_folder=SAVE_FOLDER, file_stem=SAVE_FILE_NAME)
 
 # Global state to communicate between the listener thread and main loop
 class InputState:
@@ -41,28 +39,24 @@ def on_release(key):
         input_state.jump = False
 
 def save_to_disk(buffer, filename):
-    if not buffer:
-        return
-    with open(filename, "a", encoding="utf-8") as f:
-        for frame in buffer:
-            f.write(json.dumps(frame))
-            f.write("\n")
-    print(f"--- Saved {len(buffer)} frames to {filename} ---")
+    written = save_frames_to_disk(buffer, filename)
+    if written:
+        print(f"--- Saved {written} frames to {filename} ---")
 
 def main():
     env = setup_environment()
     obs = env.reset()
     nb_agents = len(obs["obs"])
-    
+
     episode_buffer = []
     fps_limit = 1/120
     session_id = 0
-    session_file = make_session_file()
+    session_file = make_session_file_path()
 
     # Start the non-blocking listener
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
-    
+
     print("Controls: SPACE=Jump | R=Discard | ESC=Quit")
 
     try:
@@ -86,24 +80,10 @@ def main():
             actions = np.full((nb_agents, 1), action, dtype=np.int64)
             obs, reward, done, info = env.step(actions)
 
-            # normalize reward/done for JSON
-            try:
-                reward_serial = np.asarray(reward).tolist()
-            except Exception:
-                reward_serial = reward
-            try:
-                done_serial = list(map(bool, done))
-            except Exception:
-                done_serial = done
+            episode_buffer.append(
+                build_frame_record(observation, action, reward, done, session_id)
+            )
 
-            episode_buffer.append({
-                "state": observation.tolist(),
-                "action": int(action),
-                "reward": reward_serial,
-                "done": done_serial,
-                "session": session_id
-            })
-            
             # 4. Auto-Reset Logic
             if any(done):
                 save_to_disk(episode_buffer, session_file)
@@ -112,7 +92,7 @@ def main():
                 # Reset for next episode / start new session
                 episode_buffer = []
                 obs = env.reset()
-                input_state.discard = False 
+                input_state.discard = False
                 continue
 
             # 5. Timing

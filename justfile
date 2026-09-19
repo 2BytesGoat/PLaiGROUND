@@ -5,6 +5,7 @@
 #   just setup-project          Install Python 3.13 + all dependencies into .venv
 #   just setup-docker           Build the container image and run Jupyter Lab in it
 #   just run-random             Run the random agent (game binary or Godot project, per src/.config)
+#   just forge                  Launch the ML Forge visual pipeline editor
 #
 # run-random overrides:
 #   just run-random 8 1-1
@@ -26,3 +27,7 @@ setup-docker:
 # Run the random agent (src/00_random_agent.py)
 run-random nb_agents="8" level="1-3":
     NB_AGENTS={{nb_agents}} LEVEL={{level}} uv run python src/00_random_agent.py
+
+# Launch the ML Forge visual pipeline editor (editable install of ../ml_forge_plaiground)
+forge:
+    uv run python -m ml_forge

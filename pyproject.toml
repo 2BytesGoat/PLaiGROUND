@@ -19,6 +19,8 @@ dependencies = [
     "ipywidgets (>=8.1.8,<9.0.0)",
     "jupyter (>=1.1.1,<2.0.0)",
     "rust-just (>=1.58.0,<2.0.0)",
+    "zaina-ml-forge",
+    "matplotlib>=3.11.2",
 ]
 
 [dependency-groups]
@@ -28,3 +30,6 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+zaina-ml-forge = { path = "../ml_forge_plaiground", editable = true }
