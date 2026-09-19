@@ -3,7 +3,13 @@
 #
 #   make setup-project   Install Python 3.13 + all dependencies into .venv
 #   make setup-docker    Build the container image and run Jupyter Lab in it
-#   make run-random      Run the random agent against the game in ./environments
+#   make run-random      Run the random agent (game binary or Godot project, per src/.config)
+#
+# run-random overrides:
+#   make run-random NB_AGENTS=8 LEVEL=1-1
+
+NB_AGENTS ?= 8
+LEVEL ?= 1-3
 
 .PHONY: setup-project setup-docker run-random
 
@@ -26,4 +32,4 @@ setup-docker:
 	docker compose up --build
 
 run-random:
-	uv run python src/00_random_agent.py
+	NB_AGENTS=$(NB_AGENTS) LEVEL=$(LEVEL) uv run python src/00_random_agent.py

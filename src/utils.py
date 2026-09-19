@@ -10,7 +10,9 @@ from wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv
 def setup_environment(nb_agents=None, level=None):
     current_directory = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(current_directory, ".config")
-    load_dotenv(config_path, override=True)
+    # override=False: values passed via the environment (e.g. make run-random
+    # NB_AGENTS=8) must win over the config file defaults.
+    load_dotenv(config_path, override=False)
     print(f"Loaded environment variables from {config_path}")
     
     env_path = None
@@ -44,6 +46,14 @@ def setup_environment(nb_agents=None, level=None):
     action_repeat = os.getenv("ACTION_REPEAT", 5)
     show_window = os.getenv("SHOW_WINDOW", "False").lower() == "true"
 
+    godot_path = os.getenv("GODOT_PATH", "").strip()
+    godot_project_path = os.getenv("GODOT_PROJECT_PATH", "").strip()
+    if godot_project_path and not os.path.isabs(godot_project_path):
+        # Relative paths are resolved against the repo root (src/..),
+        # so "../dragon-jump-remaster" points next to this repo.
+        repo_directory = os.path.dirname(os.path.dirname(config_path))
+        godot_project_path = os.path.abspath(os.path.join(repo_directory, godot_project_path))
+
     env = StableBaselinesGodotEnv(
         env_path=env_path,
         show_window=show_window,
@@ -52,6 +62,8 @@ def setup_environment(nb_agents=None, level=None):
         nb_agents=nb_agents,
         level=level,
         action_repeat=action_repeat,
+        godot_path=godot_path,
+        godot_project_path=godot_project_path,
     )
 
     return env

@@ -14,6 +14,7 @@ import atexit
 import json
 import os
 import pathlib
+import shutil
 import socket
 import subprocess
 import time
@@ -43,6 +44,8 @@ class GodotEnv:
         action_repeat: Optional[int] = None,
         speedup: Optional[int] = None,
         convert_action_space: bool = False,
+        godot_path: Optional[str] = None,
+        godot_project_path: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -57,10 +60,24 @@ class GodotEnv:
             action_repeat (int): the number of frames to repeat an action for.
             speedup (int): the factor to speedup game time by.
             convert_action_space (bool): flag to convert action space.
+            godot_path (str): path to the Godot editor binary (e.g. /Applications/Godot.app).
+            godot_project_path (str): path to the Godot project to run via the editor binary.
         """
 
         self.proc = None
-        if env_path is not None and env_path != "debug":
+        if godot_project_path:
+            self._launch_project(
+                godot_path,
+                godot_project_path,
+                port,
+                show_window,
+                framerate,
+                seed,
+                action_repeat,
+                speedup,
+                **kwargs,
+            )
+        elif env_path is not None and env_path != "debug":
             env_path = self._set_platform_suffix(env_path)
 
             self.check_platform(env_path)
@@ -303,6 +320,117 @@ class GodotEnv:
     def _close(self):
         print("exit was not clean, using atexit to close env")
         self.close()
+
+    @staticmethod
+    def _find_godot(godot_path: Optional[str]) -> str:
+        """
+        Resolve the Godot editor binary.
+
+        Args:
+            godot_path (str): Path to the Godot editor binary or .app bundle, may be empty.
+
+        Returns:
+            str: Path to the Godot executable.
+
+        Raises:
+            FileNotFoundError: If no Godot binary can be found.
+        """
+        candidates = []
+        if godot_path:
+            candidates.append(os.path.join(godot_path, "Contents", "MacOS", "Godot"))
+            candidates.append(godot_path)
+        candidates.append(shutil.which("godot") or "")
+        candidates.append("/Applications/Godot.app/Contents/MacOS/Godot")
+
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+
+        raise FileNotFoundError(
+            "Could not find the Godot editor binary. Set GODOT_PATH in src/.config "
+            "or install Godot from https://godotengine.org/download"
+        )
+
+    @staticmethod
+    def _ensure_project_imported(godot_bin: str, project_path: str) -> None:
+        """
+        Run the one-time headless asset import for a Godot project.
+
+        Fresh clones have no `.godot/` cache (it is gitignored), which makes
+        every `class_name` lookup and imported resource fail at runtime.
+        """
+        marker = os.path.join(project_path, ".godot", "imported")
+        if os.path.isdir(marker) and os.listdir(marker):
+            return
+
+        print("First run: importing Godot project assets (this can take a minute)...")
+        result = subprocess.run(
+            [godot_bin, "--headless", "--path", project_path, "--import"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 or not (os.path.isdir(marker) and os.listdir(marker)):
+            print(result.stderr or result.stdout)
+            raise RuntimeError(
+                f"Godot asset import failed for '{project_path}'. "
+                "Try running it manually: "
+                f"{godot_bin} --headless --path {project_path} --import"
+            )
+        print("Godot project import complete.")
+
+    def _launch_project(
+        self,
+        godot_path,
+        project_path,
+        port,
+        show_window,
+        framerate,
+        seed,
+        action_repeat,
+        speedup,
+        **kwargs,
+    ):
+        """
+        Launch a Godot project directly through the editor binary, without
+        needing an exported game executable.
+
+        NOTE: Arguments must NOT be passed after a `--` separator: the game
+        parses OS.get_cmdline_args(), which excludes user args after `--`.
+        """
+        godot_bin = self._find_godot(godot_path)
+        project_path = os.path.abspath(project_path)
+
+        if not os.path.exists(os.path.join(project_path, "project.godot")):
+            raise FileNotFoundError(
+                f"No project.godot found in '{project_path}'. "
+                "Check GODOT_PROJECT_PATH in src/.config"
+            )
+
+        self._ensure_project_imported(godot_bin, project_path)
+
+        launch_cmd = [
+            godot_bin,
+            "--path",
+            project_path,
+            f"--port={port}",
+            f"--env_seed={seed}",
+        ]
+
+        if show_window is False:
+            launch_cmd.append("--headless")
+        if framerate is not None:
+            launch_cmd.append(f"--fixed-fps={framerate}")
+        if action_repeat is not None:
+            launch_cmd.append(f"--action_repeat={action_repeat}")
+        if speedup is not None:
+            launch_cmd.append(f"--speedup={speedup}")
+        for key, value in kwargs.items():
+            if value is None:
+                continue
+            launch_cmd.append(f"--{key}={value}")
+
+        print(f"Launching Godot project: {' '.join(launch_cmd)}")
+        self.proc = subprocess.Popen(launch_cmd, start_new_session=True)
 
     def _launch_env(
         self,

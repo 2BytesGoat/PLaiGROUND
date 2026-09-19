@@ -41,6 +41,31 @@ make run-random
 | `make setup-docker` | Builds the container image (via `docker compose`) and starts Jupyter Lab in it |
 | `make run-random` | Runs the random agent (`src/00_random_agent.py`) |
 
+`run-random` can be tweaked per invocation:
+
+```
+make run-random NB_AGENTS=8 LEVEL=1-1
+```
+
+### Running without an exported game
+
+You don't need to export the game — the agent can launch it straight from its Godot project. Point the two settings in `src/.config` at your setup:
+
+```
+GODOT_PATH="/Applications/Godot.app"          # path to the Godot editor (empty = auto-detect)
+GODOT_PROJECT_PATH="../dragon-jump-remaster"  # path to the game's Godot project
+```
+
+With those set, `make run-random` boots the game headless via the Godot binary and connects to it automatically. Leave `GODOT_PROJECT_PATH` empty to use an exported game binary from `./environments` instead (see [Running the project](#️-running-the-project)).
+
+On first run the project's assets are imported automatically (one-time, takes a minute).
+
+### Troubleshooting
+
+**`runtime_secrets.gd ... File not found` errors on startup** — expected on dev machines. The game signs save files with a build-time secret that is gitignored; training doesn't need it. Ignore these errors.
+
+**Game launches but shows only a timer / no world** — usually a stale Godot import cache. Delete the game's `.godot/` folder and let the launcher re-import, or run manually: `<godot> --headless --path <game-project> --import`.
+
 ## 🐋 Container Setup (Docker / Podman)
 ### 1. Download and Install Docker
 Docker is an application that's used to make sure you don't have OS compatibility issues when setting up environments. You can download [Docker Desktop](https://www.docker.com/) from their official website. (Podman with a docker alias works just as well.)
