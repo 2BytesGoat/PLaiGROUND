@@ -1,11 +1,49 @@
 services:
+  # Lean game runtime (default). Runs the Godot game + frame stream server
+  # for ML Forge's Docker Build / Live Visualizer nodes. No jupyter/torch.
   plaiground:
-    build: .
+    build:
+      context: .
+      target: lean
+    image: plaiground-lean
+    working_dir: /app
+    # Godot RL socket port (game <-> env wrapper inside the container).
+    ports:
+      - "11008:11008"
+    # Subpath mounts only: mounting the repo root would also drag the
+    # host's macOS .venv (36k files) and .git through the file-sharing
+    # layer, and shadow the container's own environment.
+    volumes:
+      - ./src:/app/src
+      - ./environments:/app/environments
+      - ./data:/app/data
+      - ./templates:/app/templates
+      # ml_forge fork (mounted live; PYTHONPATH already points here)
+      - ../ml_forge_plaiground:/ml_forge_plaiground
+    stdin_open: true
+    tty: true
+
+  # Full Jupyter Lab stack (opt-in): docker compose --profile full up --build
+  jupyter:
+    profiles:
+      - full
+    build:
+      context: .
+      target: full
+      additional_contexts:
+        forge-src: ../ml_forge_plaiground
     image: plaiground
     ports:
       - "8888:8888"
       - "11008:11008"
     volumes:
-      - .:/app
+      - ./src:/app/src
+      - ./notebooks:/app/notebooks
+      - ./environments:/app/environments
+      - ./data:/app/data
+      - ./templates:/app/templates
+      # ml_forge is installed editable from this fork; mount it so the
+      # editable install resolves inside the container too.
+      - ../ml_forge_plaiground:/ml_forge_plaiground
     stdin_open: true
     tty: true

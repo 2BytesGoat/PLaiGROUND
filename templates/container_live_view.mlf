@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "tabs": [
+    {
+      "name": "Container",
+      "role": "data_prep",
+      "nodes": [
+        {
+          "nid": 1,
+          "label": "Docker Build",
+          "pos": [40, 60],
+          "params": {
+            "compose_dir": ".",
+            "compose_file": "compose.yaml",
+            "service": "plaiground",
+            "rebuild": "True",
+            "compose_provider": "auto"
+          }
+        },
+        {
+          "nid": 2,
+          "label": "Live Visualizer",
+          "pos": [380, 60],
+          "params": {
+            "cell_size": "14",
+            "refresh_hz": "30",
+            "show_sensors": "True"
+          }
+        }
+      ],
+      "links": [
+        { "link_id": 1, "src_attr": "node_1_1_out_env", "dst_attr": "node_1_2_in_env" }
+      ]
+    },
+    {
+      "name": "Model",
+      "role": "model",
+      "nodes": []
+    },
+    {
+      "name": "Training",
+      "role": "training",
+      "nodes": []
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "tabs": [
+    {
+      "name": "Capture",
+      "role": "data_prep",
+      "nodes": [
+        {
+          "nid": 1,
+          "label": "Play & Record",
+          "pos": [40, 60],
+          "params": {
+            "mode": "record",
+            "save_folder": "./data",
+            "fps_limit": "120"
+          }
+        }
+      ],
+      "links": []
+    },
+    {
+      "name": "Model",
+      "role": "model",
+      "nodes": []
+    },
+    {
+      "name": "Training",
+      "role": "training",
+      "nodes": []
+    }
+  ]
+}

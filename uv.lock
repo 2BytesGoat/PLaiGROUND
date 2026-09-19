@@ -2768,6 +2768,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "dearpygui", specifier = ">=1.11.0" },
+    { name = "joblib", marker = "extra == 'game'", specifier = ">=1.3" },
     { name = "numpy", marker = "extra == 'game'", specifier = ">=1.24" },
     { name = "pillow", specifier = ">=9.0.0" },
     { name = "pynput", marker = "extra == 'game'", specifier = ">=1.7" },

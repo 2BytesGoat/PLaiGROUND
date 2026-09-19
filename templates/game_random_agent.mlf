@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "tabs": [
+    {
+      "name": "Play",
+      "role": "data_prep",
+      "nodes": [
+        {
+          "nid": 1,
+          "label": "Play & Record",
+          "pos": [40, 60],
+          "params": {
+            "mode": "random",
+            "save_folder": "./data",
+            "fps_limit": "0"
+          }
+        }
+      ],
+      "links": []
+    },
+    {
+      "name": "Model",
+      "role": "model",
+      "nodes": [
+        {
+          "nid": 1,
+          "label": "Session Dataset",
+          "pos": [40, 60],
+          "params": {
+            "data_dir": "./data",
+            "engineer_features": "True",
+            "session_split": "True"
+          }
+        },
+        {
+          "nid": 2,
+          "label": "Decision Tree",
+          "pos": [380, 60],
+          "params": {
+            "max_depth": "3"
+          }
+        }
+      ],
+      "links": [
+        { "link_id": 1, "src_attr": "node_1_1_out_X", "dst_attr": "node_1_2_in_X" },
+        { "link_id": 2, "src_attr": "node_1_1_out_y", "dst_attr": "node_1_2_in_y" }
+      ]
+    },
+    {
+      "name": "Training",
+      "role": "training",
+      "nodes": [
+        {
+          "nid": 1,
+          "label": "Session Dataset",
+          "pos": [40, 60],
+          "params": {
+            "data_dir": "./data",
+            "engineer_features": "True",
+            "session_split": "True"
+          }
+        },
+        {
+          "nid": 2,
+          "label": "Decision Tree",
+          "pos": [340, 60],
+          "params": {
+            "max_depth": "3"
+          }
+        },
+        {
+          "nid": 3,
+          "label": "Fit",
+          "pos": [640, 60],
+          "params": {
+            "test_size": "0.2",
+            "random_state": "42",
+            "class_weights": "True"
+          }
+        },
+        {
+          "nid": 4,
+          "label": "AgentRunner",
+          "pos": [900, 60],
+          "params": {
+            "model_path": "",
+            "max_steps": ""
+          }
+        }
+      ],
+      "links": [
+        { "link_id": 1, "src_attr": "node_2_1_out_X", "dst_attr": "node_2_2_in_X" },
+        { "link_id": 2, "src_attr": "node_2_1_out_y", "dst_attr": "node_2_2_in_y" },
+        { "link_id": 3, "src_attr": "node_2_2_out_model", "dst_attr": "node_2_3_in_model" },
+        { "link_id": 4, "src_attr": "node_2_1_out_X", "dst_attr": "node_2_3_in_X" },
+        { "link_id": 5, "src_attr": "node_2_1_out_y", "dst_attr": "node_2_3_in_y" },
+        { "link_id": 6, "src_attr": "node_2_3_out_fitted", "dst_attr": "node_2_4_in_fitted" }
+      ]
+    }
+  ]
+}
