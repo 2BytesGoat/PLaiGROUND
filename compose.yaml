@@ -1,0 +1,11 @@
+services:
+  plaiground:
+    build: .
+    image: plaiground
+    ports:
+      - "8888:8888"
+      - "11008:11008"
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
