@@ -21,31 +21,33 @@ Choose either of these two ways of setting up your environment. No need to do bo
 
 ## 👷 Local Setup
 
-All you need is [uv](https://docs.astral.sh/uv/) and [make](https://www.gnu.org/software/make/). uv will automatically download Python 3.13 and install every dependency into a local `.venv`:
+All you need is [uv](https://docs.astral.sh/uv/) — everything else (Python 3.13, dependencies, and [just](https://github.com/casey/just), the cross-OS task runner used below) installs automatically on first run:
 
 ```
-make setup-project
+uv run just setup-project
 ```
 
 That's it. To try it out, place the game executable in `./environments` (see [Running the project](#️-running-the-project)) and run:
 
 ```
-make run-random
+uv run just run-random
 ```
 
-### Available Make targets
+### Available tasks
 
-| Target | What it does |
+| Task | What it does |
 |--------|--------------|
-| `make setup-project` | Installs Python 3.13 + all dependencies via uv |
-| `make setup-docker` | Builds the container image (via `docker compose`) and starts Jupyter Lab in it |
-| `make run-random` | Runs the random agent (`src/00_random_agent.py`) |
+| `uv run just setup-project` | Installs Python 3.13 + all dependencies via uv |
+| `uv run just setup-docker` | Builds the container image (via `docker compose`) and starts Jupyter Lab in it |
+| `uv run just run-random` | Runs the random agent (`src/00_random_agent.py`) |
 
 `run-random` can be tweaked per invocation:
 
 ```
-make run-random NB_AGENTS=8 LEVEL=1-1
+uv run just run-random 8 1-1
 ```
+
+> `just` ships as a project dependency (`rust-just` in `pyproject.toml`), so `uv run just ...` works on any OS right after cloning — no global installs, no `make`. (Heads-up: `uvx just` and `pip install just` belong to an unrelated PyPI package — always go through `uv run`.)
 
 ### Running without an exported game
 
@@ -56,7 +58,7 @@ GODOT_PATH="/Applications/Godot.app"          # path to the Godot editor (empty 
 GODOT_PROJECT_PATH="../dragon-jump-remaster"  # path to the game's Godot project
 ```
 
-With those set, `make run-random` boots the game headless via the Godot binary and connects to it automatically. Leave `GODOT_PROJECT_PATH` empty to use an exported game binary from `./environments` instead (see [Running the project](#️-running-the-project)).
+With those set, `uv run just run-random` boots the game headless via the Godot binary and connects to it automatically. Leave `GODOT_PROJECT_PATH` empty to use an exported game binary from `./environments` instead (see [Running the project](#️-running-the-project)).
 
 On first run the project's assets are imported automatically (one-time, takes a minute).
 
@@ -75,7 +77,7 @@ Docker is an application that's used to make sure you don't have OS compatibilit
 Once Docker is installed, one command does everything:
 
 ```
-make setup-docker
+uv run just setup-docker
 ```
 
 This runs `docker compose up --build` against the included `compose.yaml`, which:
@@ -100,7 +102,7 @@ Here you can browse the notebooks, run code, and interact with the game environm
 * Place the game executable inside the `./environments` folder
 * Test the setup by running the random_agent script
 ```
-make run-random
+uv run just run-random
 ```
 
 #### 🐋 With Containers

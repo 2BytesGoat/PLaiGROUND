@@ -139,12 +139,15 @@ codebase.
 
 ## Distribution & setup
 
-- Student flow: get the repo -> `just setup` (uv) -> get the game (free
+- Student flow: get the repo -> `uv run just setup-project` -> get the game (free
   demo from itch or Steam) -> launch -> play/train. Game is a black box
   (exported binary); students never see game code.
-- **just** is the cross-OS task runner (Windows has no make): installed free
-  via the pypi wheel (rust-just) that ships with uv. One justfile for all
-  OSes; Makefile may remain as a thin alias.
+- **just** is the cross-OS task runner (Windows has no make): shipped as a
+  project dependency (`rust-just` in pyproject.toml), invoked as
+  `uv run just ...` — uv auto-syncs the venv on first run, so uv is the
+  only prerequisite. (Note: `uvx just` / `pip install just` collide with an
+  unrelated PyPI package.) One justfile for all OSes — DONE Sep 2026:
+  Makefile removed, justfile is the single task file.
 - **Game discovery block**: if the game binary is missing -> "Do you have a
   Steam account? (y/n)" -> open the Steam page or the itch page. Never
   direct downloads (protects sales); free demos on both stores will all be
