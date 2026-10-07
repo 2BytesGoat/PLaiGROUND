@@ -1,22 +1,24 @@
 """
 stream_server.py
 Run inside the lean PLaiGROUND container. Drives the Godot game via the
-existing env wrapper and writes one JSON frame per line to STDOUT so ML
-Forge's embedded Live Visualizer can render it in real time on the host.
+existing env wrapper and speaks a duplex JSON protocol over stdio so ML
+Forge's Playground loop can both watch and drive it:
 
-Deliberately torch-free: uses wrappers.godot_env.GodotEnv directly instead
-of the stable-baselines wrapper (whose VecEnv base class pulls torch).
+    stdout: one JSON frame per line (pure - logs go to stderr)
+    stdin:  one JSON action per line, or the literal line STOP
+
+Modes (--policy):
+    host    - wait for an action line before every env.step; the host
+              (ML Forge agent block) is the brain. This closes the loop:
+              the container is a pure environment server.
+    random  - act randomly and free-run (self-driving demo / watch mode).
 
 Frame format (one JSON object per line on stdout):
     {"obs": [...], "action": int, "reward": [...], "done": [bool], "step": int}
 
-Protocol:
-    - logs go to stderr (stdout stays frame-pure)
-    - the server streams until the client sends "STOP\\n" on stdin, stdin
-      closes, or --max-steps is reached.
-
-Usage (usually launched by ML Forge's Docker Build node):
-    python src/stream_server.py [--fps 30] [--max-steps N]
+Usage (usually launched by ML Forge's Game block):
+    python src/stream_server.py --policy host --fps 30
+    python src/stream_server.py --policy random --fps 30
 """
 
 from __future__ import annotations
@@ -84,7 +86,83 @@ def _stop_requested() -> bool:
     return line.strip().upper() == "STOP"
 
 
-def stream_loop(fps_limit: int, max_steps: int) -> None:
+def _read_action_blocking(timeout: float) -> int | None:
+    """
+    Block up to `timeout` seconds for one action line on stdin.
+    Returns the action value, or None on STOP/EOF/timeout.
+    """
+    readable, _, _ = select.select([sys.stdin], [], [], timeout)
+    if not readable:
+        return None
+    line = sys.stdin.readline()
+    if not line:
+        return None  # EOF - host closed the pipe
+    line = line.strip()
+    if line.upper() == "STOP":
+        return None
+    try:
+        cmd = json.loads(line)
+        action = cmd.get("action", 0)
+        return int(action[0] if isinstance(action, (list, tuple)) else action)
+    except (ValueError, TypeError, IndexError):
+        return 0
+
+
+def _emit(frame: dict) -> bool:
+    """Write one frame to stdout. Returns False when the pipe is gone."""
+    try:
+        sys.stdout.write(json.dumps(frame) + "\n")
+        sys.stdout.flush()
+        return True
+    except (OSError, BrokenPipeError):
+        _log("Visualizer disconnected.")
+        return False
+
+
+def _run_loop(env, obs_list: dict, nb_agents: int, n_heads: int,
+              policy: str, fps_limit: int, max_steps: int) -> None:
+    step_count = 0
+
+    def _value(fallback: int) -> int:
+        if policy == "host":
+            got = _read_action_blocking(60.0)
+            return fallback if got is None else got
+        return fallback
+
+    while True:
+        observation = obs_list[0]["obs"] if nb_agents else None
+
+        value = _value(1 if step_count == 0 else int(np.random.randint(0, 2)))
+        if value is None and policy == "host":
+            _log("Host closed the stream.")
+            break
+
+        actions = np.full((n_heads, nb_agents), value, dtype=np.int64)
+        obs_list, reward, term, trunc, info = env.step(actions)
+        done = term
+
+        frame = {
+            "obs": np.asarray(observation, dtype=float).tolist(),
+            "action": int(value),
+            "reward": np.asarray(reward).tolist(),
+            "done": [bool(d) for d in done],
+            "step": step_count,
+        }
+        if not _emit(frame):
+            break
+
+        step_count += 1
+        if 0 < max_steps <= step_count:
+            break
+        if any(done):
+            obs_list, _ = env.reset()
+        if fps_limit and policy != "host":
+            time.sleep(1.0 / max(fps_limit, 1))
+
+    _log(f"Stream server exiting after {step_count} steps.")
+
+
+def stream_loop(fps_limit: int, max_steps: int, policy: str) -> None:
     env = None
     try:
         env = make_env()
@@ -92,43 +170,9 @@ def stream_loop(fps_limit: int, max_steps: int) -> None:
         nb_agents = len(obs_list)
 
         n_heads = len(env.action_spaces[0])
-        _log(f"Game running with {nb_agents} agent(s), {n_heads} action head(s).")
+        _log(f"Game running with {nb_agents} agent(s), {n_heads} action head(s), policy={policy}.")
 
-        step_count = 0
-        while True:
-            if _stop_requested():
-                _log("Stop requested by visualizer.")
-                break
-
-            # Random agent: jump on the very first frame so the run starts.
-            value = 1 if step_count == 0 else int(np.random.randint(0, 2))
-            observation = obs_list[0]["obs"] if nb_agents else None
-
-            actions = np.full((n_heads, nb_agents), value, dtype=np.int64)
-            obs_list, reward, term, trunc, info = env.step(actions)
-            done = term
-
-            frame = {
-                "obs": np.asarray(observation, dtype=float).tolist(),
-                "action": int(value),
-                "reward": np.asarray(reward).tolist(),
-                "done": [bool(d) for d in done],
-                "step": step_count,
-            }
-            try:
-                sys.stdout.write(json.dumps(frame) + "\n")
-                sys.stdout.flush()
-            except (OSError, BrokenPipeError):
-                _log("Visualizer disconnected.")
-                break
-
-            step_count += 1
-            if 0 < max_steps <= step_count:
-                break
-            if any(done):
-                obs_list, _ = env.reset()
-            if fps_limit:
-                time.sleep(1.0 / max(fps_limit, 1))
+        _run_loop(env, obs_list, nb_agents, n_heads, policy, fps_limit, max_steps)
 
     finally:
         if env is not None:
@@ -143,9 +187,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Stream game frames to ML Forge.")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--max-steps", type=int, default=0)
+    ap.add_argument("--policy", choices=["random", "host"], default="random",
+                    help="host: the host sends actions on stdin (closed loop). "
+                         "random: self-driving demo (default).")
     args = ap.parse_args()
 
-    stream_loop(args.fps, args.max_steps)
+    stream_loop(args.fps, args.max_steps, args.policy)
 
 
 if __name__ == "__main__":

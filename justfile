@@ -8,7 +8,7 @@
 #   just run-random-host        Run the random agent windowed on the host (Godot project launch)
 #   just export-game            Export the Linux game build into environments/ (for Docker)
 #   just docker-run-random      Run the random agent inside the container
-#   just docker-forge-random    Run the ml_forge random-agent play loop inside the container
+#   just forge-env-server       Run the Playground env server (host-driven) inside the container
 #   just forge                  Launch the ML Forge visual pipeline editor
 #
 # run-random overrides:
@@ -52,9 +52,11 @@ export-game: bootstrap-secrets
 docker-run-random nb_agents="8" level="1-3":
     NB_AGENTS={{nb_agents}} LEVEL={{level}} docker compose exec plaiground uv run python src/00_random_agent.py
 
-# Run the ml_forge random-agent play loop inside the container (same path the UI RUN button uses)
-docker-forge-random steps="300":
-    MAX_STEPS={{steps}} docker compose exec plaiground uv run python -c "from ml_forge.engine.game_run import _play_thread; _play_thread({'mode': 'random', 'max_steps': int('{{steps}}'), 'fps_limit': 0})"
+# Run the Playground env server standalone (host-driven; ML Forge's Game
+# block launches this automatically). Sanity-check with a fake host:
+#   printf '{"action": 1}\n' | just forge-env-server
+forge-env-server policy="host" fps="30":
+    docker compose exec -T plaiground python src/stream_server.py --policy {{policy}} --fps {{fps}}
 
 # Launch the ML Forge visual pipeline editor (editable install of ../ml_forge_plaiground)
 forge:
