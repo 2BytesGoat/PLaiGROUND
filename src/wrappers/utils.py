@@ -11,7 +11,7 @@ minor modifications or adaptations for my specific use case.
 """
 
 import importlib
-import re
+from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
@@ -28,16 +28,18 @@ def dol_to_lod(dol):
 def convert_macos_path(env_path):
     """
     On MacOs the user is supposed to provide a application.app file to env_path.
-    However the actual binary is in application.app/Contents/Macos/application.
+    However the actual binary is in application.app/Contents/MacOS/application.
     This helper function converts the path to the path of the actual binary.
 
     Example input: ./Demo.app
-    Example output: ./Demo.app/Contents/Macos/Demo
+    Example output: ./Demo.app/Contents/MacOS/Demo
     """
 
-    filenames = re.findall(r"[^\/]+(?=\.)", env_path)
-    assert len(filenames) == 1, "An error occured while converting the env path for MacOS."
-    return env_path + "/Contents/MacOS/" + filenames[0]
+    app_path = Path(env_path)
+    assert app_path.suffix == ".app", (
+        f"Incorrect .app path for macOS: {env_path!r}"
+    )
+    return str(app_path / "Contents" / "MacOS" / app_path.stem)
 
 
 class ActionSpaceProcessor:

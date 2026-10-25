@@ -162,6 +162,15 @@ http://127.0.0.1:8888/lab/tree/notebooks/00_random_agent.ipynb
 ```
 You can run individual code snippets by pressing `SHIFT + ENTER`
 
+## 🧬 NEAT experiment
+
+The NEAT experiments evaluate a whole population in the existing multi-agent
+training environment and use the game's reward directly as fitness. The
+lineage runner carries one population through the campaign in order; the
+per-level batch runner is still available as an independent baseline. See
+[docs/neat-1-1.md](docs/neat-1-1.md) and
+[docs/neat-lineage.md](docs/neat-lineage.md).
+
 ## 📋 What's to come:
 
 - [ ] add notebook for how to build an If-Else agent

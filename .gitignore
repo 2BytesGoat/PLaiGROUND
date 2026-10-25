@@ -16,3 +16,6 @@ environments/*
 # Data
 data/*
 !data/cheatsheet
+
+# Training outputs
+runs/
