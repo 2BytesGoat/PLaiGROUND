@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -474,6 +476,108 @@ def load_student(path: Path) -> StudentPolicy:
     return student
 
 
+def export_student(args: argparse.Namespace) -> None:
+    """Export the 58-observation student to the versioned JSON runtime format."""
+    model_path = args.output_dir / args.model
+    payload = torch.load(model_path, map_location="cpu", weights_only=False)
+    input_dim = int(payload["input_dim"])
+    if input_dim != INPUT_SIZE:
+        raise ValueError(
+            f"{model_path} is a legacy {input_dim}-input checkpoint; "
+            f"only the {INPUT_SIZE}-observation student is exported"
+        )
+    if payload.get("head_mode") not in (None, "shared"):
+        raise ValueError(f"{model_path} uses a level-conditioned head; not exportable")
+
+    state = payload["state_dict"]
+    required = {
+        "trunk.0.weight",
+        "trunk.0.bias",
+        "trunk.2.weight",
+        "trunk.2.bias",
+        "heads.weight",
+        "heads.bias",
+    }
+    missing = required.difference(state)
+    if missing:
+        raise ValueError(f"{model_path} is missing state keys: {sorted(missing)}")
+
+    w1 = state["trunk.0.weight"].detach().cpu().numpy().astype(np.float32)
+    b1 = state["trunk.0.bias"].detach().cpu().numpy().astype(np.float32)
+    w2 = state["trunk.2.weight"].detach().cpu().numpy().astype(np.float32)
+    b2 = state["trunk.2.bias"].detach().cpu().numpy().astype(np.float32)
+    w3 = state["heads.weight"].detach().cpu().numpy().astype(np.float32)
+    b3 = state["heads.bias"].detach().cpu().numpy().astype(np.float32)
+    hidden_sizes = [int(w1.shape[0]), int(w2.shape[0])]
+    if w1.shape[1] != input_dim or w2.shape[1] != hidden_sizes[0] or w3.shape[1] != hidden_sizes[1]:
+        raise ValueError(f"{model_path} has inconsistent layer shapes")
+
+    weights = {
+        "w1": w1.reshape(-1).tolist(),
+        "b1": b1.reshape(-1).tolist(),
+        "w2": w2.reshape(-1).tolist(),
+        "b2": b2.reshape(-1).tolist(),
+        "w3": w3.reshape(-1).tolist(),
+        "b3": b3.reshape(-1).tolist(),
+    }
+
+    def json_forward(x: np.ndarray) -> np.ndarray:
+        h1 = np.maximum(x @ w1.T + b1, 0.0)
+        h2 = np.maximum(h1 @ w2.T + b2, 0.0)
+        return h2 @ w3.T + b3
+
+    rng = np.random.default_rng(args.verify_seed)
+    samples = rng.standard_normal((args.verify_samples, input_dim), dtype=np.float32)
+    student = StudentPolicy(input_dim=input_dim, hidden=int(payload["hidden"]))
+    student.load_state_dict(state)
+    student.eval()
+    with torch.no_grad():
+        torch_logits = student(torch.from_numpy(samples)).numpy()
+    json_logits = json_forward(samples)
+    max_abs = float(np.max(np.abs(torch_logits - json_logits)))
+    argmax_match = float(
+        (torch_logits.argmax(axis=1) == json_logits.argmax(axis=1)).mean()
+    )
+    if max_abs > 1e-4 or argmax_match < 1.0:
+        raise RuntimeError(
+            f"export verification failed: max_abs={max_abs:.6g} "
+            f"argmax_match={argmax_match:.4f}"
+        )
+
+    output_path = (
+        Path(args.output)
+        if args.output
+        else args.output_dir / "export" / f"{model_path.stem}.json"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "format": "dragon-jump-mlp",
+        "spec_version": 1,
+        "model_name": model_path.stem,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source_checkpoint": model_path.name,
+        "observation_size": INPUT_SIZE,
+        "input_size": input_dim,
+        "hidden_sizes": hidden_sizes,
+        "activation": "relu",
+        "output_size": 2,
+        "action_names": ["idle", "jump"],
+        "action_repeat": 4,
+        "level_conditioning": "none",
+        "trained_levels": payload.get("trained_levels", []),
+        "missing_levels": payload.get("missing_levels", []),
+        "weights": weights,
+    }
+    with output_path.open("w") as handle:
+        json.dump(document, handle, separators=(",", ":"))
+    print(
+        f"[export] wrote {output_path} "
+        f"({output_path.stat().st_size} bytes, hidden={hidden_sizes}, "
+        f"verify_max_abs={max_abs:.3g}, argmax_match={argmax_match:.3f})",
+        flush=True,
+    )
+
+
 def eval_student(args: argparse.Namespace, env_path: str) -> None:
     model_path = args.output_dir / args.model
     student = load_student(model_path)
@@ -640,6 +744,16 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--eval-port", type=int, default=12000)
     eval_parser.add_argument("--show", action="store_true")
     eval_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+
+    export_parser = sub.add_parser(
+        "export",
+        help="Export a 58-observation student checkpoint to versioned JSON",
+    )
+    export_parser.add_argument("--model", default="student.pt")
+    export_parser.add_argument("--output", type=Path)
+    export_parser.add_argument("--verify-samples", type=int, default=256)
+    export_parser.add_argument("--verify-seed", type=int, default=0)
+    export_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     return parser
 
 
@@ -677,6 +791,8 @@ def main() -> None:
         print(f"[dagger] {total} labelled student states", flush=True)
     elif args.command == "eval":
         eval_student(args, env_path)
+    elif args.command == "export":
+        export_student(args)
 
 
 if __name__ == "__main__":

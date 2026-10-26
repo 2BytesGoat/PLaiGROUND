@@ -181,9 +181,12 @@ updates reuse transitions instead of spending a whole population evaluation
 per generation. See [docs/ppo-pilot.md](docs/ppo-pilot.md).
 
 The distillation experiment merges the per-level PPO snapshots into one
-level-agnostic student using supervised learning. The student sees the 58 game
-observations only — no campaign-level ID — and chooses its own first jump. See
-[docs/ppo-distillation.md](docs/ppo-distillation.md).
+level-agnostic student using supervised learning. The selected student sees the
+58 game observations only — no campaign-level ID — and clears **all 16 campaign
+levels at 100/100 agents**, choosing its own first jump. Its verified JSON
+export is bundled at `godot/src/resources/ai/student_obs58_256.json` and runs
+in-game through the pure-GDScript `MLPPolicy` runtime (all 16 levels finish
+headlessly at 8×). See [docs/ppo-distillation.md](docs/ppo-distillation.md).
 
 ## 📋 What's to come:
 

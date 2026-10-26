@@ -264,7 +264,7 @@ evaluation in future runs instead of assuming every saved policy is deployable.
 
 Zero-shot on 1-4 was 0/100. The next experiment was one shared policy with
 mixed-level/curriculum training, not 14 independent PPO policies. That line of
-work is now resolved by distillation. The retired 74-input level-conditioned
-shared-128 student cleared all 16 levels at 100/100; the current
-observation-only 58-input student is evaluated separately. See
+work is now resolved by distillation. The current observation-only 58-input,
+256-hidden student clears all 16 levels at 100/100; the retired 74-input
+level-conditioned model also cleared 16/16 but required a campaign ID. See
 [ppo-distillation.md](ppo-distillation.md).
