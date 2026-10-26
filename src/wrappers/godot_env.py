@@ -43,6 +43,8 @@ class GodotEnv:
         action_repeat: Optional[int] = None,
         speedup: Optional[int] = None,
         convert_action_space: bool = False,
+        log_path: Optional[str] = None,
+        env: Optional[dict[str, str]] = None,
         **kwargs,
     ):
         """
@@ -57,9 +59,11 @@ class GodotEnv:
             action_repeat (int): the number of frames to repeat an action for.
             speedup (int): the factor to speedup game time by.
             convert_action_space (bool): flag to convert action space.
+            log_path (str): optional file for the game process stdout/stderr.
         """
 
         self.proc = None
+        self.log_handle = None
         if env_path is not None and env_path != "debug":
             env_path = self._set_platform_suffix(env_path)
 
@@ -72,10 +76,11 @@ class GodotEnv:
                 seed,
                 action_repeat,
                 speedup,
+                log_path=log_path,
+                env=env,
                 **kwargs,
             )
         else:
-            print(env_path)
             print("No game binary has been provided, please press PLAY in the Godot editor")
 
         self.port = port
@@ -153,7 +158,6 @@ class GodotEnv:
         else:
             assert 0, f"unknown filetype {pathlib.Path(filename).suffix}"
         
-        print(filename)
         assert os.path.exists(filename)
 
     def from_numpy(self, action, order_ij=False):
@@ -288,6 +292,10 @@ class GodotEnv:
         print("close message sent")
         time.sleep(1.0)
         self.connection.close()
+        if self.log_handle is not None:
+            self.log_handle.flush()
+            self.log_handle.close()
+            self.log_handle = None
         try:
             atexit.unregister(self._close)
         except Exception as e:
@@ -313,6 +321,8 @@ class GodotEnv:
         seed,
         action_repeat,
         speedup,
+        log_path=None,
+        env=None,
         **kwargs,
     ):
         # --fixed-fps {framerate}
@@ -333,11 +343,14 @@ class GodotEnv:
                 launch_cmd += f" --{key}={value}"
 
         launch_cmd = launch_cmd.split(" ")
-        self.proc = subprocess.Popen(
-            launch_cmd,
-            start_new_session=True,
-            # shell=True,
-        )
+        popen_kwargs = {"start_new_session": True}
+        if env is not None:
+            popen_kwargs["env"] = env
+        if log_path:
+            self.log_handle = open(log_path, "w", encoding="utf-8")
+            popen_kwargs["stdout"] = self.log_handle
+            popen_kwargs["stderr"] = subprocess.STDOUT
+        self.proc = subprocess.Popen(launch_cmd, **popen_kwargs)
 
     def _start_server(self):
         # Either launch a an exported Godot project or connect to a playing godot game
@@ -383,7 +396,16 @@ class GodotEnv:
         # actions can be "single" for a single action head
         # or "multi" for several outputeads
 
-        print("action space", json_dict["action_space"])
+        raw_action_space = json_dict["action_space"]
+        action_sample = (
+            raw_action_space[0]
+            if isinstance(raw_action_space, list) and raw_action_space
+            else raw_action_space
+        )
+        print(
+            f"action space: {self.num_envs} agents, {action_sample}",
+            flush=True,
+        )
         # Compatibility with previous versions of Godot plugin:
         # A single action space will be received as a dict in previous versions,
         # A list of dicts will be received from the newer version, defining the action_space for each agent (AIController)
@@ -402,7 +424,16 @@ class GodotEnv:
                     assert 0, f"action space {v['action_type']} is not supported"
             self.action_spaces.append(spaces.Dict(tmp_action_spaces))
 
-        print("observation space", json_dict["observation_space"])
+        raw_obs_space = json_dict["observation_space"]
+        obs_sample = (
+            raw_obs_space[0]
+            if isinstance(raw_obs_space, list) and raw_obs_space
+            else raw_obs_space
+        )
+        print(
+            f"observation space: {self.num_envs} agents, {obs_sample}",
+            flush=True,
+        )
         # Compatibility with older versions of Godot plugin:
         # A single observation space will be received as a dict in previous versions,
         # A list of dicts will be received from newer version, defining the observation_space for each agent (AIController)

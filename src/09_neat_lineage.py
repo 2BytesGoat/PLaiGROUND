@@ -76,7 +76,51 @@ def latest_checkpoint(directory: Path) -> Path | None:
     return checkpoints[-1] if checkpoints else None
 
 
-def run_command(cmd: list[str], log_path: Path, label: str) -> int:
+BENIGN_LOG_PREFIXES = (
+    "Godot Engine",
+    "SW Init",
+    "SW ready",
+    "[Telemetry]",
+    "Waiting for one second",
+    "trying to connect",
+    "performing handshake",
+    "handshake complete",
+    "resetting all agents",
+    "received close",
+    "Loaded environment variables",
+    "No game binary has been provided",
+    "waiting for remote",
+    "connection established",
+    "close message",
+    "action space:",
+    "observation space:",
+    "action space [",
+    "observation space [",
+    "WARNING: ObjectDB instances leaked",
+    "ERROR: There is no animation with name 'Celebrate'",
+    "GDScript backtrace",
+    "at: cleanup (",
+    "at: clear (core/io/resource",
+    "[0] update (res://src/ghost",
+    "[1] _process (res://src/training/main_training",
+)
+
+
+def is_benign_log_line(line: str) -> bool:
+    stripped = line.lstrip()
+    if stripped.startswith(BENIGN_LOG_PREFIXES):
+        return True
+    if stripped.startswith("ERROR:") and "resources still in use at exit" in line:
+        return True
+    return False
+
+
+def run_command(
+    cmd: list[str],
+    log_path: Path,
+    label: str,
+    clean: bool = True,
+) -> int:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"[{label}] {' '.join(str(part) for part in cmd)}", flush=True)
     with log_path.open("w", encoding="utf-8") as log:
@@ -90,9 +134,10 @@ def run_command(cmd: list[str], log_path: Path, label: str) -> int:
         )
         assert proc.stdout is not None
         for line in proc.stdout:
-            print(line, end="", flush=True)
             log.write(line)
             log.flush()
+            if not clean or not is_benign_log_line(line):
+                print(line, end="", flush=True)
         return proc.wait()
 
 
@@ -114,10 +159,12 @@ def run_stage(level: str, initial_checkpoint: Path | None, args, stage_dir: Path
         str(args.patience),
         "--min-finish-rate",
         str(args.min_finish_rate),
+        "--min-finish-streak",
+        str(args.min_finish_streak),
         "--max-steps",
         str(args.max_steps),
         "--action-repeat",
-        "1",
+        str(args.action_repeat),
         "--speedup",
         str(args.speedup),
         "--checkpoint-interval",
@@ -129,7 +176,12 @@ def run_stage(level: str, initial_checkpoint: Path | None, args, stage_dir: Path
         cmd.extend(["--resume", str(initial_checkpoint)])
     else:
         cmd.extend(["--population", str(args.population), "--seed", str(args.seed)])
-    return run_command(cmd, stage_dir / "train.log", f"stage {level}")
+    return run_command(
+        cmd,
+        stage_dir / "train.log",
+        f"stage {level}",
+        clean=args.clean_logs,
+    )
 
 
 def run_eval(
@@ -150,7 +202,7 @@ def run_eval(
         "--max-steps",
         str(args.max_steps),
         "--action-repeat",
-        "1",
+        str(args.action_repeat),
         "--speedup",
         str(args.eval_speedup),
         "--port",
@@ -160,7 +212,12 @@ def run_eval(
     ]
     if args.show:
         cmd.append("--show")
-    return run_command(cmd, eval_dir / "eval.log", label)
+    return run_command(
+        cmd,
+        eval_dir / "eval.log",
+        label,
+        clean=args.clean_logs,
+    )
 
 
 def parse_levels(value: str) -> list[str]:
@@ -183,10 +240,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--population", type=int, default=100)
-    parser.add_argument("--max-generations", type=int, default=20)
+    parser.add_argument("--start-level", default="1-1")
+    parser.add_argument(
+        "--initial-checkpoint",
+        type=Path,
+        help="Population checkpoint used before --start-level.",
+    )
+    parser.add_argument("--max-generations", type=int, default=30)
     parser.add_argument("--min-generations", type=int, default=10)
     parser.add_argument("--patience", type=int, default=4)
-    parser.add_argument("--min-finish-rate", type=float, default=0.10)
+    parser.add_argument("--min-finish-rate", type=float, default=0.30)
+    parser.add_argument("--min-finish-streak", type=int, default=3)
+    parser.add_argument("--action-repeat", type=int, default=4)
     parser.add_argument("--max-steps", type=int, default=900)
     parser.add_argument("--speedup", type=float, default=8.0)
     parser.add_argument("--eval-speedup", type=float, default=4.0)
@@ -197,6 +262,12 @@ def parse_args() -> argparse.Namespace:
         "--show",
         action="store_true",
         help="Show the 100-agent zero-shot/stage/final evaluations in the window.",
+    )
+    parser.add_argument(
+        "--clean-logs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Filter known-benign Godot startup/shutdown noise from stdout.",
     )
     parser.add_argument(
         "--skip-pre-eval",
@@ -219,6 +290,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     levels = parse_levels(args.levels)
+    if args.start_level not in levels:
+        raise ValueError(
+            f"--start-level {args.start_level} is not in --levels {args.levels}"
+        )
+    levels = levels[levels.index(args.start_level):]
+    if args.start_level != "1-1" and args.initial_checkpoint is None:
+        raise ValueError(
+            "--initial-checkpoint is required when --start-level is not 1-1"
+        )
+    if args.initial_checkpoint is not None and not args.initial_checkpoint.exists():
+        raise FileNotFoundError(args.initial_checkpoint)
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     snapshots_dir = args.output_dir / "snapshots"
     stages_dir = args.output_dir / "stages"
@@ -232,7 +315,7 @@ def main() -> None:
             shutil.rmtree(directory)
             directory.mkdir(parents=True, exist_ok=True)
 
-    current_checkpoint: Path | None = None
+    current_checkpoint: Path | None = args.initial_checkpoint
     summary_rows: list[dict] = []
     final_checkpoint: Path | None = None
 

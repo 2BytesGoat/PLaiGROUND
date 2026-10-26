@@ -171,6 +171,20 @@ per-level batch runner is still available as an independent baseline. See
 [docs/neat-1-1.md](docs/neat-1-1.md) and
 [docs/neat-lineage.md](docs/neat-lineage.md).
 
+## 🤖 PPO pilot
+
+The PPO experiments train one shared policy through standard Gymnasium
+wrappers. The single-level pilot uses isolated Godot training worlds per
+parallel worker; the campaign lineage carries the same model through 1-1 to
+1-16 one level at a time, with zero-shot and post-stage evaluations. Gradient
+updates reuse transitions instead of spending a whole population evaluation
+per generation. See [docs/ppo-pilot.md](docs/ppo-pilot.md).
+
+The distillation experiment merges the per-level PPO snapshots into one
+level-agnostic student using supervised learning. The student sees the 58 game
+observations only — no campaign-level ID — and chooses its own first jump. See
+[docs/ppo-distillation.md](docs/ppo-distillation.md).
+
 ## 📋 What's to come:
 
 - [ ] add notebook for how to build an If-Else agent

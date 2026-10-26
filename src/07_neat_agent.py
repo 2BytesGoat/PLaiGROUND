@@ -23,6 +23,7 @@ import pickle
 import random
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -68,6 +69,8 @@ class RewardEvaluator:
         self.best_time = float("inf")
         self.last_improvement_generation = 0
         self.history: list[dict] = []
+        self.genome_history: list[dict] = []
+        self.node_history: list[dict] = []
 
     def __call__(self, genomes, config) -> None:
         self.generation += 1
@@ -99,6 +102,9 @@ class RewardEvaluator:
             finished = np.zeros(population, dtype=bool)
             finish_times = np.full(population, np.inf, dtype=np.float64)
             terminal_rewards = np.zeros(population, dtype=np.float32)
+            done_steps = np.zeros(population, dtype=np.int32)
+            final_infos = [{} for _ in range(population)]
+            last_infos = [{} for _ in range(population)]
 
             for step in range(self.max_steps):
                 actions = []
@@ -130,9 +136,12 @@ class RewardEvaluator:
                         done_once[i] = True
                         terminal_rewards[i] = float(rewards[i])
                         finished[i] = terminal_rewards[i] > 0.0
+                        done_steps[i] = step + 1
+                        final_infos[i] = infos[i]
                         if finished[i]:
                             finish_times[i] = float(infos[i].get("run_time", np.inf))
 
+                last_infos = infos
                 if done_once.all():
                     break
         finally:
@@ -177,6 +186,42 @@ class RewardEvaluator:
         )
         self._write_history()
 
+        for i, ((genome_id, genome), score) in enumerate(zip(genomes, scores)):
+            info = final_infos[i] or last_infos[i]
+            position = info.get("global_position", (None, None))
+            if isinstance(position, str):
+                try:
+                    parts = position.strip("()").split(",")
+                    position = (float(parts[0]), float(parts[1]))
+                except (ValueError, IndexError):
+                    position = (None, None)
+            if not isinstance(position, (tuple, list)) or len(position) < 2:
+                position = (None, None)
+            outcome = "timeout"
+            if done_once[i]:
+                outcome = "finish" if finished[i] else "death"
+            self.genome_history.append(
+                {
+                    "generation": self.generation,
+                    "genome_id": genome_id,
+                    "nodes": len(genome.nodes),
+                    "enabled_connections": sum(
+                        1 for connection in genome.connections.values() if connection.enabled
+                    ),
+                    "fitness": float(score),
+                    "outcome": outcome,
+                    "run_time": (
+                        float(finish_times[i])
+                        if finished[i] and np.isfinite(finish_times[i])
+                        else ""
+                    ),
+                    "steps": int(done_steps[i]) if done_once[i] else self.max_steps,
+                    "final_x": position[0],
+                    "final_y": position[1],
+                }
+            )
+        self._write_genome_stats()
+
         if generation_best > self.best_fitness:
             self.best_fitness = generation_best
             self.best_genome = genomes[best_index][1]
@@ -190,20 +235,26 @@ class RewardEvaluator:
         min_generations: int,
         patience: int,
         min_finish_rate: float,
+        min_finish_streak: int,
     ) -> bool:
-        """True once the best fitness has plateaued with enough finishers."""
+        """True once the best fitness plateaus with a sustained finish rate."""
         if patience <= 0 or self.generation < min_generations:
             return False
         if not self.history:
             return False
         if self.generation - self.last_improvement_generation < patience:
             return False
-        last = self.history[-1]
-        population = len(last["scores"])
-        if population == 0:
-            return False
-        finish_rate = last["finishes"] / population
-        return last["finishes"] > 0 and finish_rate >= min_finish_rate
+
+        streak = 0
+        for row in reversed(self.history):
+            population = len(row["scores"])
+            if population == 0:
+                break
+            if row["finishes"] > 0 and row["finishes"] / population >= min_finish_rate:
+                streak += 1
+            else:
+                break
+        return streak >= max(1, min_finish_streak)
 
     def _write_history(self) -> None:
         import csv
@@ -226,6 +277,80 @@ class RewardEvaluator:
             writer.writeheader()
             for row in rows:
                 writer.writerow({k: row[k] for k in writer.fieldnames})
+
+    def _write_genome_stats(self) -> None:
+        import csv
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / "genome_stats.csv"
+        fields = [
+            "generation",
+            "genome_id",
+            "nodes",
+            "enabled_connections",
+            "fitness",
+            "outcome",
+            "run_time",
+            "steps",
+            "final_x",
+            "final_y",
+        ]
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            for row in self.genome_history:
+                writer.writerow({key: row[key] for key in fields})
+
+        buckets = defaultdict(list)
+        for row in self.genome_history:
+            buckets[(row["generation"], row["nodes"])].append(row)
+
+        bucket_rows = []
+        for (generation, nodes), rows in sorted(buckets.items()):
+            finish_rows = [row for row in rows if row["outcome"] == "finish"]
+            death_rows = [row for row in rows if row["outcome"] == "death"]
+            times = [
+                float(row["run_time"])
+                for row in finish_rows
+                if row["run_time"] not in ("", None)
+            ]
+            bucket_rows.append(
+                {
+                    "generation": generation,
+                    "nodes": nodes,
+                    "count": len(rows),
+                    "finishes": len(finish_rows),
+                    "finish_rate": f"{len(finish_rows) / len(rows):.3f}",
+                    "deaths": len(death_rows),
+                    "death_rate": f"{len(death_rows) / len(rows):.3f}",
+                    "timeouts": sum(1 for row in rows if row["outcome"] == "timeout"),
+                    "mean_fitness": f"{sum(float(row['fitness']) for row in rows) / len(rows):.2f}",
+                    "best_fitness": f"{max(float(row['fitness']) for row in rows):.2f}",
+                    "best_time": f"{min(times):.3f}" if times else "",
+                }
+            )
+
+        self.node_history = bucket_rows
+        bucket_path = self.output_dir / "node_buckets.csv"
+        with bucket_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "generation",
+                    "nodes",
+                    "count",
+                    "finishes",
+                    "finish_rate",
+                    "deaths",
+                    "death_rate",
+                    "timeouts",
+                    "mean_fitness",
+                    "best_fitness",
+                    "best_time",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(bucket_rows)
 
     def save_best(self) -> None:
         if self.best_genome is None:
@@ -294,6 +419,7 @@ def train(args: argparse.Namespace) -> None:
             args.min_generations,
             args.patience,
             args.min_finish_rate,
+            args.min_finish_streak,
         ):
             stop_reason = "stability plateau"
             break
@@ -408,6 +534,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.0,
         help="Required finish rate when checking stability.",
+    )
+    parser.add_argument(
+        "--min-finish-streak",
+        type=int,
+        default=1,
+        help="Consecutive generations at --min-finish-rate required to stabilize.",
     )
     parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     parser.add_argument(
