@@ -188,6 +188,25 @@ export is bundled at `godot/src/resources/ai/student_obs58_256.json` and runs
 in-game through the pure-GDScript `MLPPolicy` runtime (all 16 levels finish
 headlessly at 8×). See [docs/ppo-distillation.md](docs/ppo-distillation.md).
 
+## 📈 Model improvement experiments (first pass complete; v2 observation implemented)
+
+The current student finishes the campaign but is route-slow on levels such as
+1-7, 1-10, and 1-11. The first pass retrained all 16 teachers with the
+training-only time reward profile and eval patience, selected per-level
+champions, then distilled them into the global student. Champion selection uses
+speed first, with efficiency/flow tie-breaks; multi-seed PPO restarts are
+available after a plateau. A live-takeover script tests whether an improved
+teacher can recover from student-visited states. The new multi-hot observation
+(`--obs-encoding multi_hot`, 754 values) is implemented but has no trained v2
+model yet.
+
+Selected result: the new DAgger student clears all 16 levels at 100/100 with a
+**78.58 s** campaign best-time sum (old: 83.12 s). The 1-11 teacher improved from
+9.53 s to 8.25 s in the full sweep; the 8.05 s smoke teacher was tried again but
+regressed 1-3 and was rejected. Recovery tests finished 100/100 on 1-8 and 1-11.
+NEAT, architecture search, and dropout are deferred to V2. See
+[docs/model-improvement-experiments.md](docs/model-improvement-experiments.md).
+
 ## 📋 What's to come:
 
 - [ ] add notebook for how to build an If-Else agent

@@ -3,6 +3,12 @@
 Status: active experiment  
 Updated: 2026-10-26
 
+> **Implemented 2026-10-26:** evaluation-based patience and best-checkpoint
+> selection are available via `--eval-every` / `--patience`. The metric-rich
+> eval reports finish rate, best/median/mean time, time CV, efficiency, and
+> flow. See [model-improvement-experiments.md](model-improvement-experiments.md)
+> § 1 and § 2.
+
 > **Reward/start correction (2026-10-26):** PPO teacher results below the
 > post-fix section are **pre-fix**. The game training controller stopped tracking run time and
 > jump-arc efficiency after the first started run, and evaluation forced the
@@ -69,7 +75,9 @@ No production menu or export wiring is added.
 
 `max_decisions=150` with `action-repeat=4` is **600 physics ticks = 10 s**.
 The game's reward is used unchanged: progress, efficiency, time, finish, and
-survival. No second fitness function is added.
+survival. No second fitness function is added. Add `--obs-encoding multi_hot`
+for the 754-value semantic-grid observation; a resumed model and its environment
+must use the same encoding and control cadence.
 
 The agent owns the first jump. Every training episode resets to idle and the
 policy must start the run; evaluation uses the policy's first action too.

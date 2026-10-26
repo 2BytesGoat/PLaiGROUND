@@ -4,14 +4,17 @@ This is supervised learning, not PPO. For each passing level snapshot we run the
 teacher on that level, record observations and teacher action probabilities,
 then train one student MLP on:
 
-    observation (58) -> jump probabilities (2)
+    observation (legacy 58 or multi-hot grid) -> jump probabilities (2)
 
 The student has no campaign-level input. The same policy must infer what to do
-from the terrain, exit direction, flow field, and player state alone. It is
-evaluated on all levels with 100 deterministic agents. Missing teacher levels
-are skipped and reported. The agent chooses every action, including the first
-jump that starts the run; the collector and evaluator do not force an opening
-action.
+from the semantic grid, exit direction, time-to-exit, and player state alone. It
+is evaluated on all levels with 100 deterministic agents. Missing teacher
+levels are skipped and reported. The agent chooses every action, including the
+first jump that starts the run; the collector and evaluator do not force an
+opening action.
+
+Set ``--obs-encoding multi_hot`` on collect/train/dagger/eval to use the new
+754-value semantic grid. Teachers must be trained with the same encoding.
 
 Commands:
     python src/12_ppo_distill.py collect --episodes 2
@@ -41,19 +44,19 @@ from stable_baselines3 import PPO
 from dotenv import load_dotenv
 
 from wrappers.godot_env import GodotEnv
+import obs_spec
 
 
 LEVELS = [f"1-{i}" for i in range(1, 17)]
 # Repaired teachers take precedence over the original stage snapshots.
 TEACHER_ROOTS = (
+    Path("runs/teacher_champions"),
     Path("runs/teacher_repair/final"),
     Path("runs/teacher_repair_post"),
     Path("runs/ppo_lineage/snapshots"),
     Path("runs/ppo_lineage_cont/snapshots"),
 )
 DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "runs" / "ppo_distill"
-# The complete game observation. Level identity is deliberately not an input.
-INPUT_SIZE = 58
 
 
 def parse_levels(value: str) -> list[str]:
@@ -123,10 +126,22 @@ def teacher_probs(teacher: PPO, obs: np.ndarray) -> np.ndarray:
 
 
 class StudentPolicy(nn.Module):
-    """One level-agnostic student policy over the 58 game observations."""
+    """One level-agnostic student policy over the game observation vector.
 
-    def __init__(self, input_dim: int = INPUT_SIZE, hidden: int = 128):
+    Dropout is a training-only regularizer / MC-dropout exploration knob. The
+    exported JSON has no dropout; the runtime always evaluates deterministically.
+    """
+
+    def __init__(
+        self,
+        input_dim: int = obs_spec.LEGACY_OBSERVATION_SIZE,
+        hidden: int = 128,
+        dropout: float = 0.0,
+    ):
         super().__init__()
+        # Keep the original four-module trunk layout so pre-dropout checkpoints
+        # keep their `trunk.0` / `trunk.2` keys. Dropout is applied functionally
+        # in forward(), not as extra modules.
         self.trunk = nn.Sequential(
             nn.Linear(input_dim, hidden),
             nn.ReLU(),
@@ -134,9 +149,14 @@ class StudentPolicy(nn.Module):
             nn.ReLU(),
         )
         self.heads = nn.Linear(hidden, 2)
+        self.dropout_p = float(dropout)
 
     def forward(self, x):
-        return self.heads(self.trunk(x))
+        x = self.trunk[1](self.trunk[0](x))
+        x = F.dropout(x, p=self.dropout_p, training=self.training)
+        x = self.trunk[3](self.trunk[2](x))
+        x = F.dropout(x, p=self.dropout_p, training=self.training)
+        return self.heads(x)
 
 
 def collect_level(
@@ -152,6 +172,14 @@ def collect_level(
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     teacher = PPO.load(str(model_path), device="cpu")
+    expected_size = obs_spec.expected_obs_size(args.obs_encoding)
+    teacher_size = int(teacher.observation_space.shape[0])
+    if teacher_size != expected_size:
+        raise ValueError(
+            f"{model_path} observes {teacher_size} values, but "
+            f"--obs-encoding={args.obs_encoding} expects {expected_size}; "
+            "retrain the teacher with the same encoding"
+        )
     n = args.agents
     idx = level_index(level)
     rng = np.random.default_rng(args.seed + idx)
@@ -176,6 +204,7 @@ def collect_level(
         convert_action_space=True,
         log_path=str(log_path),
         env=isolated_home(args.output_dir, f"collect_{level}"),
+        obs_encoding=args.obs_encoding,
     )
     try:
         obs, _ = env.reset()
@@ -251,6 +280,8 @@ def train_student(args: argparse.Namespace) -> None:
         prob_parts.append(data["probs"])
     obs = np.concatenate(obs_parts).astype(np.float32)
     probs = np.concatenate(prob_parts)
+    obs = obs_spec.validate_obs_batch(obs, args.obs_encoding)
+    input_dim = int(obs.shape[1])
 
     rng = np.random.default_rng(args.seed)
     order = rng.permutation(len(obs))
@@ -271,7 +302,13 @@ def train_student(args: argparse.Namespace) -> None:
         drop_last=False,
     )
 
-    student = StudentPolicy(hidden=args.hidden)
+    init_seed = args.init_seed if args.init_seed is not None else args.seed
+    torch.manual_seed(init_seed)
+    student = StudentPolicy(
+        input_dim=input_dim,
+        hidden=args.hidden,
+        dropout=args.dropout,
+    )
     optimizer = torch.optim.Adam(
         student.parameters(),
         lr=args.learning_rate,
@@ -341,8 +378,13 @@ def train_student(args: argparse.Namespace) -> None:
     torch.save(
         {
             "state_dict": student.state_dict(),
-            "input_dim": INPUT_SIZE,
+            "input_dim": input_dim,
+            "obs_encoding": args.obs_encoding,
+            "observation_size": input_dim,
+            "action_repeat": args.action_repeat,
             "hidden": args.hidden,
+            "dropout": args.dropout,
+            "init_seed": init_seed,
             "trained_levels": available,
             "missing_levels": missing,
         },
@@ -376,6 +418,25 @@ def dagger_collect(
     log_path = args.output_dir / "logs" / f"dagger-{level}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
+    expected_size = obs_spec.expected_obs_size(args.obs_encoding)
+    if int(student.trunk[0].in_features) != expected_size:
+        raise ValueError(
+            f"student observes {student.trunk[0].in_features} values, but "
+            f"--obs-encoding={args.obs_encoding} expects {expected_size}"
+        )
+    student_action_repeat = int(getattr(student, "action_repeat", 4))
+    if student_action_repeat != args.action_repeat:
+        raise ValueError(
+            f"student was trained with action_repeat={student_action_repeat}, "
+            f"not {args.action_repeat}"
+        )
+    teacher_size = int(teacher.observation_space.shape[0])
+    if teacher_size != expected_size:
+        raise ValueError(
+            f"teacher observes {teacher_size} values, but "
+            f"--obs-encoding={args.obs_encoding} expects {expected_size}; "
+            "retrain the teacher with the same encoding"
+        )
     n = args.agents
     idx = level_index(level)
     rng = np.random.default_rng(args.seed + 100 + idx)
@@ -400,6 +461,7 @@ def dagger_collect(
         convert_action_space=True,
         log_path=str(log_path),
         env=isolated_home(args.output_dir, f"dagger_{level}"),
+        obs_encoding=args.obs_encoding,
     )
     try:
         obs, _ = env.reset()
@@ -414,7 +476,10 @@ def dagger_collect(
                 # the labels at exactly those states.
                 with torch.no_grad():
                     logits = student(torch.from_numpy(obs_np))
-                    student_probs = torch.softmax(logits, dim=1).numpy()
+                    temperature = max(float(args.rollout_temperature), 1e-3)
+                    student_probs = torch.softmax(
+                        logits / temperature, dim=1
+                    ).numpy()
                 teacher_probs_np = teacher_probs(teacher, obs_np)
                 actions = (
                     rng.random(n) < student_probs[:, 1]
@@ -459,13 +524,27 @@ def dagger_collect(
     return len(np.concatenate(action_all))
 
 
-def load_student(path: Path) -> StudentPolicy:
+def resolve_model_path(args: argparse.Namespace, model: str | None = None) -> Path:
+    path = Path(model or args.model)
+    return path if path.is_absolute() else args.output_dir / path
+
+
+def load_student(path: Path, obs_encoding: str | None = None) -> StudentPolicy:
     payload = torch.load(path, map_location="cpu", weights_only=False)
     input_dim = int(payload["input_dim"])
-    if input_dim != INPUT_SIZE:
+    payload_encoding = str(
+        payload.get("obs_encoding", obs_spec.ENCODING_LEGACY)
+    )
+    expected_size = obs_spec.expected_obs_size(payload_encoding)
+    if input_dim != expected_size:
         raise ValueError(
-            f"{path} is a legacy {input_dim}-input checkpoint; "
-            f"retrain with the {INPUT_SIZE}-observation student"
+            f"{path} declares {payload_encoding} observations but has "
+            f"input_dim={input_dim}, expected {expected_size}"
+        )
+    if obs_encoding is not None and obs_encoding != payload_encoding:
+        raise ValueError(
+            f"{path} was trained with --obs-encoding={payload_encoding}, "
+            f"not {obs_encoding}"
         )
     student = StudentPolicy(
         input_dim=input_dim,
@@ -473,18 +552,25 @@ def load_student(path: Path) -> StudentPolicy:
     )
     student.load_state_dict(payload["state_dict"])
     student.eval()
+    student.obs_encoding = payload_encoding
+    student.input_dim = input_dim
+    student.action_repeat = int(payload.get("action_repeat", 4))
     return student
 
 
 def export_student(args: argparse.Namespace) -> None:
-    """Export the 58-observation student to the versioned JSON runtime format."""
-    model_path = args.output_dir / args.model
+    """Export a legacy or multi-hot student to the versioned JSON runtime."""
+    model_path = resolve_model_path(args)
     payload = torch.load(model_path, map_location="cpu", weights_only=False)
     input_dim = int(payload["input_dim"])
-    if input_dim != INPUT_SIZE:
+    obs_encoding = str(
+        payload.get("obs_encoding", obs_spec.ENCODING_LEGACY)
+    )
+    expected_size = obs_spec.expected_obs_size(obs_encoding)
+    if input_dim != expected_size:
         raise ValueError(
-            f"{model_path} is a legacy {input_dim}-input checkpoint; "
-            f"only the {INPUT_SIZE}-observation student is exported"
+            f"{model_path} declares {obs_encoding} observations but has "
+            f"input_dim={input_dim}, expected {expected_size}"
         )
     if payload.get("head_mode") not in (None, "shared"):
         raise ValueError(f"{model_path} uses a level-conditioned head; not exportable")
@@ -552,17 +638,18 @@ def export_student(args: argparse.Namespace) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document = {
         "format": "dragon-jump-mlp",
-        "spec_version": 1,
+        "spec_version": obs_spec.spec_version(obs_encoding),
         "model_name": model_path.stem,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source_checkpoint": model_path.name,
-        "observation_size": INPUT_SIZE,
+        "obs_encoding": obs_encoding,
+        "observation_size": expected_size,
         "input_size": input_dim,
         "hidden_sizes": hidden_sizes,
         "activation": "relu",
         "output_size": 2,
         "action_names": ["idle", "jump"],
-        "action_repeat": 4,
+        "action_repeat": int(payload.get("action_repeat", 4)),
         "level_conditioning": "none",
         "trained_levels": payload.get("trained_levels", []),
         "missing_levels": payload.get("missing_levels", []),
@@ -579,8 +666,10 @@ def export_student(args: argparse.Namespace) -> None:
 
 
 def eval_student(args: argparse.Namespace, env_path: str) -> None:
-    model_path = args.output_dir / args.model
+    model_path = resolve_model_path(args)
     student = load_student(model_path)
+    obs_encoding = student.obs_encoding
+    action_repeat = int(getattr(student, "action_repeat", args.action_repeat))
     levels = parse_levels(args.levels)
     summary = []
     run_name = args.eval_name or model_path.stem
@@ -595,13 +684,14 @@ def eval_student(args: argparse.Namespace, env_path: str) -> None:
             port=args.eval_port,
             show_window=args.show,
             seed=args.seed + idx,
-            action_repeat=args.action_repeat,
+            action_repeat=action_repeat,
             speedup=args.speedup,
             nb_agents=args.agents,
             level=level,
             convert_action_space=True,
             log_path=str(log_path),
             env=isolated_home(args.output_dir, f"eval_{level}"),
+            obs_encoding=obs_encoding,
         )
         n = args.agents
         done_once = np.zeros(n, dtype=bool)
@@ -609,6 +699,10 @@ def eval_student(args: argparse.Namespace, env_path: str) -> None:
         finish_times = np.full(n, np.inf, dtype=np.float64)
         rewards_sum = np.zeros(n, dtype=np.float64)
         steps_run = np.zeros(n, dtype=np.int32)
+        efficiency = np.full(n, np.nan, dtype=np.float64)
+        flow = np.full(n, np.nan, dtype=np.float64)
+        deaths = np.zeros(n, dtype=np.int32)
+        last_infos: list[dict] = [{} for _ in range(n)]
         try:
             obs, _ = env.reset()
             for step in range(args.max_decisions):
@@ -627,6 +721,7 @@ def eval_student(args: argparse.Namespace, env_path: str) -> None:
                 for i in range(n):
                     if done_once[i]:
                         continue
+                    last_infos[i] = dict(infos[i]) if infos[i] else {}
                     rewards_sum[i] += float(rewards[i])
                     steps_run[i] = step + 1
                     if dones[i]:
@@ -642,23 +737,67 @@ def eval_student(args: argparse.Namespace, env_path: str) -> None:
                                 or finish_times[i] <= 0.0
                             ):
                                 finish_times[i] = (
-                                    (step + 1) * args.action_repeat / 60.0
+                                    (step + 1) * action_repeat / 60.0
                                 )
                 if done_once.all():
                     break
         finally:
             env.close()
 
+        for i in range(n):
+            info = last_infos[i]
+            for key, target in (("efficiency", efficiency), ("flow", flow)):
+                if key in info:
+                    try:
+                        target[i] = float(info[key])
+                    except (TypeError, ValueError):
+                        pass
+            if "deaths" in info:
+                try:
+                    deaths[i] = int(info["deaths"])
+                except (TypeError, ValueError):
+                    pass
+
         finish_count = int(finished.sum())
-        death_count = int((done_once & ~finished).sum())
+        death_count = int(deaths.sum())
         timeout_count = int((~done_once).sum())
-        best = float(np.nanmin(finish_times)) if finish_count else None
+        clean_times = finish_times[np.isfinite(finish_times)]
+        best = float(np.min(clean_times)) if clean_times.size else None
+        median = float(np.median(clean_times)) if clean_times.size else None
+        mean_time = float(np.mean(clean_times)) if clean_times.size else None
+        time_cv = (
+            float(np.std(clean_times) / mean_time)
+            if clean_times.size and mean_time
+            else None
+        )
+        efficiency_mean = (
+            float(np.nanmean(efficiency))
+            if np.isfinite(efficiency).any()
+            else None
+        )
+        flow_mean = (
+            float(np.nanmean(flow))
+            if np.isfinite(flow).any()
+            else None
+        )
         row = {
             "level": level,
+            "agents": n,
             "finishes": finish_count,
             "deaths": death_count,
             "timeouts": timeout_count,
             "best_time": f"{best:.6f}" if best is not None else "",
+            "median_time": f"{median:.6f}" if median is not None else "",
+            "mean_time": (
+                f"{mean_time:.6f}" if mean_time is not None else ""
+            ),
+            "time_cv": f"{time_cv:.6f}" if time_cv is not None else "",
+            "efficiency_mean": (
+                f"{efficiency_mean:.6f}" if efficiency_mean is not None else ""
+            ),
+            "flow_mean": (
+                f"{flow_mean:.6f}" if flow_mean is not None else ""
+            ),
             "mean_reward": f"{float(rewards_sum.mean()):.2f}",
             "teacher": "yes" if teacher_path(level) is not None else "no",
         }
@@ -666,7 +805,10 @@ def eval_student(args: argparse.Namespace, env_path: str) -> None:
         print(
             f"[eval {level}] finishes={finish_count}/{n} "
             f"deaths={death_count} timeouts={timeout_count} "
-            f"best={row['best_time'] or 'none'} teacher={row['teacher']}",
+            f"best={row['best_time'] or 'none'} "
+            f"median={row['median_time'] or 'none'} "
+            f"eff={row['efficiency_mean'] or 'none'} "
+            f"flow={row['flow_mean'] or 'none'} teacher={row['teacher']}",
             flush=True,
         )
 
@@ -676,10 +818,16 @@ def eval_student(args: argparse.Namespace, env_path: str) -> None:
             handle,
             fieldnames=[
                 "level",
+                "agents",
                 "finishes",
                 "deaths",
                 "timeouts",
                 "best_time",
+                "median_time",
+                "mean_time",
+                "time_cv",
+                "efficiency_mean",
+                "flow_mean",
                 "mean_reward",
                 "teacher",
             ],
@@ -703,6 +851,12 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--seed", type=int, default=42)
     collect.add_argument("--base-port", type=int, default=11008)
     collect.add_argument("--show", action="store_true")
+    collect.add_argument(
+        "--obs-encoding",
+        default=obs_spec.ENCODING_LEGACY,
+        choices=obs_spec.SUPPORTED_ENCODINGS,
+        help="Observation contract emitted by the game.",
+    )
     collect.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
     train = sub.add_parser("train", help="Train the student from saved data")
@@ -711,9 +865,33 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--learning-rate", type=float, default=1e-3)
     train.add_argument("--weight-decay", type=float, default=1e-4)
     train.add_argument("--hidden", type=int, default=128)
+    train.add_argument(
+        "--dropout",
+        type=float,
+        default=0.0,
+        help="Training-only dropout between hidden layers; export is always off.",
+    )
+    train.add_argument(
+        "--init-seed",
+        type=int,
+        default=None,
+        help="Model initialization seed (defaults to --seed).",
+    )
     train.add_argument("--model-name", default="student.pt")
     train.add_argument("--val-fraction", type=float, default=0.1)
     train.add_argument("--seed", type=int, default=42)
+    train.add_argument(
+        "--action-repeat",
+        type=int,
+        default=4,
+        help="Control cadence used to collect the dataset and exported JSON.",
+    )
+    train.add_argument(
+        "--obs-encoding",
+        default=obs_spec.ENCODING_LEGACY,
+        choices=obs_spec.SUPPORTED_ENCODINGS,
+        help="Observation contract used by the collected dataset.",
+    )
     train.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
     dagger = sub.add_parser(
@@ -727,9 +905,21 @@ def build_parser() -> argparse.ArgumentParser:
     dagger.add_argument("--max-decisions", type=int, default=150)
     dagger.add_argument("--action-repeat", type=int, default=4)
     dagger.add_argument("--speedup", type=float, default=8.0)
+    dagger.add_argument(
+        "--rollout-temperature",
+        type=float,
+        default=1.0,
+        help="Student rollout temperature; >1 explores more for DAgger coverage.",
+    )
     dagger.add_argument("--seed", type=int, default=42)
     dagger.add_argument("--base-port", type=int, default=11008)
     dagger.add_argument("--show", action="store_true")
+    dagger.add_argument(
+        "--obs-encoding",
+        default=obs_spec.ENCODING_LEGACY,
+        choices=obs_spec.SUPPORTED_ENCODINGS,
+        help="Observation contract shared by student, teacher, and game.",
+    )
     dagger.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
     eval_parser = sub.add_parser("eval", help="Evaluate the student on all levels")
@@ -743,11 +933,17 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--seed", type=int, default=42)
     eval_parser.add_argument("--eval-port", type=int, default=12000)
     eval_parser.add_argument("--show", action="store_true")
+    eval_parser.add_argument(
+        "--obs-encoding",
+        default=obs_spec.ENCODING_LEGACY,
+        choices=obs_spec.SUPPORTED_ENCODINGS,
+        help="Observation contract; ignored when the checkpoint records one.",
+    )
     eval_parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
     export_parser = sub.add_parser(
         "export",
-        help="Export a 58-observation student checkpoint to versioned JSON",
+        help="Export a legacy or multi-hot student checkpoint to versioned JSON",
     )
     export_parser.add_argument("--model", default="student.pt")
     export_parser.add_argument("--output", type=Path)
@@ -778,7 +974,7 @@ def main() -> None:
     elif args.command == "train":
         train_student(args)
     elif args.command == "dagger":
-        student = load_student(args.output_dir / args.model)
+        student = load_student(resolve_model_path(args))
         levels = parse_levels(args.levels)
         total = 0
         for level in levels:

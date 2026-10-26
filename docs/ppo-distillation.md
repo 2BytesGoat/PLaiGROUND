@@ -3,6 +3,12 @@
 Status: active experiment  
 Updated: 2026-10-26
 
+> **Implemented 2026-10-26:** DAgger now supports rollout temperature,
+> training-only dropout, and an explicit initialization seed. Metric-rich eval
+> reports efficiency/flow as well as time. Multiple initialization runs are the
+> current ensemble path; weighted demonstrations remain a follow-up. See
+> [model-improvement-experiments.md](model-improvement-experiments.md) § 6.
+
 > **Pre-fix data:** the teacher snapshots and student results below were
 > collected while the game training reward had a run-tracking bug: after the
 > first started run, run time and jump-arc efficiency were disabled and the
@@ -218,6 +224,54 @@ The model is `runs/ppo_distill_post/student_obs58_256.pt`, also copied to
 `student.pt`. Its evaluation is
 `runs/ppo_distill_post/eval/obs58_256/summary.csv`; the model comparison is
 `runs/ppo_distill_post/model_comparison.csv`.
+
+### Time-profile DAgger student (selected 2026-10-26)
+
+After the all-16 time-profile teacher retrain and champion selection, a fresh
+collection produced 263,519 samples. The base student cleared 16/16 at a
+79.133 s campaign sum. A targeted DAgger round on 1-3, 1-7, and 1-11 (63,680
+student-visited labels) plus a second initialization seed produced the selected
+model:
+
+```text
+student_obs58_256_time_dagger
+58 -> 256 -> 256 -> 2
+16/16 levels at 100/100, zero deaths
+campaign best-time sum: 78.583 s
+```
+
+Per-level best times:
+
+```text
+1-1   2.333 s    1-9   2.900 s
+1-2   3.017 s    1-10  4.467 s
+1-3   3.233 s    1-11  8.250 s
+1-4   4.250 s    1-12  5.967 s
+1-5   2.967 s    1-13  6.267 s
+1-6   5.050 s    1-14  6.800 s
+1-7   7.617 s    1-15  6.117 s
+1-8   3.217 s    1-16  6.133 s
+```
+
+Artifacts:
+
+```text
+runs/ppo_distill_time/student_obs58_256_time_dagger.pt
+runs/ppo_distill_time/eval/time_dagger/summary.csv
+runs/ppo_distill_time/export/student_obs58_256_time_dagger.json
+```
+
+The JSON export was installed as the game's bundled
+`student_obs58_256.json`; in-game headless bench: 16/16, zero deaths, ~78.8 s
+sum. A second DAgger variant using the 8.05 s 1-11 smoke teacher
+(`student_obs58_256_time_dagger2`) improved 1-11 to 8.05 s but regressed 1-3 to
+3.77 s, raising the sum to 78.917 s, so it was rejected.
+
+The distillation path also supports the game's **multi-hot observation v2**
+(`--obs-encoding multi_hot`, 754 values; see `src/obs_spec.py`). Teachers,
+student, DAgger, eval, and export must all use the same encoding and
+`action_repeat`. The existing 58-value champions are legacy and cannot be mixed
+with a multi-hot run; train new multi-hot PPO teachers first.
 
 The 128-hidden observation-only baseline cleared 15/16; only 1-10 failed
 (0/100, 0 deaths, 100 timeouts). A targeted DAgger round on 1-10 labelled

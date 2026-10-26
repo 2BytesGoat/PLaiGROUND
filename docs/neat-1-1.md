@@ -3,6 +3,12 @@
 Experimental NEAT training for the first campaign level. This is intentionally
 separate from the notebooks and the Stable-Baselines training path.
 
+> **Fixed-topology note:** the current config is `58 -> 1`, sigmoid, with
+> structural mutations enabled. It is not a drop-in fine-tuner for the
+> 58 -> 256 -> 256 -> 2 student. NEAT is deferred to V2/nice-to-have for the
+> current teacher-quality pass; see
+> [model-improvement-experiments.md](model-improvement-experiments.md) § 4.
+
 ## How it works
 
 `src/07_neat_agent.py` uses the game's existing training environment:

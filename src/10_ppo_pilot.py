@@ -36,7 +36,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from dotenv import load_dotenv
 
@@ -103,12 +103,15 @@ class SingleAgentGodotEnv(gym.Env):
         log_path: str,
         child_env: dict[str, str],
         force_start_jump: bool,
+        reward_profile: str,
+        obs_encoding: str,
     ) -> None:
         super().__init__()
         self.level = level
         self.max_decisions = max_decisions
         self.action_repeat = action_repeat
         self.force_start_jump = force_start_jump
+        self.obs_encoding = obs_encoding
         self._steps = 0
         self.game = GodotEnv(
             env_path=env_path,
@@ -122,6 +125,8 @@ class SingleAgentGodotEnv(gym.Env):
             convert_action_space=True,
             log_path=log_path,
             env=child_env,
+            reward_profile=reward_profile,
+            obs_encoding=obs_encoding,
         )
         self.observation_space = self.game.observation_space.spaces["obs"]
         self.action_space = spaces.Discrete(2)
@@ -213,6 +218,8 @@ def make_env(rank: int, args: argparse.Namespace, env_path: str):
         # Do not override actions inside PPO rollouts: SB3 stores the sampled
         # action, so forcing a different env action would corrupt that sample.
         force_start_jump=False,
+        reward_profile=args.reward_profile,
+        obs_encoding=args.obs_encoding,
     )
 
 
@@ -308,6 +315,90 @@ class EpisodeCSVCallback(BaseCallback):
         self.csv_file.close()
 
 
+class EvalPatienceCallback(BaseCallback):
+    """Stop on a deterministic evaluation plateau and keep the best model.
+
+    The training reward is not the stopping signal: PPO can improve its return
+    while the deployed argmax policy gets slower. The callback evaluates the
+    current policy on the target level, uses median finish time as the primary
+    metric (finish rate is a gate), and saves the best checkpoint separately.
+    """
+
+    def __init__(self, args: argparse.Namespace, env_path: str):
+        super().__init__()
+        self.args = args
+        self.env_path = env_path
+        self.last_eval = 0
+        self.best_metric = float("inf")
+        self.best_step = -1
+        self.no_improve = 0
+        self.best_path = args.output_dir / "best_model.zip"
+
+    def _metric(self, result: dict) -> float:
+        finish_rate = (
+            int(result.get("finishes", 0)) / max(1, self.args.eval_agents)
+        )
+        if finish_rate < self.args.min_finish_rate:
+            return float("inf")
+        for key in ("median_time", "best_time"):
+            value = result.get(key, "")
+            if value not in ("", None):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    pass
+        return float("inf")
+
+    def _on_step(self) -> bool:
+        if self.args.eval_every <= 0 or self.args.patience <= 0:
+            return True
+        if self.num_timesteps - self.last_eval < self.args.eval_every:
+            return True
+
+        self.last_eval = self.num_timesteps
+        checkpoint = (
+            self.args.output_dir
+            / "checkpoints"
+            / f"ppo-{self.num_timesteps}.zip"
+        )
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        self.model.save(str(checkpoint))
+
+        level = self.args.levels[0]
+        result = evaluate_policy(self.model, self.args, self.env_path, level)
+        metric = self._metric(result)
+        finish_rate = int(result.get("finishes", 0)) / max(
+            1, self.args.eval_agents
+        )
+        improved = metric < self.best_metric * (1.0 - self.args.min_improvement)
+        if improved:
+            self.best_metric = metric
+            self.best_step = self.num_timesteps
+            self.no_improve = 0
+            self.model.save(str(self.best_path))
+            print(
+                f"[patience] best {level} median={metric:.3f}s "
+                f"finish_rate={finish_rate:.2f} at {self.num_timesteps}",
+                flush=True,
+            )
+        else:
+            self.no_improve += 1
+            print(
+                f"[patience] no improvement {self.no_improve}/"
+                f"{self.args.patience} at {self.num_timesteps} "
+                f"(metric={metric:.3f}s finish_rate={finish_rate:.2f})",
+                flush=True,
+            )
+        if self.no_improve >= self.args.patience:
+            print(
+                f"[patience] stopping; best median={self.best_metric:.3f}s "
+                f"at {self.best_step}",
+                flush=True,
+            )
+            return False
+        return True
+
+
 def evaluate_policy(
     model: PPO,
     args: argparse.Namespace,
@@ -331,6 +422,8 @@ def evaluate_policy(
         convert_action_space=True,
         log_path=str(out_dir / f"godot-{run_id}.log"),
         env=child_env,
+        reward_profile=args.reward_profile,
+        obs_encoding=args.obs_encoding,
     )
 
     rows = []
@@ -342,11 +435,18 @@ def evaluate_policy(
         finish_times = np.full(n, np.inf, dtype=np.float64)
         rewards_sum = np.zeros(n, dtype=np.float64)
         steps_run = np.zeros(n, dtype=np.int32)
+        efficiency = np.full(n, np.nan, dtype=np.float64)
+        flow = np.full(n, np.nan, dtype=np.float64)
+        deaths = np.zeros(n, dtype=np.int32)
+        last_infos: list[dict] = [{} for _ in range(n)]
 
         for step in range(args.max_decisions):
             actions = []
             for i in range(n):
                 if done_once[i]:
+                    actions.append([0])
+                    continue
+                if step < args.start_delay:
                     actions.append([0])
                     continue
                 if args.force_start_jump and step == 0:
@@ -364,6 +464,7 @@ def evaluate_policy(
             for i in range(n):
                 if done_once[i]:
                     continue
+                last_infos[i] = dict(infos[i]) if infos[i] else {}
                 rewards_sum[i] += float(rewards[i])
                 steps_run[i] = step + 1
                 if dones[i]:
@@ -385,6 +486,22 @@ def evaluate_policy(
                 break
 
         for i in range(n):
+            info = last_infos[i]
+            if "efficiency" in info:
+                try:
+                    efficiency[i] = float(info["efficiency"])
+                except (TypeError, ValueError):
+                    pass
+            if "flow" in info:
+                try:
+                    flow[i] = float(info["flow"])
+                except (TypeError, ValueError):
+                    pass
+            if "deaths" in info:
+                try:
+                    deaths[i] = int(info["deaths"])
+                except (TypeError, ValueError):
+                    pass
             rows.append(
                 {
                     "agent": i,
@@ -394,17 +511,61 @@ def evaluate_policy(
                     "run_time": (
                         "" if not finished[i] else f"{finish_times[i]:.6f}"
                     ),
+                    "efficiency": (
+                        f"{efficiency[i]:.6f}"
+                        if np.isfinite(efficiency[i])
+                        else ""
+                    ),
+                    "flow": (
+                        f"{flow[i]:.6f}"
+                        if np.isfinite(flow[i])
+                        else ""
+                    ),
+                    "deaths": int(deaths[i]),
                 }
             )
 
         finish_count = int(finished.sum())
-        death_count = int((done_once & ~finished).sum())
+        death_count = int(deaths.sum())
         timeout_count = int((~done_once).sum())
-        best_time = float(np.nanmin(finish_times)) if finish_count else None
+        clean_finish_times = finish_times[np.isfinite(finish_times)]
+        best_time = (
+            float(np.min(clean_finish_times))
+            if clean_finish_times.size
+            else None
+        )
+        median_time = (
+            float(np.median(clean_finish_times))
+            if clean_finish_times.size
+            else None
+        )
+        mean_time = (
+            float(np.mean(clean_finish_times))
+            if clean_finish_times.size
+            else None
+        )
+        time_cv = (
+            float(np.std(clean_finish_times) / mean_time)
+            if clean_finish_times.size and mean_time
+            else None
+        )
+        efficiency_mean = (
+            float(np.nanmean(efficiency))
+            if np.isfinite(efficiency).any()
+            else None
+        )
+        flow_mean = (
+            float(np.nanmean(flow))
+            if np.isfinite(flow).any()
+            else None
+        )
         print(
             f"[eval {level}] finishes={finish_count}/{n} "
             f"deaths={death_count} timeouts={timeout_count} "
             f"best={best_time if best_time is not None else 'none'} "
+            f"median={median_time if median_time is not None else 'none'} "
+            f"eff={efficiency_mean if efficiency_mean is not None else 'none'} "
+            f"flow={flow_mean if flow_mean is not None else 'none'} "
             f"mean_reward={float(rewards_sum.mean()):.2f}",
             flush=True,
         )
@@ -412,17 +573,38 @@ def evaluate_policy(
         with open(out_dir / f"results-{run_id}.csv", "w", newline="") as fh:
             writer = csv.DictWriter(
                 fh,
-                fieldnames=["agent", "finished", "steps", "reward", "run_time"],
+                fieldnames=[
+                    "agent",
+                    "finished",
+                    "steps",
+                    "reward",
+                    "run_time",
+                    "efficiency",
+                    "flow",
+                    "deaths",
+                ],
             )
             writer.writeheader()
             writer.writerows(rows)
 
         return {
             "level": level,
+            "agents": n,
             "finishes": finish_count,
             "deaths": death_count,
             "timeouts": timeout_count,
             "best_time": f"{best_time:.6f}" if best_time is not None else "",
+            "median_time": (
+                f"{median_time:.6f}" if median_time is not None else ""
+            ),
+            "mean_time": f"{mean_time:.6f}" if mean_time is not None else "",
+            "time_cv": f"{time_cv:.6f}" if time_cv is not None else "",
+            "efficiency_mean": (
+                f"{efficiency_mean:.6f}" if efficiency_mean is not None else ""
+            ),
+            "flow_mean": (
+                f"{flow_mean:.6f}" if flow_mean is not None else ""
+            ),
             "mean_reward": f"{float(rewards_sum.mean()):.2f}",
         }
     finally:
@@ -444,10 +626,16 @@ def evaluate_levels(
             fh,
             fieldnames=[
                 "level",
+                "agents",
                 "finishes",
                 "deaths",
                 "timeouts",
                 "best_time",
+                "median_time",
+                "mean_time",
+                "time_cv",
+                "efficiency_mean",
+                "flow_mean",
                 "mean_reward",
             ],
         )
@@ -490,6 +678,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-only", action="store_true")
     parser.add_argument("--eval-stochastic", action="store_true")
     parser.add_argument(
+        "--start-delay",
+        type=int,
+        default=0,
+        help="Evaluation only: hold idle for N decisions before the policy starts.",
+    )
+    parser.add_argument(
+        "--reward-profile",
+        default="default",
+        choices=("default", "time"),
+        help="Training-only game reward profile.",
+    )
+    parser.add_argument(
+        "--obs-encoding",
+        default="legacy",
+        choices=("legacy", "multi_hot"),
+        help="Game observation contract; multi_hot requires a matching new model.",
+    )
+    parser.add_argument(
         "--force-start-jump",
         dest="force_start_jump",
         action="store_true",
@@ -503,6 +709,30 @@ def parse_args() -> argparse.Namespace:
     )
     parser.set_defaults(force_start_jump=False)
     parser.add_argument("--skip-eval", action="store_true")
+    parser.add_argument(
+        "--eval-every",
+        type=int,
+        default=0,
+        help="Evaluate every N timesteps (0 disables patience evaluation).",
+    )
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=0,
+        help="Stop after N evaluations without a meaningful improvement (0 disables).",
+    )
+    parser.add_argument(
+        "--min-improvement",
+        type=float,
+        default=0.01,
+        help="Relative median-time improvement required to reset patience.",
+    )
+    parser.add_argument(
+        "--min-finish-rate",
+        type=float,
+        default=0.90,
+        help="Evaluation finish-rate gate for a candidate to count as an improvement.",
+    )
     parser.add_argument("--resume", type=Path)
     parser.add_argument(
         "--output-dir",
@@ -602,7 +832,10 @@ def main() -> None:
         reset_num_timesteps = True
         target_timesteps = args.timesteps
 
-    callback = EpisodeCSVCallback(args)
+    callbacks = [EpisodeCSVCallback(args)]
+    if args.eval_every > 0 and args.patience > 0:
+        callbacks.append(EvalPatienceCallback(args, env_path))
+    callback = CallbackList(callbacks)
     try:
         model.learn(
             total_timesteps=target_timesteps,
@@ -610,6 +843,10 @@ def main() -> None:
             reset_num_timesteps=reset_num_timesteps,
             progress_bar=False,
         )
+        best_path = args.output_dir / "best_model.zip"
+        if args.eval_every > 0 and args.patience > 0 and best_path.exists():
+            model = PPO.load(str(best_path), device=args.device)
+            print(f"using best eval checkpoint: {best_path}", flush=True)
         model.save(str(model_path))
         print(f"saved model: {model_path}", flush=True)
     finally:
