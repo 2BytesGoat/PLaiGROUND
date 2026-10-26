@@ -101,9 +101,10 @@ def isolated_home(output_dir: Path, name: str) -> dict[str, str]:
     return child_env
 
 
-def teacher_path(level: str) -> Path | None:
-    for root in TEACHER_ROOTS:
-        candidate = root / level / "ppo_pilot.zip"
+def teacher_path(level: str, root: Path | None = None) -> Path | None:
+    roots = (root,) if root is not None else TEACHER_ROOTS
+    for candidate_root in roots:
+        candidate = candidate_root / level / "ppo_pilot.zip"
         if candidate.exists():
             return candidate
     return None
@@ -174,11 +175,16 @@ def collect_level(
     teacher = PPO.load(str(model_path), device="cpu")
     expected_size = obs_spec.expected_obs_size(args.obs_encoding)
     teacher_size = int(teacher.observation_space.shape[0])
-    if teacher_size != expected_size:
+    teacher_uses_legacy = teacher_size == obs_spec.LEGACY_OBSERVATION_SIZE
+    if teacher_size != expected_size and not (
+        args.obs_encoding == obs_spec.ENCODING_MULTI_HOT
+        and teacher_uses_legacy
+    ):
         raise ValueError(
             f"{model_path} observes {teacher_size} values, but "
             f"--obs-encoding={args.obs_encoding} expects {expected_size}; "
-            "retrain the teacher with the same encoding"
+            "train the teacher with either encoding and let the game emit "
+            "the legacy vector for a legacy teacher"
         )
     n = args.agents
     idx = level_index(level)
@@ -205,22 +211,29 @@ def collect_level(
         log_path=str(log_path),
         env=isolated_home(args.output_dir, f"collect_{level}"),
         obs_encoding=args.obs_encoding,
+        emit_legacy_obs=teacher_uses_legacy,
     )
     try:
         obs, _ = env.reset()
         for episode in range(args.episodes):
             active = np.ones(n, dtype=bool)
             for step in range(args.max_decisions):
-                obs_np = np.asarray(
+                student_obs_np = np.asarray(
                     [obs[i]["obs"] for i in range(n)],
                     dtype=np.float32,
                 )
-                probs = teacher_probs(teacher, obs_np)
+                teacher_obs_np = student_obs_np
+                if teacher_uses_legacy:
+                    teacher_obs_np = np.asarray(
+                        [obs[i]["legacy_obs"] for i in range(n)],
+                        dtype=np.float32,
+                    )
+                probs = teacher_probs(teacher, teacher_obs_np)
                 actions = (rng.random(n) < probs[:, 1]).astype(np.int64)
 
                 active_idx = np.flatnonzero(active)
                 if active_idx.size:
-                    obs_all.append(obs_np[active_idx].copy())
+                    obs_all.append(student_obs_np[active_idx].copy())
                     prob_all.append(probs[active_idx].copy())
                     action_all.append(actions[active_idx].copy())
                     level_all.append(np.full(active_idx.size, idx, dtype=np.int64))
@@ -267,6 +280,16 @@ def collect_level(
     return result
 
 
+def resolve_torch_device(requested: str) -> torch.device:
+    if requested != "auto":
+        return torch.device(requested)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def train_student(args: argparse.Namespace) -> None:
     paths = sorted((args.output_dir / "dataset").glob("*.npz"))
     if not paths:
@@ -304,11 +327,15 @@ def train_student(args: argparse.Namespace) -> None:
 
     init_seed = args.init_seed if args.init_seed is not None else args.seed
     torch.manual_seed(init_seed)
+    device = resolve_torch_device(args.device)
+    print(f"[train] device={device} samples={len(obs)}", flush=True)
     student = StudentPolicy(
         input_dim=input_dim,
         hidden=args.hidden,
         dropout=args.dropout,
-    )
+    ).to(device)
+    val_x = val_x.to(device)
+    val_y = val_y.to(device)
     optimizer = torch.optim.Adam(
         student.parameters(),
         lr=args.learning_rate,
@@ -326,6 +353,8 @@ def train_student(args: argparse.Namespace) -> None:
         total = 0.0
         count = 0
         for xb, yb in loader:
+            xb = xb.to(device)
+            yb = yb.to(device)
             logits = student(xb)
             log_probs = F.log_softmax(logits, dim=1)
             loss = -(yb * log_probs).sum(dim=1).mean()
@@ -362,7 +391,7 @@ def train_student(args: argparse.Namespace) -> None:
         if val_loss < best_val:
             best_val = val_loss
             best_state = {
-                key: value.detach().clone()
+                key: value.detach().cpu().clone()
                 for key, value in student.state_dict().items()
             }
 
@@ -375,9 +404,13 @@ def train_student(args: argparse.Namespace) -> None:
         }
     )
     missing = [level for level in LEVELS if level not in available]
+    save_state = {
+        key: value.detach().cpu()
+        for key, value in student.state_dict().items()
+    }
     torch.save(
         {
-            "state_dict": student.state_dict(),
+            "state_dict": save_state,
             "input_dim": input_dim,
             "obs_encoding": args.obs_encoding,
             "observation_size": input_dim,
@@ -431,11 +464,16 @@ def dagger_collect(
             f"not {args.action_repeat}"
         )
     teacher_size = int(teacher.observation_space.shape[0])
-    if teacher_size != expected_size:
+    teacher_uses_legacy = teacher_size == obs_spec.LEGACY_OBSERVATION_SIZE
+    if teacher_size != expected_size and not (
+        args.obs_encoding == obs_spec.ENCODING_MULTI_HOT
+        and teacher_uses_legacy
+    ):
         raise ValueError(
             f"teacher observes {teacher_size} values, but "
             f"--obs-encoding={args.obs_encoding} expects {expected_size}; "
-            "retrain the teacher with the same encoding"
+            "train the teacher with either encoding and let the game emit "
+            "the legacy vector for a legacy teacher"
         )
     n = args.agents
     idx = level_index(level)
@@ -462,32 +500,39 @@ def dagger_collect(
         log_path=str(log_path),
         env=isolated_home(args.output_dir, f"dagger_{level}"),
         obs_encoding=args.obs_encoding,
+        emit_legacy_obs=teacher_uses_legacy,
     )
     try:
         obs, _ = env.reset()
         for episode in range(args.episodes):
             active = np.ones(n, dtype=bool)
             for step in range(args.max_decisions):
-                obs_np = np.asarray(
+                student_obs_np = np.asarray(
                     [obs[i]["obs"] for i in range(n)],
                     dtype=np.float32,
                 )
+                teacher_obs_np = student_obs_np
+                if teacher_uses_legacy:
+                    teacher_obs_np = np.asarray(
+                        [obs[i]["legacy_obs"] for i in range(n)],
+                        dtype=np.float32,
+                    )
                 # Student rollouts supply the states; the teacher supplies
                 # the labels at exactly those states.
                 with torch.no_grad():
-                    logits = student(torch.from_numpy(obs_np))
+                    logits = student(torch.from_numpy(student_obs_np))
                     temperature = max(float(args.rollout_temperature), 1e-3)
                     student_probs = torch.softmax(
                         logits / temperature, dim=1
                     ).numpy()
-                teacher_probs_np = teacher_probs(teacher, obs_np)
+                teacher_probs_np = teacher_probs(teacher, teacher_obs_np)
                 actions = (
                     rng.random(n) < student_probs[:, 1]
                 ).astype(np.int64)
 
                 active_idx = np.flatnonzero(active)
                 if active_idx.size:
-                    obs_all.append(obs_np[active_idx].copy())
+                    obs_all.append(student_obs_np[active_idx].copy())
                     prob_all.append(teacher_probs_np[active_idx].copy())
                     action_all.append(actions[active_idx].copy())
                     level_all.append(np.full(active_idx.size, idx, dtype=np.int64))
@@ -857,6 +902,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=obs_spec.SUPPORTED_ENCODINGS,
         help="Observation contract emitted by the game.",
     )
+    collect.add_argument(
+        "--teacher-root",
+        type=Path,
+        default=None,
+        help="Optional root containing <level>/ppo_pilot.zip teachers.",
+    )
     collect.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
     train = sub.add_parser("train", help="Train the student from saved data")
@@ -880,6 +931,12 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--model-name", default="student.pt")
     train.add_argument("--val-fraction", type=float, default=0.1)
     train.add_argument("--seed", type=int, default=42)
+    train.add_argument(
+        "--device",
+        default="auto",
+        choices=("auto", "cpu", "mps", "cuda"),
+        help="Student training device; auto prefers CUDA, then MPS, then CPU.",
+    )
     train.add_argument(
         "--action-repeat",
         type=int,
@@ -919,6 +976,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=obs_spec.ENCODING_LEGACY,
         choices=obs_spec.SUPPORTED_ENCODINGS,
         help="Observation contract shared by student, teacher, and game.",
+    )
+    dagger.add_argument(
+        "--teacher-root",
+        type=Path,
+        default=None,
+        help="Optional root containing <level>/ppo_pilot.zip teachers.",
     )
     dagger.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
@@ -965,7 +1028,7 @@ def main() -> None:
         levels = parse_levels(args.levels)
         results = []
         for level in levels:
-            path = teacher_path(level)
+            path = teacher_path(level, args.teacher_root)
             if path is None:
                 print(f"[collect {level}] no teacher snapshot; skipped", flush=True)
                 continue
@@ -978,7 +1041,7 @@ def main() -> None:
         levels = parse_levels(args.levels)
         total = 0
         for level in levels:
-            path = teacher_path(level)
+            path = teacher_path(level, args.teacher_root)
             if path is None:
                 print(f"[dagger {level}] no teacher snapshot; skipped", flush=True)
                 continue

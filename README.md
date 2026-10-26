@@ -197,8 +197,15 @@ champions, then distilled them into the global student. Champion selection uses
 speed first, with efficiency/flow tie-breaks; multi-seed PPO restarts are
 available after a plateau. A live-takeover script tests whether an improved
 teacher can recover from student-visited states. The new multi-hot observation
-(`--obs-encoding multi_hot`, 754 values) is implemented but has no trained v2
-model yet.
+(`--obs-encoding multi_hot`, 754 values) is implemented. The first multi-hot
+experiment was negative: a fresh 1-11 legacy 58/64×64 PPO reached **3.8667 s**,
+while multi-hot 64×64 stayed at 0/100, multi-hot 256×256 reached 4.4667 s
+after 775k steps, and multi-hot 512×512 failed at every eval (0/100; one early
+stochastic finish, then no more). The all-16 multi-hot teacher retrain was not started. The
+256-wide legacy-teacher student cleared 13/16, failing 1-11/1-14/1-15. The
+bundled JSON remains the legacy 58-value model. The multi-hot code,
+`src/17_multi_hot_teachers.py`, and spec-2 export path remain available for the
+next attempt.
 
 Selected result: the new DAgger student clears all 16 levels at 100/100 with a
 **78.58 s** campaign best-time sum (old: 83.12 s). The 1-11 teacher improved from

@@ -27,6 +27,7 @@ from stable_baselines3 import PPO
 from dotenv import load_dotenv
 
 from wrappers.godot_env import GodotEnv
+import obs_spec
 
 
 LEVELS = [f"1-{i}" for i in range(1, 17)]
@@ -135,10 +136,15 @@ def main() -> int:
     teacher = PPO.load(str(teacher_path), device="cpu")
     teacher_size = int(teacher.observation_space.shape[0])
     student_size = int(student.trunk[0].in_features)
-    if teacher_size != student_size:
+    teacher_uses_legacy = (
+        teacher_size == obs_spec.LEGACY_OBSERVATION_SIZE
+        and student_size == obs_spec.MULTI_HOT_OBSERVATION_SIZE
+    )
+    if teacher_size != student_size and not teacher_uses_legacy:
         raise ValueError(
             f"teacher observes {teacher_size} values but student observes "
-            f"{student_size}; recovery requires matching observation encodings"
+            f"{student_size}; recovery requires matching observation encodings "
+            "or a multi-hot student with a legacy teacher"
         )
 
     n = args.agents
@@ -165,6 +171,7 @@ def main() -> int:
         log_path=str(args.output_dir / "godot.log"),
         env=isolated_home(args.output_dir, "recovery"),
         obs_encoding=obs_encoding,
+        emit_legacy_obs=teacher_uses_legacy,
     )
     done_once = np.zeros(n, dtype=bool)
     finished = np.zeros(n, dtype=bool)
@@ -178,20 +185,26 @@ def main() -> int:
     try:
         obs, _ = env.reset()
         for step in range(args.max_decisions):
-            obs_np = np.asarray(
+            student_obs_np = np.asarray(
                 [obs[i]["obs"] for i in range(n)],
                 dtype=np.float32,
             )
+            teacher_obs_np = student_obs_np
+            if teacher_uses_legacy:
+                teacher_obs_np = np.asarray(
+                    [obs[i]["legacy_obs"] for i in range(n)],
+                    dtype=np.float32,
+                )
             with torch.no_grad():
                 student_actions = (
-                    student(torch.from_numpy(obs_np)).argmax(dim=1).numpy()
+                    student(torch.from_numpy(student_obs_np)).argmax(dim=1).numpy()
                 )
             teacher_actions = np.zeros(n, dtype=np.int64)
             for i in range(n):
                 if done_once[i]:
                     continue
                 teacher_action, _ = teacher.predict(
-                    obs_np[i], deterministic=True
+                    teacher_obs_np[i], deterministic=True
                 )
                 teacher_actions[i] = int(teacher_action)
 

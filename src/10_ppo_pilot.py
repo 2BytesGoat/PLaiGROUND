@@ -4,10 +4,12 @@ The game's training mode exposes isolated worlds over the godot-rl socket.
 This script runs one world per Godot process, wraps each world as a normal
 Gymnasium environment, and lets Stable-Baselines3 PPO train one shared policy.
 
-Why one process per world: the multi-agent wrapper is designed for parallel
-inference/evaluation. It does not auto-reset individual agents, which is
-required by SB3's vector-env API. One agent per process gives us the standard
-reset/step contract without changing the game's training protocol.
+Why one process per world: the Python multi-agent wrapper is designed for
+parallel inference/evaluation. It does not auto-reset individual agents, which
+is required by SB3's vector-env API. One agent per process gives us the standard
+reset/step contract without changing the game's training protocol. The game now
+supports optional per-agent reset indices, but this pilot stays 8x1 until a
+multi-agent VecEnv exists; 8 is the default, not a measured optimum.
 
 The existing game reward is used unchanged:
 progress + efficiency + time + finish + survival. Every episode resets idle;
@@ -33,6 +35,7 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
+import torch
 import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import PPO
@@ -333,6 +336,7 @@ class EvalPatienceCallback(BaseCallback):
         self.best_step = -1
         self.no_improve = 0
         self.best_path = args.output_dir / "best_model.zip"
+        self.baseline_done = False
 
     def _metric(self, result: dict) -> float:
         finish_rate = (
@@ -348,6 +352,31 @@ class EvalPatienceCallback(BaseCallback):
                 except (TypeError, ValueError):
                     pass
         return float("inf")
+
+    def _on_training_start(self) -> None:
+        if (
+            not self.args.baseline_eval
+            or self.baseline_done
+            or self.args.eval_every <= 0
+            or self.args.patience <= 0
+        ):
+            return
+        self.baseline_done = True
+        level = self.args.levels[0]
+        result = evaluate_policy(self.model, self.args, self.env_path, level)
+        metric = self._metric(result)
+        finish_rate = int(result.get("finishes", 0)) / max(
+            1, self.args.eval_agents
+        )
+        if metric != float("inf"):
+            self.best_metric = metric
+            self.best_step = 0
+            self.model.save(str(self.best_path))
+            print(
+                f"[baseline] {level} median={metric:.3f}s "
+                f"finish_rate={finish_rate:.2f}; saved as best",
+                flush=True,
+            )
 
     def _on_step(self) -> bool:
         if self.args.eval_every <= 0 or self.args.patience <= 0:
@@ -710,6 +739,12 @@ def parse_args() -> argparse.Namespace:
     parser.set_defaults(force_start_jump=False)
     parser.add_argument("--skip-eval", action="store_true")
     parser.add_argument(
+        "--baseline-eval",
+        action="store_true",
+        help="Evaluate the initial policy and seed eval patience with it; "
+        "implied by --init-student.",
+    )
+    parser.add_argument(
         "--eval-every",
         type=int,
         default=0,
@@ -735,6 +770,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--resume", type=Path)
     parser.add_argument(
+        "--init-student",
+        type=Path,
+        help="Initialize PPO policy/action head from a StudentPolicy checkpoint; "
+        "the value head remains random.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "runs" / "ppo_pilot",
@@ -756,6 +797,64 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--verbose", type=int, default=0)
     return parser.parse_args()
+
+
+def initialize_policy_from_student(
+    model: PPO,
+    student_path: Path,
+    args: argparse.Namespace,
+) -> None:
+    """Warm-start PPO's policy/action head from a distillation checkpoint.
+
+    The value head stays randomly initialized. This lets a multi-hot PPO
+    teacher start from a legacy-teacher behavior clone instead of relearning
+    movement and finish behavior from scratch.
+    """
+    payload = torch.load(student_path, map_location="cpu", weights_only=False)
+    state = payload["state_dict"]
+    student_encoding = str(payload.get("obs_encoding", "legacy"))
+    if student_encoding != args.obs_encoding:
+        raise ValueError(
+            f"{student_path} uses obs_encoding={student_encoding}, "
+            f"not {args.obs_encoding}"
+        )
+    input_dim = int(payload["input_dim"])
+    expected_size = int(model.observation_space.shape[0])
+    if input_dim != expected_size:
+        raise ValueError(
+            f"{student_path} has input_dim={input_dim}, "
+            f"but this PPO env observes {expected_size}"
+        )
+    student_action_repeat = int(payload.get("action_repeat", 4))
+    if student_action_repeat != args.action_repeat:
+        raise ValueError(
+            f"{student_path} was trained with action_repeat="
+            f"{student_action_repeat}, not {args.action_repeat}"
+        )
+    hidden_sizes = [
+        int(state["trunk.0.weight"].shape[0]),
+        int(state["trunk.2.weight"].shape[0]),
+    ]
+    if hidden_sizes != list(args.net_arch):
+        raise ValueError(
+            f"{student_path} hidden sizes {hidden_sizes} do not match "
+            f"--net-arch {list(args.net_arch)}"
+        )
+
+    device = model.policy.device
+    policy_net = model.policy.mlp_extractor.policy_net
+    with torch.no_grad():
+        policy_net[0].weight.copy_(state["trunk.0.weight"].to(device))
+        policy_net[0].bias.copy_(state["trunk.0.bias"].to(device))
+        policy_net[2].weight.copy_(state["trunk.2.weight"].to(device))
+        policy_net[2].bias.copy_(state["trunk.2.bias"].to(device))
+        model.policy.action_net.weight.copy_(state["heads.weight"].to(device))
+        model.policy.action_net.bias.copy_(state["heads.bias"].to(device))
+    print(
+        f"initialized policy from {student_path} "
+        f"({input_dim} -> {hidden_sizes} -> 2); value head random",
+        flush=True,
+    )
 
 
 def main() -> None:
@@ -810,6 +909,13 @@ def main() -> None:
         # Passing an already-offset target would double-count the offset.
         target_timesteps = args.timesteps
     else:
+        # StudentPolicy uses ReLU. A warm-started PPO net must use the same
+        # activation or the copied weights mean a different function.
+        activation_fn = (
+            torch.nn.ReLU
+            if args.init_student is not None
+            else torch.nn.Tanh
+        )
         model = PPO(
             "MlpPolicy",
             vec_env,
@@ -824,13 +930,22 @@ def main() -> None:
             vf_coef=args.vf_coef,
             max_grad_norm=args.max_grad_norm,
             target_kl=args.target_kl,
-            policy_kwargs={"net_arch": dict(pi=args.net_arch, vf=args.net_arch)},
+            policy_kwargs={
+                "net_arch": dict(pi=args.net_arch, vf=args.net_arch),
+                "activation_fn": activation_fn,
+            },
             seed=args.seed,
             device=args.device,
             verbose=args.verbose,
         )
         reset_num_timesteps = True
         target_timesteps = args.timesteps
+
+    if args.init_student is not None:
+        if args.resume is not None:
+            raise ValueError("--init-student cannot be combined with --resume")
+        initialize_policy_from_student(model, args.init_student, args)
+        args.baseline_eval = True
 
     callbacks = [EpisodeCSVCallback(args)]
     if args.eval_every > 0 and args.patience > 0:

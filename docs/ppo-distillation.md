@@ -270,8 +270,16 @@ sum. A second DAgger variant using the 8.05 s 1-11 smoke teacher
 The distillation path also supports the game's **multi-hot observation v2**
 (`--obs-encoding multi_hot`, 754 values; see `src/obs_spec.py`). Teachers,
 student, DAgger, eval, and export must all use the same encoding and
-`action_repeat`. The existing 58-value champions are legacy and cannot be mixed
-with a multi-hot run; train new multi-hot PPO teachers first.
+`action_repeat`. The existing 58-value champions are legacy. Collection can
+emit both vectors (`--emit_legacy_obs=true`), so a multi-hot student can use a
+legacy 58-value teacher for labels without changing the exported student
+contract. Use `--teacher-root <root>` to collect from a per-level mixed
+champion set. `12_ppo_distill.py` selects the teacher vector width per level.
+
+The first multi-hot student candidate (256×256, 375,556 samples including
+84,164 DAgger states) cleared 13/16 and failed 1-11/1-14/1-15. It was exported
+as spec 2 but not installed; the legacy 58-value student remains the bundled
+model.
 
 The 128-hidden observation-only baseline cleared 15/16; only 1-10 failed
 (0/100, 0 deaths, 100 timeouts). A targeted DAgger round on 1-10 labelled

@@ -27,8 +27,8 @@ across levels rather than one independent PPO policy per level.
 ## Why one process per world
 
 The existing multi-agent training wrapper is useful for population inference
-and 100-agent evaluation, but it is not a standard SB3 vector environment: the
-game resets all agents together and does not auto-reset individual agents.
+and 100-agent evaluation, but it is not a standard SB3 vector environment:
+the Python wrapper does not yet auto-reset individual agents.
 
 `10_ppo_pilot.py` therefore runs **one isolated Godot training world per
 process** and wraps each one as a normal Gymnasium environment. SB3's
@@ -36,7 +36,12 @@ process** and wraps each one as a normal Gymnasium environment. SB3's
 bookkeeping.
 
 The pilot uses 8 worlds. That is enough to establish whether PPO learns the
-level; it is not the 100-agent evaluation population.
+level; it is not the 100-agent evaluation population. **8 is the pilot default,
+not a measured optimum.** The game now supports optional per-agent reset
+indices (`GodotEnv.reset(agents=...)`), but the pilot stays 8×1 until a
+multi-agent VecEnv exists, so the completed 512 width A/B remained comparable.
+See [model-improvement-experiments.md](model-improvement-experiments.md) §
+Training topology.
 
 ## Isolation
 
@@ -78,6 +83,13 @@ The game's reward is used unchanged: progress, efficiency, time, finish, and
 survival. No second fitness function is added. Add `--obs-encoding multi_hot`
 for the 754-value semantic-grid observation; a resumed model and its environment
 must use the same encoding and control cadence.
+
+`--init-student <student.pt>` warm-starts the PPO policy/action head from a
+distillation checkpoint while leaving the value head random. This is used for
+multi-hot teachers that start from a behavior clone of the legacy champions.
+`--baseline-eval` (implied by `--init-student`) evaluates that starting policy
+and seeds eval patience with it, so a bad PPO run cannot replace a good clone.
+`src/17_multi_hot_teachers.py` wraps the per-level warm-start loop.
 
 The agent owns the first jump. Every training episode resets to idle and the
 policy must start the run; evaluation uses the policy's first action too.

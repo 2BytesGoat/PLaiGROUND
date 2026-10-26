@@ -86,6 +86,8 @@ class GodotEnv:
         self.port = port
         self.connection = self._start_server()
         self.num_envs = None
+        self.supports_agent_reset = False
+        self.last_reset_agents: list[int] = []
         self._handshake()
 
         # Action and observation spaces for each in-game agent/env/AIController (used only for multi-agent case with Rllib for now)
@@ -257,9 +259,16 @@ class GodotEnv:
 
         return response_obs
 
-    def reset(self, seed=None):
+    def reset(self, seed=None, agents: Optional[list[int]] = None):
         """
         Reset the Godot environment.
+
+        Args:
+            seed: Unused; kept for the Gymnasium reset signature.
+            agents: Optional zero-based agent indices to reset. ``None`` or an
+                empty list resets all agents for backward compatibility. The
+                response always contains every agent's observation; the reset
+                subset is available as ``last_reset_agents``.
 
         Returns:
             dict: The initial observation data.
@@ -267,10 +276,23 @@ class GodotEnv:
         message = {
             "type": "reset",
         }
+        if agents is not None:
+            if not self.supports_agent_reset:
+                print(
+                    "warning: game does not advertise per-agent reset; "
+                    "resetting all agents",
+                    flush=True,
+                )
+            message["agents"] = [int(index) for index in agents]
         self._send_as_json(message)
         response = self._get_json_dict()
         response["obs"] = self._process_obs(response["obs"])
         assert response["type"] == "reset"
+        returned_agents = response.get("agents")
+        if isinstance(returned_agents, list):
+            self.last_reset_agents = [int(index) for index in returned_agents]
+        else:
+            self.last_reset_agents = list(range(self.num_envs))
         obs = response["obs"]
         return obs, [{}] * self.num_envs
 
@@ -392,6 +414,9 @@ class GodotEnv:
 
         # Number of AIController instances in a single Godot env/process
         self.num_envs = json_dict["n_agents"]
+        self.supports_agent_reset = bool(
+            json_dict.get("supports_agent_reset", False)
+        )
 
         # actions can be "single" for a single action head
         # or "multi" for several outputeads

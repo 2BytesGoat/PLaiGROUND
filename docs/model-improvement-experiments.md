@@ -1,6 +1,6 @@
 # Model improvement experiments
 
-Status: first pass complete; multi-hot observation implemented — no v2 model trained  
+Status: first pass complete; multi-hot experiment negative; 512 width failed; fresh 1-11 legacy teacher 3.8667 s
 Updated: 2026-10-26
 
 This is the implementation-facing companion to the game repo's
@@ -89,6 +89,34 @@ The selected JSON is `student_obs58_256_time_dagger.json`, exported and
 verified, then installed as the game's `student_obs58_256.json`. In-game
 headless bench: all 16 finish, zero deaths, ~78.8 s sum.
 
+## Training topology (analysis 2026-10-26)
+
+The current PPO runs use **8 Godot processes × 1 agent**. This is the pilot
+default, not a measured optimum. The development machine has 10 cores; the
+100-agent evaluation runs 100 worlds in one process because it is one episode
+with no resets, not because one process is the best training topology. All
+workers feed one central PPO policy; there is no per-worker weight copy and no
+weight merging.
+
+The game now supports optional per-agent reset indices on the `reset` message
+(`agents: [1, 3]`), and `GodotEnv.reset(agents=...)` exposes it. The PPO pilot
+still uses 8×1 so the completed 512 width A/B stays comparable. A multi-agent SB3
+`VecEnv` with per-agent auto-reset is still required before topology can change.
+
+Pending benchmark, after the width work:
+
+1. Throughput screen: 1, 2, 4, 8, 10 processes × 1 agent; measure environment
+   steps/sec and wall-clock, not learning.
+2. Fixed-total-agent topology: 8×1, 4×2, 2×4, 1×8; keep the PPO batch at 1,200
+   transitions so only the process/agent split changes.
+3. Only then scale total agents (e.g. 8×8) or try 1×100; one Godot process may
+   serialize many worlds on one thread, so more agents is not automatically
+   faster.
+4. Validate the winning topology with a wall-clock-to-target learning run
+   before using it for teacher training.
+
+Do not mix this infrastructure change into the current width comparison.
+
 ## Multi-hot observation v2 (implemented 2026-10-26)
 
 The game now supports a second observation contract alongside the shipped
@@ -125,6 +153,89 @@ teacher champions and `student_obs58_256_time_dagger` are legacy 58-value,
 `action_repeat=4`; they cannot label or drive a multi-hot environment. A v2
 run needs new multi-hot PPO teachers first, then collection/DAgger. The bundled
 JSON remains legacy until that model is trained, exported, and benched.
+
+### Warm-start requirement observed
+
+A fresh multi-hot PPO run from random weights on 1-11 (`300k` cap, 8 envs,
+`reward-profile=time`, eval every 25k, patience 3) stopped at 75k because every
+100-agent eval was **0/100 finishes**. That run is kept under
+`runs/teacher_multi_hot_scratch/1-11` as a negative result: the larger semantic
+observation does not remove the need for a movement/finish curriculum.
+
+The practical path is therefore:
+
+1. Collect multi-hot observations while the legacy 58-value champions drive
+   (`--emit_legacy_obs=true` exposes both vectors).
+2. Train a 754-input behavior-cloned student from those labels.
+3. Warm-start per-level PPO from that checkpoint (`10_ppo_pilot.py
+   --init-student`), with `--baseline-eval` seeding eval patience from the
+   cloned policy so a bad PPO run cannot replace it.
+4. Fine-tune with `src/17_multi_hot_teachers.py`; compare each result against
+   the legacy champion and keep the faster eligible teacher per level.
+
+This is an engineering response to the observed plateau, not evidence yet that
+multi-hot is better.
+
+### Teacher result (negative, 2026-10-26)
+
+The old 8.05 s teacher was not a ceiling. A controlled 1-11 A/B used 300k
+steps, 8 envs, 64×64, the existing `time` reward, `action_repeat=4`, seed 42,
+and deterministic 100-agent evals:
+
+| Arm | Result |
+|---|---:|
+| fresh legacy 58, 64×64 | **3.8667 s, 100/100** |
+| multi-hot 754, 64×64 | **0/100**, training reward stuck at timeout |
+| multi-hot 754, 256×256 | 7.0833 s at 300k; **4.4667 s** after extension to 775k |
+| multi-hot 754, 512×512 | **0/100** at 300k; one stochastic finish at ~17.5k, then only timeouts/deaths; no best checkpoint |
+| old legacy 1-11 champion | 8.05 s |
+
+The 58 run first cleared at 125k and reached 3.8667 at 200k. The 256 multi-hot
+run needed 275k for its first 7.08 clear, then extended to 775k and settled at
+4.4667; its training reward rose to ~125 and training median clear time was
+~4.75 s. It never matched the 58 baseline. The 512×512 from-scratch arm failed
+at every eval (0/100 from 25k through 300k); training had one stochastic finish
+at ~17.5k (8.98 s), then no further finishes (1,960 timeouts / 60 deaths;
+timeouts returned 37.15), and no best checkpoint. It was not extended. Width is
+non-monotonic: 64 and 512 fail, 256 learns; 350×350 is the remaining untested
+width. The earlier 512-wide behavior clone result (stuck at 9.65 s) is a
+different experiment.
+
+The behavior-clone route also plateaued: global 256 clone failed 1-2/1-11/1-14/
+1-15; 1-11-only clones stayed 9.65 through DAgger and 512 width; PPO from the
+9.65 clone collapsed to 0/100 at the 25k eval. The 512 width in that clone did
+not help. The student therefore used the legacy teacher set.
+
+A temporary **sparse-time reward** (time pressure + finish-time + death,
+no progress/efficiency) was also tested on the legacy 58, 64×64 setup. It
+stayed at the timeout return (~-15) and never cleared 1-11; the profile and code
+were removed. This confirms the progress/efficiency shaping is required for
+learning.
+
+### Student result (negative, 2026-10-26)
+
+The final 754-input student was a 256×256 DAgger distillation trained on
+375,556 samples (two episodes per level from the legacy champions, plus 84,164
+DAgger states from 1-2, 1-3, 1-4, 1-11, 1-14, and 1-15):
+
+```text
+13/16 levels clear at 100/100, 0 deaths
+failures: 1-11, 1-14, 1-15
+regressions vs legacy student: 1-3 3.50 vs 3.233; 1-10 6.217 vs 4.467;
+                              1-12 6.10 vs 5.967
+candidate: runs/multi_hot_base/student_multi_hot_dagger.pt
+JSON:      runs/multi_hot_base/export/student_multi_hot_dagger.json
+           spec 2 / 754 / action_repeat 4 / 5.8 MB
+```
+
+The candidate does **not** clear the 16-level gate and was not installed. The
+256-wide global clone alone cleared 12/16 (failed 1-2, 1-11, 1-14, 1-15); a
+512-wide clone fixed 1-2 but regressed 1-8 to 8.82 s and 1-10 to 6.22 s. Width
+alone is not the fix.
+
+The bundled game model remains `student_obs58_256.json` (legacy 58-value
+DAgger, 16/16, 78.583 s campaign sum). The multi-hot branch and spec-2 loader
+remain available for the next experiment.
 
 ## Current baseline
 
@@ -233,6 +344,16 @@ Reward changes are game-side changes. PLaiGROUND should consume the resulting
 reward and log its terms; it should not silently fork the game reward.
 
 ## Experiment tracks
+
+### 0. Policy seed vs environment seed (proposed)
+
+`--seed` currently feeds both the PPO/policy seed and the base environment
+seed; the 8 training workers get sequential env seeds. Before calling env-seed
+variation “more scenarios,” freeze one policy and evaluate it across several
+env seeds with the 100-agent protocol. If the times vary materially, add an
+env-seed robustness/fine-tune pass with the policy seed fixed. If they do not,
+use randomized starts or takeover/DAgger states instead. This is not
+implemented and must not change fixed-seed A/B comparisons.
 
 ### 1. PPO evaluation patience
 
