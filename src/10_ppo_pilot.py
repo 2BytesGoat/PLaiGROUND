@@ -31,7 +31,9 @@ import argparse
 import csv
 import json
 import os
+import statistics
 import time
+from collections import defaultdict, deque
 from functools import partial
 from pathlib import Path
 
@@ -41,6 +43,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+from stable_baselines3.common.utils import configure_logger
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
 from dotenv import load_dotenv
 
@@ -54,6 +57,15 @@ from wrappers.semantic_autoencoder import FrozenSemanticAutoencoderExtractor
 DEFAULT_LEVEL = "1-3"
 LEVELS = [f"1-{i}" for i in range(1, 17)]
 DEFAULT_ENV_PATH = Path(__file__).resolve().parent.parent / "environments"
+
+
+def tensorboard_available() -> bool:
+    """Return whether SB3 can create a TensorBoard output format."""
+    try:
+        import tensorboard  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def parse_levels(value: str) -> list[str]:
@@ -198,6 +210,10 @@ class SingleAgentGodotEnv(gym.Env):
         training_no_cosmetics: bool = False,
         start_pool: list[dict] | None = None,
         start_seed: int = 0,
+        grid_dropout: float = 0.0,
+        sensor_dropout: float = 0.0,
+        trajectory_dir: str | None = None,
+        trajectory_max_time: float = 0.0,
     ) -> None:
         super().__init__()
         self.level = level
@@ -223,6 +239,22 @@ class SingleAgentGodotEnv(gym.Env):
             else:
                 self.start_weights /= total
         self.last_start: dict = {}
+        self._start_info: dict = {}
+        self.grid_dropout = max(0.0, min(1.0, float(grid_dropout)))
+        self.sensor_dropout = max(0.0, min(1.0, float(sensor_dropout)))
+        self.dropout_rng = np.random.default_rng(start_seed + 104729)
+        self.trajectory_dir = (
+            Path(trajectory_dir).expanduser().resolve()
+            if trajectory_dir is not None
+            else None
+        )
+        if self.trajectory_dir is not None:
+            self.trajectory_dir.mkdir(parents=True, exist_ok=True)
+        self.trajectory_max_time = max(0.0, float(trajectory_max_time))
+        self._trajectory_obs: list[np.ndarray] = []
+        self._trajectory_actions: list[int] = []
+        self._trajectory_id = 0
+        self._last_obs: np.ndarray | None = None
         extra_env_kwargs = (
             {"training_no_cosmetics": "true"}
             if training_no_cosmetics
@@ -250,6 +282,26 @@ class SingleAgentGodotEnv(gym.Env):
     def _obs(self, obs_list):
         return np.asarray(obs_list[0]["obs"], dtype=np.float32)
 
+    def _augment_obs(self, observation: np.ndarray) -> np.ndarray:
+        """Training-only structured dropout for the sensor adaptation run."""
+        if self.grid_dropout <= 0.0 and self.sensor_dropout <= 0.0:
+            return observation
+        observation = np.asarray(observation, dtype=np.float32).copy()
+        # Base multi-hot grid: 7*7 cells * 15 values. Keep the player/route
+        # tail intact so the policy still knows where it is and where it goes.
+        grid_values = 7 * 7 * 15
+        if self.grid_dropout > 0.0 and observation.size >= grid_values:
+            for cell in range(7 * 7):
+                if self.dropout_rng.random() < self.grid_dropout:
+                    start = cell * 15
+                    observation[start : start + 15] = 0.0
+        sensor_start = observation.size - 40
+        if self.sensor_dropout > 0.0 and sensor_start >= 0:
+            for index in range(sensor_start, observation.size):
+                if self.dropout_rng.random() < self.sensor_dropout:
+                    observation[index] = 0.0
+        return observation
+
     def _sample_start(self) -> dict:
         if not self.start_pool:
             return {"canonical": True}
@@ -258,7 +310,54 @@ class SingleAgentGodotEnv(gym.Env):
         )
         return dict(self.start_pool[index])
 
+    def _clear_trajectory(self) -> None:
+        self._trajectory_obs = []
+        self._trajectory_actions = []
+
+    def _save_trajectory(self, info: dict) -> None:
+        """Persist one successful, sufficiently fast episode for offline BC."""
+        if self.trajectory_dir is None or not self._trajectory_obs:
+            return
+        run_time = info.get("run_time", float("inf"))
+        try:
+            run_time = float(run_time)
+        except (TypeError, ValueError):
+            return
+        if not np.isfinite(run_time) or run_time > self.trajectory_max_time:
+            return
+        cell = info.get("start_cell")
+        if cell is None:
+            cell_array = np.empty((0,), dtype=np.int64)
+        else:
+            cell_array = np.asarray(cell, dtype=np.int64)
+        distance = info.get("start_distance")
+        distance_value = (
+            float(distance)
+            if isinstance(distance, (int, float, np.integer, np.floating))
+            else np.nan
+        )
+        self._trajectory_id += 1
+        path = self.trajectory_dir / (
+            f"episode_{self._trajectory_id:06d}_{time.time_ns()}.npz"
+        )
+        np.savez_compressed(
+            path,
+            observations=np.stack(self._trajectory_obs),
+            actions=np.asarray(self._trajectory_actions, dtype=np.int64),
+            run_time=np.float32(run_time),
+            level=np.array(self.level),
+            start_source=np.array(str(info.get("start_source", ""))),
+            start_kind=np.array(str(info.get("start_kind", ""))),
+            start_cell=cell_array,
+            start_facing=np.int64(int(info.get("start_facing") or 0)),
+            start_distance=np.float32(distance_value),
+            prefix_len=np.int64(int(info.get("prefix_len") or 0)),
+            decision_steps=np.int64(int(info.get("decision_steps") or 0)),
+        )
+        print(f"trajectory saved: {path}", flush=True)
+
     def reset(self, *, seed=None, options=None):
+        self._clear_trajectory()
         spec = self._sample_start()
         for _attempt in range(4):
             prefix = spec.get("prefix_actions") or []
@@ -303,18 +402,34 @@ class SingleAgentGodotEnv(gym.Env):
             self.last_start = dict(spec)
             self._steps = 0
             info = dict(infos[0] if infos else {})
-            info["start_source"] = (
-                "prefix"
-                if prefix
-                else "canonical"
-                if spec.get("canonical")
-                else "cell"
-            )
-            info["prefix_len"] = len(prefix)
-            info["start_cell"] = spec.get("cell")
-            info["start_facing"] = spec.get("facing")
-            info["start_jump"] = start_jump
-            return self._obs(obs), info
+            self._start_info = {
+                "start_source": (
+                    "prefix"
+                    if prefix
+                    else "canonical"
+                    if spec.get("canonical")
+                    else "cell"
+                ),
+                "start_kind": (
+                    "prefix"
+                    if prefix
+                    else str(
+                        spec.get(
+                            "kind",
+                            "canonical" if spec.get("canonical") else "cell",
+                        )
+                    )
+                ),
+                "prefix_len": len(prefix),
+                "start_cell": spec.get("cell"),
+                "start_facing": spec.get("facing"),
+                "start_distance": spec.get("distance"),
+                "start_jump": start_jump,
+            }
+            info.update(self._start_info)
+            observation = self._augment_obs(self._obs(obs))
+            self._last_obs = observation
+            return observation, info
 
         # A malformed/all-terminal prefix should not wedge training.
         obs, infos = self.game.reset()
@@ -326,21 +441,35 @@ class SingleAgentGodotEnv(gym.Env):
         self.last_start = {"canonical": True}
         self._steps = 0
         info = dict(infos[0] if infos else {})
-        info["start_source"] = "canonical_fallback"
-        info["prefix_len"] = 0
-        info["start_jump"] = start_jump
-        return self._obs(obs), info
+        self._start_info = {
+            "start_source": "canonical_fallback",
+            "start_kind": "canonical",
+            "prefix_len": 0,
+            "start_jump": start_jump,
+        }
+        info.update(self._start_info)
+        observation = self._augment_obs(self._obs(obs))
+        self._last_obs = observation
+        return observation, info
 
     def step(self, action):
+        if (
+            self.trajectory_dir is not None
+            and self._last_obs is not None
+        ):
+            self._trajectory_obs.append(self._last_obs.copy())
+            self._trajectory_actions.append(int(action))
         actions = np.asarray([[int(action)]], dtype=np.int64)
         # GodotEnv.step exposes the raw 5-tuple. The multi-agent SB3 wrapper
         # collapses terminated/truncated into a single done, but here we keep
         # them separate so Gymnasium/SB3 can handle timeout bootstrapping.
         obs, rewards, dones, _timeouts, infos = self.game.step(actions)
-        obs = self._obs(obs)
+        obs = self._augment_obs(self._obs(obs))
         reward = float(rewards[0])
         done = bool(dones[0])
         info = dict(infos[0] if infos else {})
+        if self._start_info:
+            info.update(self._start_info)
 
         self._steps += 1
         truncated = False
@@ -367,6 +496,9 @@ class SingleAgentGodotEnv(gym.Env):
         info["decision_steps"] = self._steps
         info["level"] = self.level
         info["finished"] = bool(info["finished"])
+        self._last_obs = obs
+        if info["finished"]:
+            self._save_trajectory(info)
         return obs, reward, done, truncated, info
 
     def close(self):
@@ -416,6 +548,12 @@ def make_env(rank: int, args: argparse.Namespace, env_path: str):
         training_no_cosmetics=args.training_no_cosmetics,
         start_pool=start_pool,
         start_seed=args.start_seed + rank,
+        grid_dropout=args.grid_dropout,
+        sensor_dropout=args.sensor_dropout,
+        trajectory_dir=(
+            str(args.trajectory_dir) if args.trajectory_dir else None
+        ),
+        trajectory_max_time=args.trajectory_max_time,
     )
 
 
@@ -458,12 +596,26 @@ def build_vec_env(args: argparse.Namespace, env_path: str):
     return VecMonitor(
         vec_env,
         filename=str(args.output_dir / "monitor.csv"),
-        info_keywords=("level", "finished", "timed_out", "run_time"),
+        info_keywords=(
+            "level",
+            "finished",
+            "timed_out",
+            "run_time",
+            "start_source",
+            "start_kind",
+            "start_cell",
+            "start_facing",
+            "start_distance",
+            "prefix_len",
+        ),
     )
 
 
 class EpisodeCSVCallback(BaseCallback):
     """Write one row per completed training episode and save checkpoints."""
+
+    WINDOW = 200
+    LOG_EVERY = 25
 
     def __init__(self, args: argparse.Namespace):
         super().__init__()
@@ -471,6 +623,10 @@ class EpisodeCSVCallback(BaseCallback):
         self.started = time.time()
         self.episodes = 0
         self.last_save = 0
+        self.last_metrics_log = 0
+        self.metrics: dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=self.WINDOW)
+        )
         self.csv_file = open(args.output_dir / "episodes.csv", "w", newline="")
         self.writer = csv.DictWriter(
             self.csv_file,
@@ -478,6 +634,12 @@ class EpisodeCSVCallback(BaseCallback):
                 "timesteps",
                 "level",
                 "spawn_cell",
+                "start_source",
+                "start_kind",
+                "start_cell",
+                "start_facing",
+                "start_distance",
+                "prefix_len",
                 "episode_return",
                 "episode_length",
                 "finished",
@@ -504,6 +666,12 @@ class EpisodeCSVCallback(BaseCallback):
                 "timesteps": self.num_timesteps,
                 "level": info.get("level", ""),
                 "spawn_cell": info.get("spawn_cell", ""),
+                "start_source": info.get("start_source", ""),
+                "start_kind": info.get("start_kind", ""),
+                "start_cell": info.get("start_cell", ""),
+                "start_facing": info.get("start_facing", ""),
+                "start_distance": info.get("start_distance", ""),
+                "prefix_len": info.get("prefix_len", ""),
                 "episode_return": float(episode["r"]),
                 "episode_length": int(episode["l"]),
                 "finished": bool(info.get("finished", False)),
@@ -513,13 +681,19 @@ class EpisodeCSVCallback(BaseCallback):
             }
             self.writer.writerow(row)
             self.csv_file.flush()
+            self._remember(row)
             print(
                 f"[ep {self.episodes}] t={row['timesteps']} level={row['level']} "
+                f"start={row['start_kind'] or row['start_source'] or '?'} "
                 f"reward={row['episode_return']:.2f} steps={row['episode_length']} "
                 f"finish={row['finished']} timeout={row['timed_out']} "
                 f"time={row['run_time']}",
                 flush=True,
             )
+
+        if self.episodes - self.last_metrics_log >= self.LOG_EVERY:
+            self.last_metrics_log = self.episodes
+            self._log_metrics()
 
         if (
             self.args.save_freq > 0
@@ -532,7 +706,56 @@ class EpisodeCSVCallback(BaseCallback):
             print(f"checkpoint: {path}.zip", flush=True)
         return True
 
+    def _remember(self, row: dict) -> None:
+        level = row["level"]
+        kind = row["start_kind"] or row["start_source"] or "unknown"
+        self.metrics["all"].append(row)
+        self.metrics[level].append(row)
+        self.metrics[f"{level}/{kind}"].append(row)
+        if kind == "canonical":
+            self.metrics["canonical"].append(row)
+
+    @staticmethod
+    def _summarize(records: deque) -> tuple[int, float, float | None, float | None]:
+        rows = list(records)
+        if not rows:
+            return 0, 0.0, None, None
+        finished = [row for row in rows if row["finished"]]
+        times = [
+            float(row["run_time"])
+            for row in finished
+            if row["run_time"] not in ("", None)
+        ]
+        finish_rate = len(finished) / len(rows)
+        if not times:
+            return len(rows), finish_rate, None, None
+        return (
+            len(rows),
+            finish_rate,
+            float(statistics.median(times)),
+            float(min(times)),
+        )
+
+    def _log_metrics(self) -> None:
+        if self.logger is None or not self.metrics:
+            return
+        for key in sorted(self.metrics):
+            count, finish_rate, median_time, best_time = self._summarize(
+                self.metrics[key]
+            )
+            if count == 0:
+                continue
+            self.logger.record(f"{key}/episodes_window", count)
+            self.logger.record(f"{key}/finish_rate", finish_rate)
+            if median_time is not None:
+                self.logger.record(f"{key}/median_time", median_time)
+            if best_time is not None:
+                self.logger.record(f"{key}/best_time", best_time)
+        self.logger.record("train/episodes_total", self.episodes)
+        self.logger.dump(self.num_timesteps)
+
     def _on_training_end(self) -> None:
+        self._log_metrics()
         self.csv_file.flush()
         self.csv_file.close()
 
@@ -969,12 +1192,6 @@ def evaluate_policy(
     try:
         obs, _ = env.reset()
         n = args.eval_agents
-        if args.force_start_jump:
-            # Same reset contract as training: press jump once, then let the
-            # policy choose every subsequent action.
-            obs, _rewards, _dones, _timeouts, _infos = env.step(
-                np.ones((n, 1), dtype=np.int64)
-            )
         done_once = np.zeros(n, dtype=bool)
         finished = np.zeros(n, dtype=bool)
         finish_times = np.full(n, np.inf, dtype=np.float64)
@@ -984,8 +1201,35 @@ def evaluate_policy(
         flow = np.full(n, np.nan, dtype=np.float64)
         deaths = np.zeros(n, dtype=np.int32)
         last_infos: list[dict] = [{} for _ in range(n)]
+        step_offset = 0
+
+        if args.force_start_jump:
+            # Same reset contract as training: press jump once, then let the
+            # policy choose every subsequent action. An exit-adjacent spawn
+            # may finish on this jump; keep that terminal state.
+            obs, start_rewards, start_dones, _timeouts, start_infos = env.step(
+                np.ones((n, 1), dtype=np.int64)
+            )
+            step_offset = 1
+            for i in range(n):
+                info = start_infos[i] if i < len(start_infos) else {}
+                last_infos[i] = dict(info)
+                rewards_sum[i] += float(start_rewards[i])
+                steps_run[i] = 1
+                if bool(start_dones[i]):
+                    done_once[i] = True
+                    finished[i] = bool(
+                        info.get("finished", float(start_rewards[i]) > 0.0)
+                    )
+                    if finished[i]:
+                        try:
+                            finish_times[i] = float(info["run_time"])
+                        except (KeyError, TypeError, ValueError):
+                            finish_times[i] = 0.0
 
         for step in range(args.max_decisions):
+            if done_once.all():
+                break
             actions = np.zeros((n, 1), dtype=np.int64)
             active: list[int] = []
             for i in range(n):
@@ -1015,7 +1259,7 @@ def evaluate_policy(
                     continue
                 last_infos[i] = dict(infos[i]) if infos[i] else {}
                 rewards_sum[i] += float(rewards[i])
-                steps_run[i] = step + 1
+                steps_run[i] = step + 1 + step_offset
                 if dones[i]:
                     done_once[i] = True
                     finished[i] = float(rewards[i]) > 0.0
@@ -1285,6 +1529,18 @@ def parse_args() -> argparse.Namespace:
         "jump before the policy acts.",
     )
     parser.add_argument(
+        "--grid-dropout",
+        type=float,
+        default=0.0,
+        help="Training-only probability of zeroing each 7x7 multi-hot cell.",
+    )
+    parser.add_argument(
+        "--sensor-dropout",
+        type=float,
+        default=0.0,
+        help="Training-only probability of zeroing each appended sensor value.",
+    )
+    parser.add_argument(
         "--reward-profile",
         default="default",
         choices=("default", "time", "time_speed"),
@@ -1293,8 +1549,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--obs-encoding",
         default="legacy",
-        choices=("legacy", "multi_hot"),
-        help="Game observation contract; multi_hot requires a matching new model.",
+        choices=("legacy", "multi_hot", "multi_hot_sensor"),
+        help="Game observation contract; multi_hot and multi_hot_sensor require "
+        "a matching new model. multi_hot_sensor appends head-mounted ray features.",
     )
     parser.add_argument(
         "--grid-encoder",
@@ -1367,6 +1624,32 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--resume", type=Path)
     parser.add_argument(
+        "--expand-from",
+        type=Path,
+        help="Warm-start a wider observation policy (e.g. multi_hot -> "
+        "multi_hot_sensor) by expanding the first MLP input layer. "
+        "Cannot be combined with --resume.",
+    )
+    parser.add_argument(
+        "--expand-init",
+        choices=("zero", "sample"),
+        default="zero",
+        help="Initialization for newly added input columns: zero (preserve old "
+        "policy) or sample from the existing input columns.",
+    )
+    parser.add_argument(
+        "--expand-init-scale",
+        type=float,
+        default=0.5,
+        help="Scale applied to sampled new input columns.",
+    )
+    parser.add_argument(
+        "--freeze-old-input",
+        action="store_true",
+        help="With --expand-from, freeze gradients on the original input "
+        "columns so only appended sensor columns adapt.",
+    )
+    parser.add_argument(
         "--init-student",
         type=Path,
         help="Initialize PPO policy/action head from a StudentPolicy checkpoint; "
@@ -1376,6 +1659,24 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "runs" / "ppo_pilot",
+    )
+    parser.add_argument(
+        "--tensorboard-log",
+        type=Path,
+        default=None,
+        help="TensorBoard log directory; defaults to <output-dir>/tensorboard.",
+    )
+    parser.add_argument(
+        "--trajectory-dir",
+        type=Path,
+        default=None,
+        help="Opt-in directory for successful fast episode .npz trajectories.",
+    )
+    parser.add_argument(
+        "--trajectory-max-time",
+        type=float,
+        default=5.5,
+        help="Only save successful trajectories at or below this finish time.",
     )
 
     parser.add_argument("--n-steps", type=int, default=150)
@@ -1462,6 +1763,97 @@ def restore_frozen_encoder(model: PPO, context: str) -> None:
         print(f"restored frozen autoencoder weights ({context})", flush=True)
 
 
+def initialize_expanded_policy(
+    model: PPO,
+    old_model_path: Path,
+    args: argparse.Namespace,
+) -> None:
+    """Warm-start a wider observation by zero-padding its first MLP layer.
+
+    The sensor encoding appends features after the existing 754 values. Copying
+    the old input columns preserves the old policy exactly at zero sensor input;
+    the new columns start at zero and are learned during fine-tuning.
+    """
+    old_model = PPO.load(str(old_model_path), device=args.device)
+    old_size = int(np.prod(old_model.observation_space.shape))
+    new_size = int(np.prod(model.observation_space.shape))
+    if new_size <= old_size:
+        raise ValueError(
+            f"--expand-from requires a wider observation: old={old_size}, "
+            f"new={new_size}"
+        )
+    old_state = old_model.policy.state_dict()
+    new_state = model.policy.state_dict()
+    copied = 0
+    expanded = 0
+    for key, new_tensor in new_state.items():
+        old_tensor = old_state.get(key)
+        if old_tensor is None:
+            continue
+        if old_tensor.shape == new_tensor.shape:
+            new_tensor.copy_(old_tensor)
+            copied += 1
+            continue
+        if (
+            old_tensor.ndim == 2
+            and new_tensor.ndim == 2
+            and old_tensor.shape[0] == new_tensor.shape[0]
+            and new_tensor.shape[1] >= old_tensor.shape[1]
+        ):
+            new_tensor.zero_()
+            new_tensor[:, : old_tensor.shape[1]].copy_(old_tensor)
+            new_width = new_tensor.shape[1] - old_tensor.shape[1]
+            if args.expand_init == "sample" and new_width > 0:
+                generator = torch.Generator(device=old_tensor.device)
+                generator.manual_seed(args.seed)
+                sampled = torch.randint(
+                    0,
+                    old_tensor.shape[1],
+                    (new_width,),
+                    generator=generator,
+                    device=old_tensor.device,
+                )
+                new_tensor[:, old_tensor.shape[1]:] = (
+                    old_tensor[:, sampled] * float(args.expand_init_scale)
+                )
+            copied += 1
+            expanded += 1
+            continue
+        print(
+            f"expand-from: leaving {key} at initialization "
+            f"({tuple(old_tensor.shape)} -> {tuple(new_tensor.shape)})",
+            flush=True,
+        )
+    model.policy.load_state_dict(new_state)
+    print(
+        f"expanded policy {old_size} -> {new_size} observations "
+        f"({copied} tensors copied, {expanded} input layers padded, "
+        f"init={args.expand_init}, scale={args.expand_init_scale})",
+        flush=True,
+    )
+    if args.baseline_eval:
+        print("expand-from: using fine-tune, not from-scratch baseline", flush=True)
+    return old_size
+
+
+def freeze_expanded_input_columns(model: PPO, old_size: int) -> None:
+    """Keep the original observation columns fixed during the canary."""
+    def mask_old_columns(gradient: torch.Tensor) -> torch.Tensor:
+        gradient[:, :old_size] = 0.0
+        return gradient
+
+    modules = (
+        model.policy.mlp_extractor.policy_net[0],
+        model.policy.mlp_extractor.value_net[0],
+    )
+    for module in modules:
+        module.weight.register_hook(mask_old_columns)
+    print(
+        f"froze first {old_size} input columns; only appended features adapt",
+        flush=True,
+    )
+
+
 def initialize_policy_head_from_checkpoint(
     model: PPO,
     head_path: Path,
@@ -1533,6 +1925,20 @@ def main() -> None:
     (args.output_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
     (args.output_dir / "eval").mkdir(parents=True, exist_ok=True)
 
+    if tensorboard_available():
+        tensorboard_log = args.tensorboard_log
+        if tensorboard_log is None:
+            tensorboard_log = args.output_dir / "tensorboard"
+        args.tensorboard_log = tensorboard_log.expanduser().resolve()
+        args.tensorboard_log.mkdir(parents=True, exist_ok=True)
+        print(f"tensorboard log: {args.tensorboard_log}", flush=True)
+    else:
+        args.tensorboard_log = None
+        print(
+            "tensorboard not installed; training will continue without it",
+            flush=True,
+        )
+
     args.spawn_pool_data: list[dict] = []
     if args.spawn_pool is not None:
         if args.agents_per_process < 2:
@@ -1583,6 +1989,15 @@ def main() -> None:
     if args.resume:
         model = PPO.load(str(args.resume), env=vec_env, device=args.device)
         restore_frozen_encoder(model, "resume")
+        if args.tensorboard_log is not None:
+            model.set_logger(
+                configure_logger(
+                    args.verbose,
+                    str(args.tensorboard_log),
+                    tb_log_name="PPO",
+                    reset_num_timesteps=True,
+                )
+            )
         # Saved PPO hyperparameters win over CLI defaults on load. Repair runs
         # deliberately change the exploration pressure and learning rate to
         # sharpen or re-explore a stalled per-level teacher.
@@ -1689,11 +2104,26 @@ def main() -> None:
             policy_kwargs=policy_kwargs,
             seed=args.seed,
             device=args.device,
+            tensorboard_log=(
+                str(args.tensorboard_log) if args.tensorboard_log else None
+            ),
             verbose=args.verbose,
         )
         reset_num_timesteps = True
         target_timesteps = args.timesteps
         restore_frozen_encoder(model, "new policy")
+
+    if args.expand_from is not None:
+        if args.resume is not None:
+            raise ValueError("--expand-from cannot be combined with --resume")
+        if args.init_student is not None or args.init_head is not None:
+            raise ValueError("--expand-from cannot be combined with --init-*")
+        args.expand_from = args.expand_from.expanduser().resolve()
+        old_size = initialize_expanded_policy(model, args.expand_from, args)
+        if args.freeze_old_input:
+            freeze_expanded_input_columns(model, old_size)
+    elif args.freeze_old_input:
+        raise ValueError("--freeze-old-input requires --expand-from")
 
     if args.init_student is not None:
         if args.resume is not None:

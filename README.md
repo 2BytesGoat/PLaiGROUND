@@ -2,6 +2,14 @@
 
 PLaiGROUND (name may change) is a repository for learning Machine Learning by training Game AIs. 
 
+> **Lab state (2026-10-27):** historical experiment scripts, runs, and notes
+> were moved to
+> [`archive/2026-10-27-cleanup/`](archive/2026-10-27-cleanup/README.md).
+> The active branch is the 794-value sensor PPO pipeline described there.
+> The model actually installed in Godot is documented in
+> [`docs/deployed-model-58.md`](docs/deployed-model-58.md).
+> Sections below include historical experiments and are not the current plan.
+
 ## 🍽️ Table of Contents
 
 Here are some nifty links to navigate this huge README file
@@ -188,7 +196,7 @@ export is bundled at `godot/src/resources/ai/student_obs58_256.json` and runs
 in-game through the pure-GDScript `MLPPolicy` runtime (all 16 levels finish
 headlessly at 8×). See [docs/ppo-distillation.md](docs/ppo-distillation.md).
 
-## 📈 Model improvement experiments (first pass complete; v2 observation implemented)
+## 📈 Model improvement experiments (historical; archived)
 
 The current student finishes the campaign but is route-slow on levels such as
 1-7, 1-10, and 1-11. The first pass retrained all 16 teachers with the
@@ -203,16 +211,14 @@ while multi-hot 64×64 stayed at 0/100, multi-hot 256×256 reached 4.4667 s
 after 775k steps, and multi-hot 512×512 failed at every eval (0/100; one early
 stochastic finish, then no more). The all-16 multi-hot teacher retrain was not started. The
 256-wide legacy-teacher student cleared 13/16, failing 1-11/1-14/1-15. The
-bundled JSON remains the legacy 58-value model. The multi-hot code,
-`src/17_multi_hot_teachers.py`, and spec-2 export path remain available for the
-next attempt.
+bundled JSON remains the legacy 58-value model. The multi-hot teacher driver and spec-2 export path are in the cleanup archive.
 
 Selected result: the new DAgger student clears all 16 levels at 100/100 with a
 **78.58 s** campaign best-time sum (old: 83.12 s). The 1-11 teacher improved from
 9.53 s to 8.25 s in the full sweep; the 8.05 s smoke teacher was tried again but
 regressed 1-3 and was rejected. Recovery tests finished 100/100 on 1-8 and 1-11.
 NEAT, architecture search, and dropout are deferred to V2. See
-[docs/model-improvement-experiments.md](docs/model-improvement-experiments.md).
+[archive/2026-10-27-cleanup/docs/model-improvement-experiments.md](archive/2026-10-27-cleanup/docs/model-improvement-experiments.md).
 
 ## 📋 What's to come:
 

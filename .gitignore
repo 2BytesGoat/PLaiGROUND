@@ -19,3 +19,6 @@ data/*
 
 # Training outputs
 runs/
+
+# Archived experiment outputs (large)
+archive/runs/

@@ -58,6 +58,11 @@ def main() -> int:
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--starts", type=Path, default=DEFAULT_STARTS)
     parser.add_argument("--level", default="1-1")
+    parser.add_argument(
+        "--obs-encoding",
+        default="multi_hot",
+        choices=("legacy", "multi_hot", "multi_hot_sensor"),
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--strata",
@@ -68,6 +73,11 @@ def main() -> int:
     parser.add_argument("--max-steps", type=int, default=150)
     parser.add_argument("--action-repeat", type=int, default=4)
     parser.add_argument("--speedup", type=float, default=8.0)
+    parser.add_argument(
+        "--zero-sensor",
+        action="store_true",
+        help="Ablation: zero the 40 appended multi_hot_sensor values at evaluation.",
+    )
     parser.add_argument(
         "--start-jump",
         dest="start_jump",
@@ -120,9 +130,18 @@ def main() -> int:
         log_path=str(log_dir / "eval.log"),
         env=isolated_home(args.output_dir),
         reward_profile="time",
-        obs_encoding="multi_hot",
+        obs_encoding=args.obs_encoding,
     )
     try:
+        def mask_sensor(items) -> None:
+            if not args.zero_sensor:
+                return
+            for item in items:
+                values = np.asarray(item["obs"], dtype=np.float32).copy()
+                if values.size >= 40:
+                    values[-40:] = 0.0
+                item["obs"] = values
+
         spawns = [
             {
                 "agent": index,
@@ -133,12 +152,6 @@ def main() -> int:
         ]
         obs, _infos = env.reset(spawns=spawns)
         count = len(starts)
-        if args.start_jump:
-            # Match the training reset contract: one jump starts the run,
-            # then the policy owns every subsequent decision.
-            obs, _rewards, _dones, _timeouts, _infos = env.step(
-                np.ones((count, 1), dtype=np.int64)
-            )
         if len(obs[0]["obs"]) != expected:
             raise RuntimeError(
                 f"model expects {expected} observations, game returned {len(obs[0]['obs'])}"
@@ -149,7 +162,34 @@ def main() -> int:
         steps = np.zeros(count, dtype=np.int32)
         actual_spawns: list[list[int] | None] = [None] * count
 
+        if args.start_jump:
+            # Match the training reset contract: one jump starts the run,
+            # then the policy owns every subsequent decision. The jump can
+            # legitimately finish an exit-adjacent spawn; record that terminal
+            # state instead of feeding the agent again and calling it a timeout.
+            obs, start_rewards, start_dones, _timeouts, start_infos = env.step(
+                np.ones((count, 1), dtype=np.int64)
+            )
+            for index in range(count):
+                info = start_infos[index] if index < len(start_infos) else {}
+                spawn = info.get("spawn_cell", starts[index]["cell"])
+                if isinstance(spawn, (list, tuple)) and len(spawn) >= 2:
+                    actual_spawns[index] = [int(spawn[0]), int(spawn[1])]
+                steps[index] = 1
+                if bool(start_dones[index]):
+                    done[index] = True
+                    finished[index] = bool(
+                        info.get("finished", float(start_rewards[index]) > 0.0)
+                    )
+                    if finished[index]:
+                        finish_times[index] = float(
+                            info.get("run_time", np.inf)
+                        )
+        mask_sensor(obs)
+
         for step in range(args.max_steps):
+            if done.all():
+                break
             batch = np.stack(
                 [np.asarray(obs[index]["obs"], dtype=np.float32) for index in range(count)]
             )
@@ -157,6 +197,7 @@ def main() -> int:
             actions = np.asarray(actions, dtype=np.int64).reshape(count, 1)
             actions[done] = 0
             obs, _rewards, dones, _timeouts, infos = env.step(actions)
+            mask_sensor(obs)
             for index in range(count):
                 if done[index]:
                     continue

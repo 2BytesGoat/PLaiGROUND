@@ -25,10 +25,16 @@ import numpy as np
 
 ENCODING_LEGACY = "legacy"
 ENCODING_MULTI_HOT = "multi_hot"
-SUPPORTED_ENCODINGS = (ENCODING_LEGACY, ENCODING_MULTI_HOT)
+ENCODING_MULTI_HOT_SENSOR = "multi_hot_sensor"
+SUPPORTED_ENCODINGS = (
+    ENCODING_LEGACY,
+    ENCODING_MULTI_HOT,
+    ENCODING_MULTI_HOT_SENSOR,
+)
 
 SPEC_VERSION_LEGACY = 1
 SPEC_VERSION_MULTI_HOT = 2
+SPEC_VERSION_MULTI_HOT_SENSOR = 3
 
 LEGACY_OBSERVATION_SIZE = 58
 
@@ -96,12 +102,22 @@ PLAYER_FEATURE_COUNT = (
 MULTI_HOT_OBSERVATION_SIZE = GRID_FEATURE_COUNT + PLAYER_FEATURE_COUNT
 ROUTE_TIME_SCALE = 10.0
 
+# Optional head-mounted ray sensor appended after the base multi-hot vector.
+SENSOR_RAYS = 20
+SENSOR_VALUES_PER_RAY = 2
+SENSOR_FEATURE_COUNT = SENSOR_RAYS * SENSOR_VALUES_PER_RAY
+MULTI_HOT_SENSOR_OBSERVATION_SIZE = (
+    MULTI_HOT_OBSERVATION_SIZE + SENSOR_FEATURE_COUNT
+)
+
 
 def expected_obs_size(encoding: str) -> int:
     if encoding == ENCODING_LEGACY:
         return LEGACY_OBSERVATION_SIZE
     if encoding == ENCODING_MULTI_HOT:
         return MULTI_HOT_OBSERVATION_SIZE
+    if encoding == ENCODING_MULTI_HOT_SENSOR:
+        return MULTI_HOT_SENSOR_OBSERVATION_SIZE
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
@@ -110,6 +126,8 @@ def spec_version(encoding: str) -> int:
         return SPEC_VERSION_LEGACY
     if encoding == ENCODING_MULTI_HOT:
         return SPEC_VERSION_MULTI_HOT
+    if encoding == ENCODING_MULTI_HOT_SENSOR:
+        return SPEC_VERSION_MULTI_HOT_SENSOR
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
