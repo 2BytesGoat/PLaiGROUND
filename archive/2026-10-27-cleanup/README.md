@@ -5,7 +5,12 @@ documentation moved out of the active tree. Nothing was deleted.
 
 ## Active pipeline
 
-The only active experiment branch is the 794-value sensor PPO route:
+> **Current state:** see `docs/status.md`. This section describes the active
+> pipeline **at cleanup time (2026-10-27)**. The DQN route-spawn experiment was
+> added on 2026-10-28 and is documented in
+> `docs/experiments/dqn-route-spawns.md`; it has no result yet.
+
+The active experiment branch at cleanup time was the 794-value sensor PPO route:
 
 ```text
 NEAT routes
@@ -38,6 +43,9 @@ Keep `00_random_agent.py` as the README onboarding smoke test.
 - `runs/neat_1_1_8x24_archive/` — 1-1 NEAT archive, coverage, start pool
 - `runs/neat_1_2_transfer_8x24/` — 1-2 NEAT archive, coverage, start pool
 - `runs/neat_1_3_transfer_8x24/` — 1-3 NEAT archive, coverage, start pool
+
+Added after cleanup (2026-10-28): `src/41_dqn_route_spawns.py` and
+`runs/dqn_route_spawns_1_1/` (incomplete; see `docs/status.md`).
 
 ## Archived
 

@@ -4,9 +4,14 @@ Status: deployed and frozen for the demo
 Built: 2026-10-26  
 Runtime artifact: `godot/src/resources/ai/student_obs58_256.json`
 
+> Current state: [`../status.md`](../status.md) · Docs index:
+> [`../index.md`](../index.md) · Run artifacts:
+> [`run-artifacts.md`](run-artifacts.md).
+
 This is the model currently used by `WATCH AI` and campaign AI in Dragon Jump.
 It is one level-agnostic policy: there is no level ID and no per-level model
-selection.
+selection. Some game docs quote 1-1 as **2.35 s**; the deployed evaluation in
+this note is **2.333 s**. Re-run one clean bench before freezing a ship number.
 
 ## At a glance
 

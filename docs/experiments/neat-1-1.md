@@ -1,13 +1,21 @@
 # NEAT on Dragon Jump 1-1
 
-Experimental NEAT training for the first campaign level. This is intentionally
-separate from the notebooks and the Stable-Baselines training path.
+Status: **historical baseline** (early 32-agent run; superseded by the 8×24
+archive at **2.15 s**)
+Last updated: 2026-10-27
 
-> **Fixed-topology note:** the current config is `58 -> 1`, sigmoid, with
-> structural mutations enabled. It is not a drop-in fine-tuner for the
-> 58 -> 256 -> 256 -> 2 student. NEAT is deferred to V2/nice-to-have for the
-> current teacher-quality pass; see
-> [model-improvement-experiments.md](model-improvement-experiments.md) § 4.
+Experimental NEAT training for the first campaign level. This is intentionally
+separate from the notebooks and the Stable-Baselines training path. The current
+reference artifacts are in `runs/neat_1_1_8x24_archive/`; see
+[`../status.md`](../status.md) and
+[`../reference/run-artifacts.md`](../reference/run-artifacts.md).
+
+> **Fixed-topology note:** the configuration described here is `58 -> 1`,
+> sigmoid, with structural mutations enabled. It is not a drop-in fine-tuner
+> for the 58 -> 256 -> 256 -> 2 student. NEAT is a route/teacher generator, not
+> the deployed policy; see the archived experiment log
+> [`../../archive/2026-10-27-cleanup/docs/model-improvement-experiments.md`](../../archive/2026-10-27-cleanup/docs/model-improvement-experiments.md)
+> § 4.
 
 ## How it works
 

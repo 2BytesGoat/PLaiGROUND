@@ -1,5 +1,9 @@
 # NEAT lineage through the campaign
 
+Status: **available/historical** — the current NEAT reference work uses
+`07_neat_agent.py` with the 8×24 archive, not the full lineage runner.
+Last updated: 2026-10-27
+
 This is the single-population experiment. It is intentionally different from
 `08_neat_all_levels.py`, which trains one independent population per level.
 

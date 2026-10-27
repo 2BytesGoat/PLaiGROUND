@@ -5,7 +5,9 @@ values (direction, flow, velocity, contact, jump phase, powerup) are left
 untouched and concatenated after the latent vector. Freezing the encoder lets
 PPO train a small MLP head instead of updating the spatial encoder jointly.
 
-See docs/model-improvement-experiments.md in PLaiGROUND for the experiment.
+See the archived experiment log
+`archive/2026-10-27-cleanup/docs/model-improvement-experiments.md` in
+PLaiGROUND for the experiment.
 """
 
 from __future__ import annotations

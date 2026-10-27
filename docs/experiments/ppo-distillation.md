@@ -1,13 +1,18 @@
 # PPO policy distillation
 
-Status: active experiment  
-Updated: 2026-10-26
+Status: deployed/reference — the selected 58→256→256→2 student is the frozen
+game baseline; the older 128-hidden/experiment results are historical.
+Last updated: 2026-10-27
+
+> **Deployed model:** [`../reference/deployed-model-58.md`](../reference/deployed-model-58.md).
+> The game ships the 58-value JSON MLP; this repo does not install models
+> directly. See [`../status.md`](../status.md) for the current gate.
 
 > **Implemented 2026-10-26:** DAgger now supports rollout temperature,
 > training-only dropout, and an explicit initialization seed. Metric-rich eval
 > reports efficiency/flow as well as time. Multiple initialization runs are the
 > current ensemble path; weighted demonstrations remain a follow-up. See
-> [model-improvement-experiments.md](model-improvement-experiments.md) § 6.
+> [archived experiment log](../../archive/2026-10-27-cleanup/docs/model-improvement-experiments.md) § 6.
 
 > **Pre-fix data:** the teacher snapshots and student results below were
 > collected while the game training reward had a run-tracking bug: after the

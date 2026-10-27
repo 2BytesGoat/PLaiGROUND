@@ -5,7 +5,8 @@ NEAT routes are used only to find clean, grounded spawn cells. The DQN
 collects its own transitions from those starts; NEAT actions are not used as
 imitation labels.
 
-The first experiment is 1-1 only. See docs/dqn-route-spawns.md.
+The first experiment is 1-1 only. See docs/experiments/dqn-route-spawns.md
+and docs/audit/2026-10-28-dqn-pipeline-review.md.
 """
 
 from __future__ import annotations

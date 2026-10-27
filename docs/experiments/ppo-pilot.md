@@ -1,12 +1,17 @@
 # PPO pilot
 
-Status: active experiment  
-Updated: 2026-10-26
+Status: active/reference — the 794 sensor lineage and the 754 multilevel
+reference use this driver; the older 58/512 and pilot results are historical.
+Last updated: 2026-10-27
+
+> **Current state:** see [`../status.md`](../status.md). The 754 200k
+> checkpoint is the selected 3-map reference; the 794 sensor lineage is the
+> newest PPO branch; neither is installed in the game.
 
 > **Implemented 2026-10-26:** evaluation-based patience and best-checkpoint
 > selection are available via `--eval-every` / `--patience`. The metric-rich
 > eval reports finish rate, best/median/mean time, time CV, efficiency, and
-> flow. See [model-improvement-experiments.md](model-improvement-experiments.md)
+> flow. See [archived experiment log](../../archive/2026-10-27-cleanup/docs/model-improvement-experiments.md)
 > § 1 and § 2.
 
 > **Reward/start correction (2026-10-26):** PPO teacher results below the
@@ -44,7 +49,7 @@ put the **one-process** environment knee at **16 agents** (~1,106 decisions/s),
 while machine-level environment throughput peaks at **8×8** (~2,301/s). Fresh
 30k PPO smokes instead favor **16×2** (~817 decisions/s) over 8×8 (~468), 16×3
 (~669), and 16×4 (~656); 8×8 spent 136.7 s of system time vs 43.7 s. See
-[model-improvement-experiments.md](model-improvement-experiments.md) § Training
+[archived experiment log](../../archive/2026-10-27-cleanup/docs/model-improvement-experiments.md) § Training
 topology and the game repo's A31/A26 for route setup and game-side throughput.
 
 ## Isolation
