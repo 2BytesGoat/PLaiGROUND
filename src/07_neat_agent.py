@@ -19,6 +19,8 @@ usable for the other notebooks.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import pickle
 import random
 import sys
@@ -54,6 +56,10 @@ class RewardEvaluator:
         speedup: float = 1.0,
         show_window: bool = False,
         port: int | None = None,
+        parallel: int = 1,
+        record_paths: bool = False,
+        archive_dir: Path | None = None,
+        initial_generation: int = 0,
     ) -> None:
         self.level = level
         self.max_steps = max_steps
@@ -63,36 +69,185 @@ class RewardEvaluator:
         self.speedup = speedup
         self.show_window = show_window
         self.port = port
-        self.generation = 0
+        self.parallel = max(1, int(parallel))
+        self.record_paths = bool(record_paths)
+        self.archive_dir = archive_dir or (output_dir / "archive")
+        self.env = None
+        self.population = 0
+        self.startup_s = 0.0
+        self.generation = int(initial_generation)
         self.best_fitness = float("-inf")
         self.best_genome = None
         self.best_time = float("inf")
+        self.best_time_genome = None
+        self.best_clean_time = float("inf")
+        self.best_clean_genome = None
+        self.route_archive: dict[str, dict] = {}
         self.last_improvement_generation = 0
         self.history: list[dict] = []
         self.genome_history: list[dict] = []
         self.node_history: list[dict] = []
+        self._load_archive_state()
 
-    def __call__(self, genomes, config) -> None:
-        self.generation += 1
-        nets = [neat.nn.FeedForwardNetwork.create(genome, config) for _, genome in genomes]
-        population = len(nets)
+    def _load_archive_state(self) -> None:
+        """Reload route, best, and history state when resuming into a run."""
+        self.archive_dir.mkdir(parents=True, exist_ok=True)
+        routes_path = self.archive_dir / "routes.json"
+        if routes_path.exists():
+            try:
+                payload = json.loads(routes_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    self.route_archive = payload
+            except (OSError, ValueError):
+                self.route_archive = {}
 
-        print(
-            f"\n=== generation {self.generation} | "
-            f"population={population} | max_steps={self.max_steps} ===",
-            flush=True,
-        )
+        best_time_path = self.output_dir / "best_time.json"
+        if best_time_path.exists():
+            try:
+                payload = json.loads(best_time_path.read_text(encoding="utf-8"))
+                self.best_time = float(payload.get("time", self.best_time))
+            except (OSError, TypeError, ValueError):
+                pass
+        best_time_genome_path = self.output_dir / "best_time_genome.pkl"
+        if best_time_genome_path.exists():
+            try:
+                with best_time_genome_path.open("rb") as handle:
+                    self.best_time_genome = pickle.load(handle)
+            except (OSError, pickle.UnpicklingError):
+                self.best_time_genome = None
 
-        env = setup_environment(
-            nb_agents=population,
+        best_clean_path = self.output_dir / "best_clean.json"
+        if best_clean_path.exists():
+            try:
+                payload = json.loads(best_clean_path.read_text(encoding="utf-8"))
+                self.best_clean_time = float(
+                    payload.get("time", self.best_clean_time)
+                )
+            except (OSError, TypeError, ValueError):
+                pass
+        best_clean_genome_path = self.output_dir / "best_clean_genome.pkl"
+        if best_clean_genome_path.exists():
+            try:
+                with best_clean_genome_path.open("rb") as handle:
+                    self.best_clean_genome = pickle.load(handle)
+            except (OSError, pickle.UnpicklingError):
+                self.best_clean_genome = None
+
+        finishers_path = self.archive_dir / "finishers.jsonl"
+        if finishers_path.exists() and (
+            not np.isfinite(self.best_time) or not np.isfinite(self.best_clean_time)
+        ):
+            try:
+                for line in finishers_path.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    record = json.loads(line)
+                    run_time = float(record.get("run_time", float("inf")))
+                    if run_time < self.best_time:
+                        self.best_time = run_time
+                    if record.get("clean") and run_time < self.best_clean_time:
+                        self.best_clean_time = run_time
+            except (OSError, TypeError, ValueError):
+                pass
+
+        best_genome_path = self.output_dir / "best_genome.pkl"
+        if best_genome_path.exists():
+            try:
+                with best_genome_path.open("rb") as handle:
+                    self.best_genome = pickle.load(handle)
+            except (OSError, pickle.UnpicklingError):
+                self.best_genome = None
+
+        history_path = self.output_dir / "history.csv"
+        if history_path.exists():
+            try:
+                import csv
+
+                with history_path.open(newline="", encoding="utf-8") as handle:
+                    self.history = list(csv.DictReader(handle))
+                fitness_values = [
+                    float(row["best_fitness"])
+                    for row in self.history
+                    if row.get("best_fitness") not in (None, "")
+                ]
+                if fitness_values:
+                    self.best_fitness = max(fitness_values)
+            except (OSError, TypeError, ValueError):
+                pass
+
+        genome_stats_path = self.output_dir / "genome_stats.csv"
+        if genome_stats_path.exists():
+            try:
+                import csv
+
+                with genome_stats_path.open(
+                    newline="", encoding="utf-8"
+                ) as handle:
+                    self.genome_history = list(csv.DictReader(handle))
+            except OSError:
+                pass
+
+    def open(self, population: int) -> float:
+        """Create the game processes once and reuse them for every generation.
+
+        The first call pays Godot launch/handshake/level-load cost. Later calls
+        keep the same environment and only reset the agents, which is the warm
+        generation measured by the throughput probe.
+        """
+        if self.env is not None and self.population == population:
+            return 0.0
+        self.close()
+        if population % self.parallel != 0:
+            raise ValueError(
+                f"population {population} must be divisible by --parallel "
+                f"({self.parallel})"
+            )
+        started = time.perf_counter()
+        self.env = setup_environment(
+            nb_agents=population // self.parallel,
+            n_parallel=self.parallel,
             level=self.level,
             action_repeat=self.action_repeat,
             speedup=self.speedup,
             show_window=self.show_window,
             port=self.port,
         )
+        self.population = population
+        self.startup_s = time.perf_counter() - started
+        return self.startup_s
+
+    def close(self) -> None:
+        if self.env is not None:
+            self.env.close()
+            self.env = None
+        self.population = 0
+
+    def __call__(self, genomes, config) -> None:
+        self.generation += 1
+        nets = [neat.nn.FeedForwardNetwork.create(genome, config) for _, genome in genomes]
+        population = len(nets)
+        if population % self.parallel != 0:
+            raise ValueError(
+                f"population {population} must be divisible by --parallel "
+                f"({self.parallel})"
+            )
+        startup_this = self.open(population)
+        env = self.env
+        if env is None:
+            raise RuntimeError("failed to open the training environment")
+        generation_start = time.perf_counter()
+
+        print(
+            f"\n=== generation {self.generation} | "
+            f"population={population} | parallel={self.parallel} | "
+            f"max_steps={self.max_steps} | startup={startup_this:.2f}s ===",
+            flush=True,
+        )
+
         try:
+            reset_start = time.perf_counter()
             obs = env.reset()
+            reset_s = time.perf_counter() - reset_start
             if env.num_envs != population:
                 raise RuntimeError(
                     f"Expected {population} training agents, got {env.num_envs}"
@@ -105,6 +260,9 @@ class RewardEvaluator:
             done_steps = np.zeros(population, dtype=np.int32)
             final_infos = [{} for _ in range(population)]
             last_infos = [{} for _ in range(population)]
+            cell_paths: list[list[list[int]]] = [[] for _ in range(population)]
+            action_paths: list[list[int]] = [[] for _ in range(population)]
+            steps_start = time.perf_counter()
 
             for step in range(self.max_steps):
                 actions = []
@@ -122,6 +280,7 @@ class RewardEvaluator:
                         jump = 1
                     else:
                         jump = int(nets[i].activate(obs["obs"][i])[0] > 0.5)
+                    action_paths[i].append(jump)
                     actions.append([jump])
 
                 obs, rewards, dones, infos = env.step(
@@ -131,21 +290,34 @@ class RewardEvaluator:
                 for i in range(population):
                     if done_once[i]:
                         continue
+                    info = infos[i] if i < len(infos) else {}
+                    cell = info.get("cell")
+                    if (
+                        isinstance(cell, (list, tuple))
+                        and len(cell) >= 2
+                    ):
+                        cell_paths[i].append([int(cell[0]), int(cell[1])])
                     scores[i] += float(rewards[i])
                     if dones[i]:
                         done_once[i] = True
                         terminal_rewards[i] = float(rewards[i])
-                        finished[i] = terminal_rewards[i] > 0.0
+                        finished[i] = bool(
+                            info.get("finished", terminal_rewards[i] > 0.0)
+                        )
                         done_steps[i] = step + 1
-                        final_infos[i] = infos[i]
+                        final_infos[i] = info
                         if finished[i]:
-                            finish_times[i] = float(infos[i].get("run_time", np.inf))
+                            finish_times[i] = float(info.get("run_time", np.inf))
 
                 last_infos = infos
                 if done_once.all():
                     break
+            steps_s = time.perf_counter() - steps_start
+            generation_s = time.perf_counter() - generation_start
         finally:
-            env.close()
+            # Intentionally keep the environment alive for the next generation;
+            # train()/evaluate() own the final close.
+            pass
 
         # The environment reward is the fitness. No second fitness function is
         # added here: flow progress, efficiency, time pressure, finish, and
@@ -155,9 +327,10 @@ class RewardEvaluator:
 
         best_index = int(np.argmax(scores))
         generation_best = float(scores[best_index])
+        finished_indices = np.flatnonzero(finished)
         generation_best_time = (
-            float(finish_times[best_index])
-            if finished[best_index]
+            float(finish_times[finished_indices].min())
+            if len(finished_indices)
             else None
         )
         finish_count = int(finished.sum())
@@ -173,6 +346,11 @@ class RewardEvaluator:
             flush=True,
         )
 
+        self.history = [
+            row
+            for row in self.history
+            if str(row.get("generation", "")) != str(self.generation)
+        ]
         self.history.append(
             {
                 "generation": self.generation,
@@ -181,6 +359,10 @@ class RewardEvaluator:
                 "finishes": finish_count,
                 "deaths": death_count,
                 "best_time": generation_best_time,
+                "startup_s": startup_this,
+                "reset_s": reset_s,
+                "steps_s": steps_s,
+                "generation_s": generation_s,
                 "scores": scores.tolist(),
             }
         )
@@ -221,14 +403,204 @@ class RewardEvaluator:
                 }
             )
         self._write_genome_stats()
+        self._archive_generation(
+            genomes,
+            finished,
+            finish_times,
+            cell_paths,
+            action_paths,
+            final_infos,
+            scores,
+        )
+
+        if len(finished_indices):
+            best_time_index = int(
+                finished_indices[
+                    int(np.argmin(finish_times[finished_indices]))
+                ]
+            )
+            if float(finish_times[best_time_index]) < self.best_time:
+                self.best_time = float(finish_times[best_time_index])
+                self.best_time_genome = genomes[best_time_index][1]
+                self.save_best_time()
 
         if generation_best > self.best_fitness:
             self.best_fitness = generation_best
             self.best_genome = genomes[best_index][1]
-            if generation_best_time is not None:
-                self.best_time = generation_best_time
             self.last_improvement_generation = self.generation
             self.save_best()
+
+    def _archive_generation(
+        self,
+        genomes,
+        finished,
+        finish_times,
+        cell_paths,
+        action_paths,
+        final_infos,
+        scores,
+    ) -> None:
+        """Append successful trajectories and keep the fastest per route.
+
+        The raw JSONL is intentionally unfiltered: it is the state-source for
+        prefix-replay PPO initialization. Route deduplication and the
+        non-jitter flag are derived metadata, not deletion criteria.
+        """
+        if not self.record_paths:
+            return
+        self.archive_dir.mkdir(parents=True, exist_ok=True)
+        genome_dir = self.archive_dir / "genomes"
+        genome_dir.mkdir(parents=True, exist_ok=True)
+        finishers_path = self.archive_dir / "finishers.jsonl"
+        routes_path = self.archive_dir / "routes.json"
+
+        for i in np.flatnonzero(finished):
+            cells = []
+            for cell in cell_paths[int(i)]:
+                if isinstance(cell, (list, tuple)) and len(cell) >= 2:
+                    cells.append([int(cell[0]), int(cell[1])])
+            if len(cells) < 2:
+                continue
+            actions = [int(item) for item in action_paths[int(i)]]
+            genome_id, genome = genomes[int(i)]
+            info = final_infos[int(i)] or {}
+            run_time = float(finish_times[int(i)])
+
+            compressed = []
+            for cell in cells:
+                if not compressed or compressed[-1] != cell:
+                    compressed.append(cell)
+            unique_cells = len({tuple(cell) for cell in compressed})
+            revisit_ratio = (
+                1.0 - unique_cells / len(compressed) if compressed else 1.0
+            )
+            backtracks = sum(
+                1
+                for index in range(2, len(compressed))
+                if compressed[index] == compressed[index - 2]
+            )
+            action_flips = (
+                sum(
+                    1
+                    for index in range(1, len(actions))
+                    if actions[index] != actions[index - 1]
+                )
+                / max(1, len(actions))
+            )
+            clean = (
+                len(compressed) >= 5
+                and revisit_ratio <= 0.10
+                and backtracks <= 2
+                and action_flips <= 0.75
+            )
+            signature = hashlib.sha1(
+                json.dumps(compressed, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            record = {
+                "generation": self.generation,
+                "genome_id": genome_id,
+                "fitness": float(scores[int(i)]),
+                "run_time": run_time,
+                "path_cells": compressed,
+                "actions": actions,
+                "route_signature": signature,
+                "path_length": len(compressed),
+                "unique_cells": unique_cells,
+                "revisit_ratio": revisit_ratio,
+                "backtracks": backtracks,
+                "action_flip_rate": action_flips,
+                "clean": clean,
+                "final_info": {
+                    key: info.get(key)
+                    for key in (
+                        "state",
+                        "global_position",
+                        "velocity",
+                        "run_time",
+                        "best_run_time",
+                        "run_active",
+                        "started_walking",
+                        "facing_direction",
+                        "on_floor",
+                        "on_wall",
+                        "powerup_count",
+                    )
+                },
+            }
+            with finishers_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record) + "\n")
+
+            previous = self.route_archive.get(signature)
+            if previous is None or run_time < float(previous["run_time"]):
+                genome_path = genome_dir / f"{signature}.pkl"
+                with genome_path.open("wb") as handle:
+                    pickle.dump(genome, handle)
+                self.route_archive[signature] = {
+                    "generation": self.generation,
+                    "genome_id": genome_id,
+                    "run_time": run_time,
+                    "path_length": len(compressed),
+                    "unique_cells": unique_cells,
+                    "revisit_ratio": revisit_ratio,
+                    "backtracks": backtracks,
+                    "action_flip_rate": action_flips,
+                    "clean": clean,
+                    "genome_file": str(genome_path.relative_to(self.archive_dir)),
+                }
+            if clean and run_time < self.best_clean_time:
+                self.best_clean_time = run_time
+                self.best_clean_genome = genome
+                self.save_best_clean()
+
+        if self.route_archive:
+            routes_path.write_text(
+                json.dumps(self.route_archive, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+    def save_best_time(self) -> None:
+        if self.best_time_genome is None:
+            return
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / "best_time_genome.pkl"
+        with path.open("wb") as handle:
+            pickle.dump(self.best_time_genome, handle)
+        (self.output_dir / "best_time.json").write_text(
+            json.dumps(
+                {
+                    "time": self.best_time,
+                    "generation": self.generation,
+                    "level": self.level,
+                    "observation": "legacy_58",
+                    "action_repeat": self.action_repeat,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"saved best-time genome to {path}", flush=True)
+
+    def save_best_clean(self) -> None:
+        if self.best_clean_genome is None:
+            return
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / "best_clean_genome.pkl"
+        with path.open("wb") as handle:
+            pickle.dump(self.best_clean_genome, handle)
+        (self.output_dir / "best_clean.json").write_text(
+            json.dumps(
+                {
+                    "time": self.best_clean_time,
+                    "generation": self.generation,
+                    "level": self.level,
+                    "observation": "legacy_58",
+                    "action_repeat": self.action_repeat,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"saved best-clean genome to {path}", flush=True)
 
     def is_stable(
         self,
@@ -247,7 +619,7 @@ class RewardEvaluator:
 
         streak = 0
         for row in reversed(self.history):
-            population = len(row["scores"])
+            population = len(row.get("scores", []))
             if population == 0:
                 break
             if row["finishes"] > 0 and row["finishes"] / population >= min_finish_rate:
@@ -272,11 +644,15 @@ class RewardEvaluator:
                     "finishes",
                     "deaths",
                     "best_time",
+                    "startup_s",
+                    "reset_s",
+                    "steps_s",
+                    "generation_s",
                 ],
             )
             writer.writeheader()
             for row in rows:
-                writer.writerow({k: row[k] for k in writer.fieldnames})
+                writer.writerow({k: row.get(k, "") for k in writer.fieldnames})
 
     def _write_genome_stats(self) -> None:
         import csv
@@ -303,7 +679,12 @@ class RewardEvaluator:
 
         buckets = defaultdict(list)
         for row in self.genome_history:
-            buckets[(row["generation"], row["nodes"])].append(row)
+            try:
+                generation = int(float(row["generation"]))
+                nodes = int(float(row["nodes"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            buckets[(generation, nodes)].append(row)
 
         bucket_rows = []
         for (generation, nodes), rows in sorted(buckets.items()):
@@ -389,6 +770,7 @@ def train(args: argparse.Namespace) -> None:
         random.seed(args.seed)
         np.random.seed(args.seed)
         population = neat.Population(config)
+    initial_generation = int(getattr(population, "generation", 0))
 
     population.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
@@ -409,20 +791,33 @@ def train(args: argparse.Namespace) -> None:
         speedup=args.speedup,
         show_window=args.show,
         port=args.port,
+        parallel=args.parallel,
+        record_paths=args.record_paths,
+        archive_dir=args.archive_dir,
+        initial_generation=initial_generation,
     )
 
     start = time.time()
     stop_reason = "max generations"
-    for _ in range(args.generations):
-        population.run(evaluator, 1)
-        if evaluator.is_stable(
-            args.min_generations,
-            args.patience,
-            args.min_finish_rate,
-            args.min_finish_streak,
-        ):
-            stop_reason = "stability plateau"
-            break
+    try:
+        for _ in range(args.generations):
+            population.run(evaluator, 1)
+            if (
+                args.target_time is not None
+                and evaluator.best_time <= args.target_time
+            ):
+                stop_reason = "target time"
+                break
+            if evaluator.is_stable(
+                args.min_generations,
+                args.patience,
+                args.min_finish_rate,
+                args.min_finish_streak,
+            ):
+                stop_reason = "stability plateau"
+                break
+    finally:
+        evaluator.close()
     elapsed = time.time() - start
 
     if evaluator.best_genome is not None:
@@ -454,9 +849,16 @@ def evaluate(args: argparse.Namespace) -> None:
         speedup=args.speedup,
         show_window=args.show,
         port=args.port,
+        parallel=args.parallel,
+        record_paths=args.record_paths,
+        archive_dir=args.archive_dir,
+        initial_generation=int(getattr(population, "generation", 0)),
     )
     start = time.time()
-    evaluator(list(population.population.items()), population.config)
+    try:
+        evaluator(list(population.population.items()), population.config)
+    finally:
+        evaluator.close()
     elapsed = time.time() - start
     print(
         f"\nevaluation finished in {elapsed:.1f}s | "
@@ -518,6 +920,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generations", type=int, default=30)
     parser.add_argument("--population", type=int, default=32)
     parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="Game processes per generation; population must be divisible by it.",
+    )
+    parser.add_argument(
+        "--record-paths",
+        action="store_true",
+        help="Append every finisher's cell/action path and write route archives.",
+    )
+    parser.add_argument(
+        "--archive-dir",
+        type=Path,
+        default=None,
+        help="Path archive directory (default: <output-dir>/archive).",
+    )
+    parser.add_argument(
         "--min-generations",
         type=int,
         default=0,
@@ -541,6 +960,12 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Consecutive generations at --min-finish-rate required to stabilize.",
     )
+    parser.add_argument(
+        "--target-time",
+        type=float,
+        default=None,
+        help="Stop after the generation whose best finish time is <= this value.",
+    )
     parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     parser.add_argument(
         "--action-repeat",
@@ -552,7 +977,8 @@ def parse_args() -> argparse.Namespace:
         "--start-delay",
         type=int,
         default=0,
-        help="Deterministic first-jump delay in physics frames.",
+        help="Decision step at which the forced start jump is pressed (default: 0, "
+        "the first decision). This jump is always injected before the genome acts.",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(

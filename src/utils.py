@@ -14,6 +14,7 @@ def setup_environment(
     speedup=None,
     show_window=None,
     port=None,
+    n_parallel=1,
 ):
     current_directory = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(current_directory, ".config")
@@ -67,6 +68,7 @@ def setup_environment(
         nb_agents=nb_agents,
         level=level,
         action_repeat=action_repeat,
+        n_parallel=n_parallel,
     )
     if port is not None:
         env_kwargs["port"] = port

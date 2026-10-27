@@ -1,6 +1,6 @@
 # Model improvement experiments
 
-Status: first pass complete; multi-hot experiment negative; 512 width failed; fresh 1-11 legacy teacher 3.8667 s
+Status: semantic 64-d MAE + fresh 64×64 head matches 3.7500 s at step 0; legacy AE ties 3.8667 s; one-hot AE worse
 Updated: 2026-10-26
 
 This is the implementation-facing companion to the game repo's
@@ -99,23 +99,136 @@ workers feed one central PPO policy; there is no per-worker weight copy and no
 weight merging.
 
 The game now supports optional per-agent reset indices on the `reset` message
-(`agents: [1, 3]`), and `GodotEnv.reset(agents=...)` exposes it. The PPO pilot
-still uses 8×1 so the completed 512 width A/B stays comparable. A multi-agent SB3
-`VecEnv` with per-agent auto-reset is still required before topology can change.
+(`agents: [1, 3]`), and `GodotEnv.reset(agents=...)` exposes it. PLaiGROUND now
+has a multi-agent `VecEnv` with per-agent auto-reset, and `10_ppo_pilot.py`
+accepts `--agents-per-process`. The completed 512 width A/B stayed on 8×1 for
+comparability. The 8×8 legacy rerun uses `--agents-per-process 8 --n-envs 8`
+(64 agents) and 2.4M total timesteps so each agent gets the old 37.5k-decision
+budget (300k / 8).
 
-Pending benchmark, after the width work:
+Measured environment throughput (1-11, multi-hot 754, random actions,
+`action_repeat=4`, `speedup=8`, 500 decisions/agent, 2 repeats):
 
-1. Throughput screen: 1, 2, 4, 8, 10 processes × 1 agent; measure environment
-   steps/sec and wall-clock, not learning.
-2. Fixed-total-agent topology: 8×1, 4×2, 2×4, 1×8; keep the PPO batch at 1,200
-   transitions so only the process/agent split changes.
-3. Only then scale total agents (e.g. 8×8) or try 1×100; one Godot process may
-   serialize many worlds on one thread, so more agents is not automatically
-   faster.
-4. Validate the winning topology with a wall-clock-to-target learning run
-   before using it for teacher training.
+| Agents/process | Aggregate decisions/s | Per-agent |
+|---:|---:|---:|
+| 1 | 116.0 | 116.0 |
+| 2 | 225.7 | 112.9 |
+| 4 | 434.7 | 108.7 |
+| **8** | **791.7** | **99.0** |
+| 16 | 753.6 | 47.1 |
+| 32 | 626.7 | 19.6 |
+| 64 | 476.6 | 7.4 |
+| 100 | 405.1 | 4.1 |
 
-Do not mix this infrastructure change into the current width comparison.
+**8 agents/process is the knee.** More agents than that divide the process’s
+capacity instead of increasing it. The next measurement is the process-count
+sweep at 8 agents/process (1, 2, 4, 8). Game-side throughput work is tracked in
+the game repo’s A26: profiling, training-only no-visuals, packed binary/reset-only
+observations, cached multi-hot cell features, and a conditional Rapier/threaded
+physics spike only if profiling shows physics is dominant.
+
+Do not mix topology or throughput changes into the width comparison.
+
+### 2026-10-27 follow-up: process sweep + binary observations
+
+A controlled 8-agents/process environment sweep (`--action-seed`) found 8×7
+(~1,912 decisions/s) and 8×8 (~1,930) effectively tied, with 8×1 at ~795. The
+environment-only knee remains around 8 agents/process; more processes scale
+sublinearly because the 10-core box saturates.
+
+The game then moved step/reset observations from JSON numbers to length-prefixed
+float32 frames; info remains complete/columnar. Short 30k PPO smokes (1-11,
+multi-hot, 64×64, `--skip-eval`) favored **16 agents/session**:
+
+| Topology | Actual timesteps | Wall clock | Approx. decisions/s |
+|---|---:|---:|---:|
+| 8×8 | 38,400 | 66.7 s | ~575 |
+| 16×1 | 30,960 | 45.1 s | ~686 |
+| 16×2 | 33,600 | 38.4 / 56.2 s | ~874 / ~598 |
+| 16×3 | 36,000 | 47.7 s | ~754 |
+| 16×4 | 38,400 | 49.2 / 64.6 s | ~780 / ~594 |
+| 16×8 | 38,400 | 67.9 s | ~565 |
+| 24×2 | 36,000 | 56.3 s | ~640 |
+
+These are noisy, action-stream-uncontrolled, non-learning smokes; repeat variance
+was often >30%. The promising candidate is **16 agents/session on 2–4 processes**,
+not 16×8. A longer wall-clock-to-target run with interleaved topologies is still
+required. Reset-only observations were tried and reverted after a regression.
+
+### 2026-10-27 current-code topology + cosmetics
+
+Fresh current-code runs (1-11, multi-hot, 64×64, CPU, `action_repeat=4`,
+`speedup=8`) supersede the older cross-code comparisons:
+
+- One-process environment-only: 1 agent 115/s, 2 224/s, 4 427/s, 8 790/s,
+  **16 1,106/s**, 24 963/s, 32 838/s. The per-instance knee is 16.
+- Environment-only process scaling: **8×8 ~2,301/s**, 8×6 ~2,259/s, 8×4 ~1,834/s,
+  16×3 ~1,549/s, 16×4 ~1,318/s.
+- Fresh 30k PPO: 8×8 64.1 s (~468/s), **16×2 36.7 s (~817/s)**, 16×3 44.9 s
+  (~669/s), 16×4 45.7 s (~656/s). PPO flips the winner to 16×2; 8×8 spent
+  136.7 s of system time vs 43.7 s.
+- Synchronizer timers at 16 agents: physics ~0.57 ms/decision, observations
+  ~0.07, binary packing ~0.06, wait ~0.02, info ~0.01.
+- New `--training-no-cosmetics`/`--no-cosmetics` A/B skips effect scenes, player
+  particles/SFX, and player animations. Environment-only: 16 agents/process
+  954→1,230/s (+29%), 16×2 1,391→1,644/s (+18%). A four-run 30k 16×2 PPO A/B was
+  neutral: baseline median 39.71 s vs 39.65 s no-cosmetics (means 39.81 vs
+  40.55). The flag is experimental and off by default; the current speedup pass
+  is closed.
+
+These are still noisy, short, no-eval throughput smokes; use a longer
+wall-clock-to-target run before locking the training topology.
+
+### PPO-first robustness plan (2026-10-27)
+
+Speed experiments are closed. The current exported policy clears canonical 16/16 but stalls on
+unseen obstacles (e.g. a block two cells ahead); the block is inside the 7×7 window, so this is
+route/recovery overfit rather than observation blindness. The first proof is **1-1 only**:
+
+1. Export the 1-1 level analysis; enumerate clean standable/reachable spawn cells.
+2. Run the current 1.7000 s 512×512 expert, record its route, and hold out the right/long route
+   cells. Build a train spawn pool from the remaining cells and a holdout pool from the long route.
+3. Baseline the current expert from default, train-pool, and holdout spawns; record finish rate,
+   time, and route regret.
+4. Train PPO from the expert at **16 agents × 2 processes** on multi-hot 754 with canonical +
+   randomized spawns. Start with a canonical/near-route curriculum and exclude holdout cells.
+5. Evaluate default-spawn best time, holdout-route finish/time and route choice, random-spawn
+   recovery, and canonical regression against the original expert.
+
+Then scale to 1-11 and all 16 levels. Only after a PPO baseline exists, A/B DDQN/off-policy with
+level-balanced replay. Do not use all-unique-state replay or strict sequential carry.
+
+**Result (2026-10-27):** both the 16×2 and 8×8 from-scratch runs failed the canonical gate, so the
+from-scratch branch is closed. DDQN/off-policy remains deferred. The convention baseline is the
+frozen 58/256 student; the only remaining model work is a bounded same-contract DAgger pass after
+the demo gate (1.7 multi-hot 1-1 teacher → 58 student, train spawns, all-level replay). MAE remains
+a frozen representation experiment until a v1.1 spec-3/ONNX runtime is chosen; the flat JSON
+runtime cannot run the encoder.
+
+### 2026-10-27 from-scratch 1-1 probe (negative; branch closed)
+
+A fresh 512×512 multi-hot 16×2 PPO run was trained on canonical 1-1 starts only for ~1M steps
+(300k + 700k continuation), with the right/long route held out from evaluation. Canonical time
+plateaued at **2.333 s** after ~350k and stayed there; it never reached the existing **1.7000 s**
+expert. Holdout recovery was **0/10 baseline**, briefly **4/10 at ~400k**, then fell back to
+**0–1/10**. No checkpoint met the canonical **≤1.75 s** gate while improving holdout.
+
+This is a topology/learning result, not a spawn-sampling bug: the 16×2 throughput winner does not
+learn the 1-1 1.7 s route from scratch within 1M steps. The checkpoint selection originally used
+the baseline time as its target and briefly accepted the 2.333 s plateau; the absolute 1.75 s gate
+is now fixed. Do not treat 2.333 s as a deployable result.
+
+The 8×8 follow-up (64 agents, 2.4M steps, 512×512, canonical-only, seed 47) also failed the
+absolute gate. The best canonical checkpoint was **2.133 s at 1.5M**; the final 2.4M fresh-env
+canonical run failed while training episodes hovered **1.8–2.15 s**. Holdout was **6/10 final**
+(7/10 at 1.5M). No checkpoint was promotable. Artifacts: `runs/spawn_1_1/scratch_8x8_2400k/`
+(log, checkpoints, episodes) and `runs/spawn_1_1/pool.json` (21/10 split). **From-scratch PPO is
+closed**; the convention baseline is the bundled 58/256 DAgger student (16/16, zero deaths,
+1-1 2.35 s). One bounded
+same-contract baseline-v2 pass may run only after the demo gate: cross-encoding DAgger from the
+1.7 multi-hot 1-1 teacher into the 58 student, train spawns only, all-level replay, canonical
+anchor, and a 16/16 + canonical ≤2.0 s + holdout ≥ baseline gate. No PPO seed/topology chase,
+DDQN, MAE, multi-hot install, or teacher sweep before the convention.
 
 ## Multi-hot observation v2 (implemented 2026-10-26)
 
@@ -185,9 +298,11 @@ and deterministic 100-agent evals:
 | Arm | Result |
 |---|---:|
 | fresh legacy 58, 64×64 | **3.8667 s, 100/100** |
+| legacy 58, 64×64, 8×8 (64 agents) | **3.8667 s** at 600k; tied, then plateaued |
 | multi-hot 754, 64×64 | **0/100**, training reward stuck at timeout |
 | multi-hot 754, 256×256 | 7.0833 s at 300k; **4.4667 s** after extension to 775k |
 | multi-hot 754, 512×512 | **0/100** at 300k; one stochastic finish at ~17.5k, then only timeouts/deaths; no best checkpoint |
+| multi-hot 754, 512×512, 8×8 | **3.7500 s, 100/100** at 2.0M; final 2.4M = 3.7500 |
 | old legacy 1-11 champion | 8.05 s |
 
 The 58 run first cleared at 125k and reached 3.8667 at 200k. The 256 multi-hot
@@ -200,6 +315,223 @@ timeouts returned 37.15), and no best checkpoint. It was not extended. Width is
 non-monotonic: 64 and 512 fail, 256 learns; 350×350 is the remaining untested
 width. The earlier 512-wide behavior clone result (stuck at 9.65 s) is a
 different experiment.
+
+The legacy **8×8 topology** (64 agents, 2.4M total = 37.5k decisions/agent)
+reached **3.8667 s, 100/100** at 600k (~9.4k/agent), then plateaued. Training
+mean return sat at ~115–118 and median training clear at ~4.75–4.85 s; later
+evals were 4.00, 5.08, 5.08, 5.22, 4.48, 4.55. It was stopped at ~1.286M after
+six no-improvement evals. It ties the 8×1 best rather than beating it, but
+reaches that time with much less per-agent experience.
+
+The **512×512 multi-hot 8×8** arm then broke the ceiling: **3.7500 s, 100/100**
+at 2.0M (0 deaths/timeouts, efficiency/flow 1.0), 2.1M tied, and the final 2.4M
+eval also returned 3.7500. That is 0.1167 s faster than the 3.8667 s legacy
+ceiling. The per-level specialist sweep (`src/20_train_all_levels_8x8.py`) is
+paused at 1-5; it uses tiered caps/patience (1.2M/5, 1.8M/8, 2.4M/13) and logs
+`no_clear`/`regression` instead of aborting. Completed: **1-1 1.7000 s** (old
+2.35), **1-2 3.0167 s** (tied), **1-3 3.0000 s** (old 3.23); **1-4 regressed to
+5.7167 s** vs 4.25 and needs a retry.
+
+The continual-learning alternative (A29) is paused:
+`src/21_curriculum_8x8.py` starts from the 1-1 best, fine-tunes the next level for
+300k, evaluates every seen level with 100 agents, and replays a forgotten level
+for 50k before advancing. It accepts only when all seen levels clear; otherwise
+it retries that level rather than restarting the campaign.
+
+A faster legacy-input encoder experiment is now running (A30): keep the 58-value
+contract, but parse the 49 tile IDs as a 7×7 grid with a tile embedding + 2-layer
+CNN, then append the 9 scalar tail values. `--grid-encoder legacy_cnn` selects
+`LegacyGridExtractor`; the baseline is the 8×8 legacy MLP at **3.8667 s**. This is
+teacher-only until a spec-3/ONNX runtime exists.
+
+**Frozen grid autoencoder arm (A30 follow-up, 2026-10-26).** The joint CNN arm
+was stopped at 200k after four deterministic evals stayed **0/100**; training
+episodes were reaching 4–6 s but the deployed argmax policy never cleared.
+The follow-up separates representation learning from control:
+
+- **Static level windows.** `src/23_generate_level_windows.py` parses the 16
+  campaign level codes, reproduces the game's border fill and stacked-cell
+  behavior, and slides a 7×7 window over every cell. This produced **8,857
+  unique static grids**. Every one of the **3,724** real agent grids is present
+  in that static set. A clean all-real holdout trained on the **5,133 static
+  grids that are not real states** reaches **96.55% cell / 30.1% exact**; this
+  is the generalization caveat, not the final encoder result.
+- **Autoencoder.** The 17-token grid autoencoder (tile IDs 0–15 plus `-1`/void
+  = 16) uses a 64-d latent and a convolutional decoder. The final encoder is
+  trained on all **8,857** corrected static grids. On its random static
+  validation split it reaches **99.66% cell / 87.0% exact**; on the real agent
+  grids (which are in training) it reaches **99.95% cell / 97.8% exact**. The
+  64-d encoder is frozen.
+- **Behavior-cloning head.** The frozen latent is concatenated with the nine
+  exact tail values and fed to a **64×64 tanh MLP**. Training uses **126,152
+  rows / 23,854 unique 1-11 states**, including 13,970 fresh on-policy samples
+  from the **3.8667 s** teacher; labels are the teacher probabilities. Validation
+  action agreement is **99.50%**.
+- **SB3 extractor reload bug.** SB3 re-initializes a custom feature extractor
+  after policy construction. The first frozen-AE PPO runs therefore used a
+  random encoder and are **invalid** for this route. `FrozenLegacyAutoencoderExtractor.reload_encoder()`
+  restores the checkpoint after construction/load; verification shows a
+  **0.0** weight difference. With the corrected extractor, the fixed-AE BC head
+  alone evaluates at **100/100, 3.8667 s, 0 deaths/timeouts, efficiency/flow 1.0**.
+- **PPO fine-tune.** The earlier 3.8667 s head was fine-tuned for 100k: the 50k
+  eval tied **3.8667 s, 100/100**, then the 100k eval regressed to **0/100** as
+  PPO moved away from the behavior-cloned policy. The run was stopped and the
+  baseline checkpoint kept. The corrected-AE head also matches **3.8667 s at
+  step 0**; the final comparison is a tie with the original 8×8 MLP, reached
+  without PPO exploration. The original MLP first cleared at ~125k.
+- **One-hot ablation (negative, 2026-10-26).** A `7×7×17` one-hot conv
+  autoencoder with the same 64-d latent, conv widths, data split, and class
+  loss is worse than the learned tile embedding. On the clean all-real holdout
+  it reaches **95.44% cell / 21.75% exact**, versus **96.55% / 30.1%** for the
+  embedding AE. Trained on all 8,857 static grids, it reaches **99.52% cell /
+  80.18% exact** on real states, versus **99.95% / 97.8%** for the embedding AE.
+  Explicit one-hot channels do not preserve more information through the
+  bottleneck; the learned embedding is retained and no downstream one-hot run
+  is scheduled.
+
+Implementation: `src/23_generate_level_windows.py`, `src/22_train_legacy_autoencoder.py`,
+`src/wrappers/legacy_autoencoder.py`, `--grid-encoder legacy_autoencoder`, and
+`--init-head`. Teacher-only; no runtime or installation change.
+
+```bash
+# 1. Static 7x7 windows + real agent grids
+.venv/bin/python src/23_generate_level_windows.py \
+  --center-mode all \
+  --output-dir runs/legacy_autoencoder/static_windows_fixed_s42
+
+# 2. Clean all-real holdout: train on static grids that are not real states
+.venv/bin/python - <<'PY'
+import numpy as np
+from pathlib import Path
+base = Path("runs/legacy_autoencoder/static_windows_fixed_s42")
+static = np.load(base / "static_grids.npy")
+real = np.load(base / "real_grids.npy")
+real_keys = {row.tobytes() for row in real}
+train = static[[row.tobytes() not in real_keys for row in static]]
+np.save(base / "static_train_grids.npy", train)
+PY
+.venv/bin/python src/22_train_legacy_autoencoder.py \
+  --device cpu \
+  --grids-path runs/legacy_autoencoder/static_windows_fixed_s42/static_train_grids.npy \
+  --holdout-grids-path runs/legacy_autoencoder/static_windows_fixed_s42/real_grids.npy \
+  --output-dir runs/legacy_autoencoder/static_ae64_fixed_holdout_s42 \
+  --latent-dim 64 --epochs 40 --autoencoder-patience 5 --skip-bc
+
+# 3. Final autoencoder on all corrected static grids
+.venv/bin/python src/22_train_legacy_autoencoder.py \
+  --device cpu \
+  --grids-path runs/legacy_autoencoder/static_windows_fixed_s42/static_grids.npy \
+  --output-dir runs/legacy_autoencoder/static_ae64_fixed_s42 \
+  --latent-dim 64 --epochs 40 --autoencoder-patience 5 --skip-bc
+
+# 4. On-policy teacher states + frozen-encoder BC head
+.venv/bin/python src/12_ppo_distill.py collect \
+  --levels 1-11 --episodes 2 --agents 100 --teacher-root runs/teacher_best \
+  --output-dir runs/teacher_best_collect
+.venv/bin/python src/22_train_legacy_autoencoder.py \
+  --device cpu \
+  --grids-path runs/legacy_autoencoder/static_windows_fixed_s42/static_grids.npy \
+  --load-autoencoder runs/legacy_autoencoder/static_ae64_fixed_s42/autoencoder.pt \
+  --data-root runs --teacher-model runs/ab_1-11/legacy_w64_s42/best_model.zip \
+  --bc-level 1-11 --bc-epochs 150 --head-patience 20 \
+  --output-dir runs/legacy_autoencoder/static_ae64_fixed_teacher_head_s42
+```
+
+
+
+### Semantic multi-hot MAE (2026-10-26)
+
+The semantic 754-value contract is the better shared-encoder input. The first
+MAE uses the **7×7×15 grid** (735 values) and bypasses the **19 exact tail
+values**. Random cells are masked during training; the encoder gets a mask
+channel.
+
+Data: **442,816 rows**, deduplicated to **7,412 unique semantic grids** across
+all 16 levels.
+
+Held-out-level test — train on the other 15 levels, validate on 1-11:
+
+- train grids: **4,532**
+- held-out 1-11 grids: **2,880**
+- bit accuracy: **99.40%**
+- exact-grid (all 12 binary channels, all 49 cells): **8.47%**
+- continuous-channel MAE: **0.049**
+
+The strict exact-grid metric is harsh: one rare bit mismatch fails the whole
+grid. Per-bit information is high, but rare dynamic bits are not perfectly
+preserved.
+
+Full encoder — train on all 16 levels:
+
+- **99.81% bit accuracy**
+- **44.4% exact-grid** on the random holdout
+- **0.027** continuous MAE
+
+A 128-d latent was worse on the held-out test (**99.32% bit / 4.83% exact**).
+The 64-d latent is retained.
+
+**Reuse test.** Freeze the 64-d semantic encoder, concatenate the exact 19-value
+tail, and train a fresh **64×64** head on 18,197 unique 1-11 states, relabelled
+from the **3.7500 s** 512×512 teacher:
+
+- head action agreement: **95.38%**
+- deterministic 100-agent eval: **100/100, 3.7500 s**
+- 0 deaths, 0 timeouts, efficiency/flow 1.0
+
+This matches the best known 1-11 time with a **64-d latent + 64×64 head**, at
+**step 0**, versus the 512×512 teacher's 2.4M PPO steps. The comparison is still
+behavior cloning, not from-scratch RL, but it demonstrates that the semantic
+MAE is a viable reusable state encoder.
+
+Artifacts:
+
+```text
+runs/legacy_autoencoder/semantic_mae64_holdout_1-11_s42/autoencoder.pt
+runs/legacy_autoencoder/semantic_mae64_all_s42/autoencoder.pt
+runs/legacy_autoencoder/semantic_mae64_head_1-11_s42/policy_head.pt
+runs/legacy_autoencoder/semantic_mae64_head_1-11_s42/head_only.zip
+```
+
+```bash
+# Held-out-level semantic MAE
+.venv/bin/python src/24_train_semantic_autoencoder.py \
+  --device cpu --holdout-levels 1-11 --latent-dim 64 \
+  --output-dir runs/legacy_autoencoder/semantic_mae64_holdout_1-11_s42
+
+# Final all-level semantic MAE
+.venv/bin/python src/24_train_semantic_autoencoder.py \
+  --device cpu --holdout-levels "" --latent-dim 64 \
+  --output-dir runs/legacy_autoencoder/semantic_mae64_all_s42
+
+# Frozen semantic latent + 19 tail -> 64x64 head, labels from the 3.75 teacher
+.venv/bin/python src/25_train_semantic_head.py \
+  --device cpu \
+  --autoencoder-path runs/legacy_autoencoder/semantic_mae64_all_s42/autoencoder.pt \
+  --teacher-model runs/topology/multi_hot_8x8_w512_s42/best_model.zip \
+  --output-dir runs/legacy_autoencoder/semantic_mae64_head_1-11_s42
+```
+
+No VAE was needed for this result. A VAE would model the observed latent
+distribution, not create missing rare states; the masked autoencoder plus exact
+tail bypass already preserves enough control information. A VAE remains a
+possible later generative/uncertainty experiment, not the first shared encoder.
+
+**1-2 accepted:** 1-1 stayed **1.7000 s**, and 1-2 reached **3.0000 s**
+(specialist 3.0167) after one replay round. 1-3 is running from that snapshot.
+This is the first evidence that the sequential policy can add a level without
+losing the previous one.
+
+**Comparison discipline:** use the 64×64 legacy **3.8667 s** as the performance
+ceiling only, not as a learning-speed baseline. The 512×512 model has a larger
+input and network, so compare its learning curve only with another 512 run
+(especially 512 8×8 vs 512 8×1). Cross-model comparisons happen only at the
+final deterministic 100-agent eval after both models clear.
+
+Reward-shaping next steps are in the game repo's **A27**: do not use a flat
++500 finish bonus; test time-scaled terminal weights/exponents and per-step
+pressure one variable at a time before any CMA-ES/GA-style weight search.
+
+
 
 The behavior-clone route also plateaued: global 256 clone failed 1-2/1-11/1-14/
 1-15; 1-11-only clones stayed 9.65 through DAgger and 512 width; PPO from the
@@ -578,6 +910,47 @@ Two different experiments:
   training. Use it for recovery evaluation, and for DAgger-style labels; do not
   feed an off-policy student prefix directly into a PPO update without treating
   it as a reset/context.
+
+### Route checkpoints (first 1-1 checkpoint eval 2026-10-27)
+
+The game exports its real level analysis and accepts clean standable reset
+spawns. The first 1-1 checkpoint evaluation is run with **21 train / 10
+holdout** clean standable cells (right/long route as holdout). The 1.7 s expert
+gets **10/21 train and 5–6/10 holdout**; expert-initialized 16×2 reaches
+**7–8/10 holdout** but regresses canonical to 2.4 s; from-scratch 16×2 and 8×8
+fail canonical. No checkpoint is promotable. Route-choice testing and the 1-11
+speedrun holdout remain unrun; the holdout is a spawn checkpoint, not route
+choice with every route open.
+
+Game side:
+
+```bash
+python3 tools/export_level_analysis.py 1-1
+python3 tools/validate_route_spawns.py \
+  runs/level_analysis/1-1.json path/to/routes-1-1.json
+python3 tools/visualize_level_analysis.py --route path/to/routes-1-1.json \
+  runs/level_analysis/1-1.json
+```
+
+Python side:
+
+```python
+env.reset(spawns=[{"agent": 0, "cell": [10, 14], "facing": 1}])
+env.reset(agents=[0], spawns=[{"agent": 0, "cell": [20, 14], "facing": 1}])
+# MultiAgentGodotVecEnv: map global env index -> {"cell": [x, y], "facing": 1}
+vec_env.set_spawns({0: {"cell": [10, 14], "facing": 1}})
+```
+
+`spawns` only restores cell and facing; velocity, powerups, dissolve timers,
+and elapsed run time are not snapshotted. Missing/invalid entries fall back to
+the canonical level start. Route-forced level variants/blockers, arbitrary
+state snapshots, and PPO route-start training are deferred.
+
+The first 1-1 short/long route holdout is run; next is a 1-11 speedrun holdout
+using the existing model zoo (3.75, 4.4667, 4.6167, 8.05, 9.53). Measure finish
+rate, segment time, and route-specific cell coverage; a checkpoint tests
+execution from an unseen route state, not route choice with all routes open. See
+the game repo's `docs/technical/training.md` § 1-1 spawn evaluation and A31/A32.
 
 ## Execution order (current)
 

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import time
 from functools import partial
@@ -44,6 +45,10 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMoni
 from dotenv import load_dotenv
 
 from wrappers.godot_env import GodotEnv
+from wrappers.legacy_autoencoder import FrozenLegacyAutoencoderExtractor
+from wrappers.legacy_grid_extractor import LegacyGridExtractor
+from wrappers.multi_agent_vec_env import MultiAgentGodotVecEnv
+from wrappers.semantic_autoencoder import FrozenSemanticAutoencoderExtractor
 
 
 DEFAULT_LEVEL = "1-3"
@@ -88,6 +93,88 @@ def resolve_env_path() -> str:
     return str(resolved / env_name)
 
 
+def load_spawn_pool(path: Path) -> list[dict]:
+    """Load ``{"train": [...]}`` or a bare spawn list for PPO resets."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        entries = payload
+    elif isinstance(payload, dict):
+        entries = payload.get("train") or payload.get("spawns") or payload.get("cells")
+    else:
+        entries = None
+    if not isinstance(entries, list) or not entries:
+        raise ValueError(f"{path} has no non-empty train/spawns/cells list")
+    pool: list[dict] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path} spawn[{index}] must be an object")
+        if entry.get("canonical"):
+            pool.append({"canonical": True})
+            continue
+        cell = entry.get("cell")
+        facing = int(entry.get("facing", 1))
+        if not isinstance(cell, (list, tuple)) or len(cell) != 2:
+            raise ValueError(f"{path} spawn[{index}].cell must be [x, y]")
+        pool.append({
+            "cell": [int(cell[0]), int(cell[1])],
+            "facing": 1 if facing >= 0 else -1,
+        })
+    return pool
+
+
+def load_spawn_holdout(path: Path) -> list[dict]:
+    """Load the held-out spawn list from a spawn-pool JSON file."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return []
+    entries = payload.get("holdout", [])
+    if not isinstance(entries, list):
+        return []
+    holdout: list[dict] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        cell = entry.get("cell")
+        if not isinstance(cell, (list, tuple)) or len(cell) != 2:
+            continue
+        holdout.append({
+            "cell": [int(cell[0]), int(cell[1])],
+            "facing": 1 if int(entry.get("facing", 1)) >= 0 else -1,
+        })
+    return holdout
+
+
+def load_start_pool(path: Path) -> list[dict]:
+    """Load optional canonical/cell/NEAT-prefix start specifications."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    entries = payload.get("starts") if isinstance(payload, dict) else payload
+    if not isinstance(entries, list) or not entries:
+        raise ValueError(f"{path} has no non-empty start list")
+    pool: list[dict] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path} start[{index}] must be an object")
+        item = dict(entry)
+        item["weight"] = max(0.0, float(item.get("weight", 1.0)))
+        prefix = item.get("prefix_actions")
+        if prefix is not None:
+            if not isinstance(prefix, list):
+                raise ValueError(f"{path} start[{index}].prefix_actions must be a list")
+            item["prefix_actions"] = [int(action) for action in prefix]
+        elif not item.get("canonical"):
+            cell = item.get("cell")
+            if not isinstance(cell, (list, tuple)) or len(cell) != 2:
+                raise ValueError(f"{path} start[{index}] needs cell or prefix_actions")
+            item["cell"] = [int(cell[0]), int(cell[1])]
+            item["facing"] = 1 if int(item.get("facing", 1)) >= 0 else -1
+        if item["weight"] <= 0.0:
+            continue
+        pool.append(item)
+    if not pool:
+        raise ValueError(f"{path} has no positive-weight starts")
+    return pool
+
+
 class SingleAgentGodotEnv(gym.Env):
     """One Godot training world exposed as a standard Gymnasium environment."""
 
@@ -108,6 +195,9 @@ class SingleAgentGodotEnv(gym.Env):
         force_start_jump: bool,
         reward_profile: str,
         obs_encoding: str,
+        training_no_cosmetics: bool = False,
+        start_pool: list[dict] | None = None,
+        start_seed: int = 0,
     ) -> None:
         super().__init__()
         self.level = level
@@ -116,6 +206,28 @@ class SingleAgentGodotEnv(gym.Env):
         self.force_start_jump = force_start_jump
         self.obs_encoding = obs_encoding
         self._steps = 0
+        self.start_pool = [dict(item) for item in (start_pool or [])]
+        self.start_rng = np.random.default_rng(start_seed)
+        # ``force_start_jump`` is applied during reset (not as an action
+        # override in step) so PPO stores only actions that the policy chose.
+        # It is part of the reset contract for stationary cell/canonical starts.
+        self.start_weights = np.asarray(
+            [max(0.0, float(item.get("weight", 1.0))) for item in self.start_pool],
+            dtype=np.float64,
+        )
+        if self.start_weights.size:
+            total = float(self.start_weights.sum())
+            if total <= 0.0:
+                self.start_pool = []
+                self.start_weights = np.asarray([], dtype=np.float64)
+            else:
+                self.start_weights /= total
+        self.last_start: dict = {}
+        extra_env_kwargs = (
+            {"training_no_cosmetics": "true"}
+            if training_no_cosmetics
+            else {}
+        )
         self.game = GodotEnv(
             env_path=env_path,
             port=port,
@@ -130,6 +242,7 @@ class SingleAgentGodotEnv(gym.Env):
             env=child_env,
             reward_profile=reward_profile,
             obs_encoding=obs_encoding,
+            **extra_env_kwargs,
         )
         self.observation_space = self.game.observation_space.spaces["obs"]
         self.action_space = spaces.Discrete(2)
@@ -137,16 +250,88 @@ class SingleAgentGodotEnv(gym.Env):
     def _obs(self, obs_list):
         return np.asarray(obs_list[0]["obs"], dtype=np.float32)
 
+    def _sample_start(self) -> dict:
+        if not self.start_pool:
+            return {"canonical": True}
+        index = int(
+            self.start_rng.choice(len(self.start_pool), p=self.start_weights)
+        )
+        return dict(self.start_pool[index])
+
     def reset(self, *, seed=None, options=None):
+        spec = self._sample_start()
+        for _attempt in range(4):
+            prefix = spec.get("prefix_actions") or []
+            if prefix:
+                obs, infos = self.game.reset()
+                done = False
+                for action in prefix:
+                    obs, _rewards, dones, _timeouts, infos = self.game.step(
+                        np.asarray([[int(action)]], dtype=np.int64)
+                    )
+                    if bool(dones[0]):
+                        done = True
+                        break
+                if done:
+                    spec = self._sample_start()
+                    continue
+            elif spec.get("cell") is not None:
+                obs, infos = self.game.reset(
+                    spawns=[
+                        {
+                            "agent": 0,
+                            "cell": list(spec["cell"]),
+                            "facing": int(spec.get("facing", 1)),
+                        }
+                    ]
+                )
+            else:
+                obs, infos = self.game.reset()
+
+            start_jump = bool(self.force_start_jump and not prefix)
+            if start_jump:
+                # The training controller starts the run on the first jump.
+                # Press it as part of reset, then hand control to the policy;
+                # no synthetic action is inserted into the PPO rollout.
+                obs, _rewards, dones, _timeouts, infos = self.game.step(
+                    np.asarray([[1]], dtype=np.int64)
+                )
+                if bool(dones[0]):
+                    spec = self._sample_start()
+                    continue
+
+            self.last_start = dict(spec)
+            self._steps = 0
+            info = dict(infos[0] if infos else {})
+            info["start_source"] = (
+                "prefix"
+                if prefix
+                else "canonical"
+                if spec.get("canonical")
+                else "cell"
+            )
+            info["prefix_len"] = len(prefix)
+            info["start_cell"] = spec.get("cell")
+            info["start_facing"] = spec.get("facing")
+            info["start_jump"] = start_jump
+            return self._obs(obs), info
+
+        # A malformed/all-terminal prefix should not wedge training.
         obs, infos = self.game.reset()
+        start_jump = bool(self.force_start_jump)
+        if start_jump:
+            obs, _rewards, _dones, _timeouts, infos = self.game.step(
+                np.asarray([[1]], dtype=np.int64)
+            )
+        self.last_start = {"canonical": True}
         self._steps = 0
-        return self._obs(obs), (infos[0] if infos else {})
+        info = dict(infos[0] if infos else {})
+        info["start_source"] = "canonical_fallback"
+        info["prefix_len"] = 0
+        info["start_jump"] = start_jump
+        return self._obs(obs), info
 
     def step(self, action):
-        # Diagnostic-only override. Normal training and evaluation leave the
-        # start action to the policy: the first jump starts the run.
-        if self.force_start_jump and self._steps == 0:
-            action = 1
         actions = np.asarray([[int(action)]], dtype=np.int64)
         # GodotEnv.step exposes the raw 5-tuple. The multi-agent SB3 wrapper
         # collapses terminated/truncated into a single done, but here we keep
@@ -207,6 +392,11 @@ def isolated_home(output_dir: Path, name: str) -> dict[str, str]:
 def make_env(rank: int, args: argparse.Namespace, env_path: str):
     level = args.levels[rank % len(args.levels)]
     log_path = args.output_dir / "godot" / f"train_{rank}_{level}.log"
+    start_pool = [
+        item
+        for item in args.start_pool_data
+        if item.get("level") in (None, level)
+    ]
     return SingleAgentGodotEnv(
         env_path=env_path,
         level=level,
@@ -218,25 +408,52 @@ def make_env(rank: int, args: argparse.Namespace, env_path: str):
         show_window=args.show,
         log_path=str(log_path),
         child_env=isolated_home(args.output_dir, f"train_{rank}"),
-        # Do not override actions inside PPO rollouts: SB3 stores the sampled
-        # action, so forcing a different env action would corrupt that sample.
-        force_start_jump=False,
+        # Applied during reset, not by overriding a rollout action. This keeps
+        # SB3's stored action and the action actually sent to Godot identical.
+        force_start_jump=args.force_start_jump,
         reward_profile=args.reward_profile,
         obs_encoding=args.obs_encoding,
+        training_no_cosmetics=args.training_no_cosmetics,
+        start_pool=start_pool,
+        start_seed=args.start_seed + rank,
     )
 
 
 def build_vec_env(args: argparse.Namespace, env_path: str):
-    env_fns = [
-        partial(make_env, rank, args, env_path)
-        for rank in range(args.n_envs)
-    ]
-    if args.n_envs == 1:
-        vec_env = DummyVecEnv(env_fns)
+    if args.agents_per_process > 1:
+        if len(args.levels) != 1:
+            raise ValueError(
+                "--agents-per-process currently supports exactly one level"
+            )
+        vec_env = MultiAgentGodotVecEnv(
+            env_path=env_path,
+            level=args.levels[0],
+            n_agents_per_process=args.agents_per_process,
+            n_processes=args.n_envs,
+            seed=args.seed,
+            action_repeat=args.action_repeat,
+            speedup=args.speedup,
+            max_decisions=args.max_decisions,
+            base_port=args.base_port,
+            output_dir=args.output_dir,
+            obs_encoding=args.obs_encoding,
+            reward_profile=args.reward_profile,
+            show_window=args.show,
+            training_no_cosmetics=args.training_no_cosmetics,
+            spawn_pool=args.spawn_pool_data,
+            spawn_seed=args.spawn_seed,
+        )
     else:
-        # spawn is the portable macOS start method; Godot sockets are not
-        # pickled, only the env factory is.
-        vec_env = SubprocVecEnv(env_fns, start_method="spawn")
+        env_fns = [
+            partial(make_env, rank, args, env_path)
+            for rank in range(args.n_envs)
+        ]
+        if args.n_envs == 1:
+            vec_env = DummyVecEnv(env_fns)
+        else:
+            # spawn is the portable macOS start method; Godot sockets are not
+            # pickled, only the env factory is.
+            vec_env = SubprocVecEnv(env_fns, start_method="spawn")
 
     return VecMonitor(
         vec_env,
@@ -260,6 +477,7 @@ class EpisodeCSVCallback(BaseCallback):
             fieldnames=[
                 "timesteps",
                 "level",
+                "spawn_cell",
                 "episode_return",
                 "episode_length",
                 "finished",
@@ -285,6 +503,7 @@ class EpisodeCSVCallback(BaseCallback):
             row = {
                 "timesteps": self.num_timesteps,
                 "level": info.get("level", ""),
+                "spawn_cell": info.get("spawn_cell", ""),
                 "episode_return": float(episode["r"]),
                 "episode_length": int(episode["l"]),
                 "finished": bool(info.get("finished", False)),
@@ -428,6 +647,297 @@ class EvalPatienceCallback(BaseCallback):
         return True
 
 
+class SpawnEvalCallback(BaseCallback):
+    """Keep the best checkpoint by default-spawn time plus spawn recovery.
+
+    The canonical 1-1 time is a hard constraint: a checkpoint that clears the
+    held-out spawns but regresses the default start is not selected.
+    """
+
+    def __init__(self, args: argparse.Namespace, env_path: str):
+        super().__init__()
+        self.args = args
+        self.env_path = env_path
+        self.holdout = (
+            load_spawn_holdout(args.spawn_pool)
+            if args.spawn_pool is not None
+            else []
+        )
+        self.env: GodotEnv | None = None
+        self.last_eval = 0
+        self.baseline_canonical: tuple[bool, float, int] | None = None
+        self.best_score: tuple | None = None
+        self.best_path = args.output_dir / "spawn_best.zip"
+        self.baseline_path = args.output_dir / "spawn_baseline.zip"
+        self.best_canonical_path = args.output_dir / "spawn_best_canonical.zip"
+        self.best_holdout_path = args.output_dir / "spawn_best_holdout.zip"
+        self.best_canonical_time = float("inf")
+        self.best_holdout: tuple[int, float] = (-1, float("inf"))
+        self.csv_file = open(args.output_dir / "spawn_eval.csv", "w", newline="")
+        self.csv_writer = csv.DictWriter(
+            self.csv_file,
+            fieldnames=[
+                "phase",
+                "timesteps",
+                "canonical_finished",
+                "canonical_time",
+                "canonical_ok",
+                "holdout_finished",
+                "holdout_total",
+                "holdout_time",
+                "saved_best",
+            ],
+        )
+        self.csv_writer.writeheader()
+
+    def _open_env(self) -> None:
+        self.env = GodotEnv(
+            env_path=self.env_path,
+            port=self.args.eval_port,
+            show_window=False,
+            seed=self.args.seed,
+            action_repeat=self.args.action_repeat,
+            speedup=self.args.speedup,
+            nb_agents=1,
+            level=self.args.levels[0],
+            convert_action_space=True,
+            log_path=str(self.args.output_dir / "godot" / "spawn_eval.log"),
+            env=isolated_home(self.args.output_dir, "spawn_eval"),
+            reward_profile=self.args.reward_profile,
+            obs_encoding=self.args.obs_encoding,
+        )
+
+    def _run(self, spawn: dict | None = None) -> tuple[bool, float, int]:
+        assert self.env is not None
+        if spawn is None:
+            obs, _infos = self.env.reset()
+        else:
+            obs, _infos = self.env.reset(
+                spawns=[{**spawn, "agent": 0}]
+            )
+        if self.args.force_start_jump:
+            obs, _rewards, dones, _timeouts, infos = self.env.step(
+                np.asarray([[1]], dtype=np.int64)
+            )
+            if bool(dones[0]):
+                info = infos[0] if infos else {}
+                return (
+                    bool(info.get("finished", False)),
+                    float(info.get("run_time", 0.0)),
+                    1,
+                )
+        for step in range(self.args.max_decisions):
+            action, _ = self.model.predict(
+                np.asarray(obs[0]["obs"], dtype=np.float32),
+                deterministic=True,
+            )
+            obs, _rewards, dones, _timeouts, infos = self.env.step(
+                np.asarray([[int(action)]], dtype=np.int64)
+            )
+            if dones[0]:
+                info = infos[0] if infos else {}
+                return (
+                    bool(info.get("finished", False)),
+                    float(info.get("run_time", 0.0)),
+                    step + 1,
+                )
+        return False, 0.0, self.args.max_decisions
+
+    def _holdout_result(self) -> tuple[int, float]:
+        finished = 0
+        times: list[float] = []
+        for spawn in self.holdout:
+            ok, time_s, _steps = self._run(spawn)
+            if ok:
+                finished += 1
+                times.append(time_s)
+        return finished, (sum(times) / len(times) if times else float("inf"))
+
+    def _score(
+        self,
+        canonical: tuple[bool, float, int],
+        holdout_finished: int,
+        holdout_time: float,
+    ) -> tuple:
+        target = float(self.args.spawn_canonical_target)
+        canonical_ok = canonical[0] and canonical[1] <= target
+        return (
+            1 if canonical_ok else 0,
+            holdout_finished,
+            -canonical[1] if canonical[0] else -1e9,
+            -holdout_time,
+        )
+
+    def _canonical_ok(self, canonical: tuple[bool, float, int]) -> bool:
+        return (
+            canonical[0]
+            and canonical[1] <= float(self.args.spawn_canonical_target)
+        )
+
+    def _update_bests(
+        self,
+        canonical: tuple[bool, float, int],
+        holdout_finished: int,
+        holdout_time: float,
+    ) -> None:
+        """Keep independent best-canonical and best-holdout checkpoints.
+
+        ``spawn_best`` remains the promotable checkpoint (canonical gate AND
+        recovery). These two extra files preserve the best half-result so a
+        later stage can resume from the best speed or the best recovery even
+        when no checkpoint passes both gates yet.
+        """
+        if canonical[0] and canonical[1] < self.best_canonical_time:
+            self.best_canonical_time = canonical[1]
+            self.model.save(str(self.best_canonical_path))
+            print(
+                f"[spawn-eval] saved best canonical: "
+                f"{self.best_canonical_path} ({canonical[1]:.3f}s)",
+                flush=True,
+            )
+        if holdout_finished > self.best_holdout[0] or (
+            holdout_finished == self.best_holdout[0]
+            and holdout_time < self.best_holdout[1]
+        ):
+            self.best_holdout = (holdout_finished, holdout_time)
+            self.model.save(str(self.best_holdout_path))
+            print(
+                f"[spawn-eval] saved best holdout: "
+                f"{self.best_holdout_path} "
+                f"({holdout_finished}/{len(self.holdout)})",
+                flush=True,
+            )
+
+    def _record_eval(
+        self,
+        phase: str,
+        canonical: tuple[bool, float, int],
+        holdout_finished: int,
+        holdout_time: float,
+        saved_best: bool,
+    ) -> None:
+        def finite(value: float) -> str:
+            return f"{value:.3f}" if np.isfinite(value) else ""
+
+        self.csv_writer.writerow(
+            {
+                "phase": phase,
+                "timesteps": self.num_timesteps,
+                "canonical_finished": int(canonical[0]),
+                "canonical_time": finite(canonical[1]) if canonical[0] else "",
+                "canonical_ok": int(self._canonical_ok(canonical)),
+                "holdout_finished": holdout_finished,
+                "holdout_total": len(self.holdout),
+                "holdout_time": finite(holdout_time),
+                "saved_best": int(saved_best),
+            }
+        )
+        self.csv_file.flush()
+
+    def _on_training_start(self) -> None:
+        if self.args.spawn_eval_every <= 0 or not self.holdout:
+            return
+        self.baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        self._open_env()
+        self.baseline_canonical = self._run()
+        holdout_finished, holdout_time = self._holdout_result()
+        self.best_score = self._score(
+            self.baseline_canonical,
+            holdout_finished,
+            holdout_time,
+        )
+        self.model.save(str(self.baseline_path))
+        baseline_ok = self._canonical_ok(self.baseline_canonical)
+        if baseline_ok:
+            self.model.save(str(self.best_path))
+        self._update_bests(
+            self.baseline_canonical,
+            holdout_finished,
+            holdout_time,
+        )
+        self._record_eval(
+            "baseline",
+            self.baseline_canonical,
+            holdout_finished,
+            holdout_time,
+            baseline_ok,
+        )
+        self.last_eval = self.num_timesteps
+        print(
+            f"[spawn-eval] baseline canonical={self.baseline_canonical[1]:.3f}s "
+            f"holdout={holdout_finished}/{len(self.holdout)} "
+            f"canonical_ok={baseline_ok}",
+            flush=True,
+        )
+
+    def _on_step(self) -> bool:
+        if self.args.spawn_eval_every <= 0 or not self.holdout:
+            return True
+        if self.num_timesteps - self.last_eval < self.args.spawn_eval_every:
+            return True
+        self.last_eval = self.num_timesteps
+
+        checkpoint = (
+            self.args.output_dir
+            / "checkpoints"
+            / f"spawn-{self.num_timesteps}.zip"
+        )
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        self.model.save(str(checkpoint))
+        canonical = self._run()
+        holdout_finished, holdout_time = self._holdout_result()
+        score = self._score(canonical, holdout_finished, holdout_time)
+        print(
+            f"[spawn-eval] step={self.num_timesteps} "
+            f"canonical={canonical[1]:.3f}s "
+            f"holdout={holdout_finished}/{len(self.holdout)} "
+            f"holdout_time={holdout_time:.3f}s",
+            flush=True,
+        )
+        canonical_ok = self._canonical_ok(canonical)
+        saved_best = False
+        if canonical_ok and score > self.best_score:
+            self.best_score = score
+            self.model.save(str(self.best_path))
+            saved_best = True
+            print(f"[spawn-eval] saved best: {self.best_path}", flush=True)
+        elif not canonical_ok:
+            print("[spawn-eval] rejected: canonical gate failed", flush=True)
+        self._update_bests(canonical, holdout_finished, holdout_time)
+        self._record_eval(
+            "step",
+            canonical,
+            holdout_finished,
+            holdout_time,
+            saved_best,
+        )
+        return True
+
+    def _on_training_end(self) -> None:
+        self.csv_file.flush()
+        self.csv_file.close()
+        if self.env is not None:
+            self.env.close()
+
+
+def batch_predict_actions(
+    model: PPO,
+    observations: list[np.ndarray],
+    deterministic: bool = True,
+) -> np.ndarray:
+    """Run one policy forward for all active evaluation agents."""
+    if not observations:
+        return np.empty(0, dtype=np.int64)
+    obs_array = np.asarray(observations, dtype=np.float32)
+    with torch.no_grad():
+        obs_tensor, _ = model.policy.obs_to_tensor(obs_array)
+        actions, _, _ = model.policy(
+            obs_tensor,
+            deterministic=deterministic,
+        )
+    return actions.detach().cpu().numpy().reshape(-1).astype(np.int64)
+
+
 def evaluate_policy(
     model: PPO,
     args: argparse.Namespace,
@@ -459,6 +969,12 @@ def evaluate_policy(
     try:
         obs, _ = env.reset()
         n = args.eval_agents
+        if args.force_start_jump:
+            # Same reset contract as training: press jump once, then let the
+            # policy choose every subsequent action.
+            obs, _rewards, _dones, _timeouts, _infos = env.step(
+                np.ones((n, 1), dtype=np.int64)
+            )
         done_once = np.zeros(n, dtype=bool)
         finished = np.zeros(n, dtype=bool)
         finish_times = np.full(n, np.inf, dtype=np.float64)
@@ -470,26 +986,30 @@ def evaluate_policy(
         last_infos: list[dict] = [{} for _ in range(n)]
 
         for step in range(args.max_decisions):
-            actions = []
+            actions = np.zeros((n, 1), dtype=np.int64)
+            active: list[int] = []
             for i in range(n):
                 if done_once[i]:
-                    actions.append([0])
                     continue
                 if step < args.start_delay:
-                    actions.append([0])
                     continue
-                if args.force_start_jump and step == 0:
-                    actions.append([1])
-                    continue
-                action, _ = model.predict(
-                    obs[i]["obs"],
-                    deterministic=not args.eval_stochastic,
-                )
-                actions.append([int(action)])
+                active.append(i)
+            if active:
+                if args.eval_legacy_per_agent:
+                    for i in active:
+                        action, _ = model.predict(
+                            obs[i]["obs"],
+                            deterministic=not args.eval_stochastic,
+                        )
+                        actions[i, 0] = int(action)
+                else:
+                    actions[active, 0] = batch_predict_actions(
+                        model,
+                        [obs[i]["obs"] for i in active],
+                        deterministic=not args.eval_stochastic,
+                    )
 
-            obs, rewards, dones, _timeouts, infos = env.step(
-                np.asarray(actions, dtype=np.int64)
-            )
+            obs, rewards, dones, _timeouts, infos = env.step(actions)
             for i in range(n):
                 if done_once[i]:
                     continue
@@ -690,6 +1210,52 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Parallel worlds. Defaults to one per selected level.",
     )
+    parser.add_argument(
+        "--agents-per-process",
+        type=int,
+        default=1,
+        help="Godot agents per process; 1 keeps the existing one-world-per-process path.",
+    )
+    parser.add_argument(
+        "--spawn-pool",
+        type=Path,
+        help="JSON spawn pool for per-episode randomized start cells.",
+    )
+    parser.add_argument(
+        "--spawn-seed",
+        type=int,
+        default=0,
+        help="Seed for sampling from --spawn-pool.",
+    )
+    parser.add_argument(
+        "--start-pool",
+        type=Path,
+        help="JSON weighted start pool with canonical/cell/prefix entries.",
+    )
+    parser.add_argument(
+        "--start-seed",
+        type=int,
+        default=0,
+        help="Seed for sampling from --start-pool.",
+    )
+    parser.add_argument(
+        "--spawn-eval-every",
+        type=int,
+        default=25_000,
+        help="Evaluate canonical + holdout spawns every N training steps; 0 disables.",
+    )
+    parser.add_argument(
+        "--spawn-canonical-target",
+        type=float,
+        default=1.75,
+        help="Absolute default-spawn time a spawn checkpoint must meet.",
+    )
+    parser.add_argument(
+        "--spawn-learning-rate",
+        type=float,
+        default=None,
+        help="Override the loaded PPO learning rate for spawn fine-tuning.",
+    )
     parser.add_argument("--timesteps", type=int, default=100_000)
     parser.add_argument(
         "--additional-timesteps",
@@ -707,15 +1273,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-only", action="store_true")
     parser.add_argument("--eval-stochastic", action="store_true")
     parser.add_argument(
+        "--eval-legacy-per-agent",
+        action="store_true",
+        help="Diagnostic only: run model.predict once per active agent instead of batching.",
+    )
+    parser.add_argument(
         "--start-delay",
         type=int,
         default=0,
-        help="Evaluation only: hold idle for N decisions before the policy starts.",
+        help="Evaluation only: hold idle for N decisions after the reset start "
+        "jump before the policy acts.",
     )
     parser.add_argument(
         "--reward-profile",
         default="default",
-        choices=("default", "time"),
+        choices=("default", "time", "time_speed"),
         help="Training-only game reward profile.",
     )
     parser.add_argument(
@@ -725,19 +1297,44 @@ def parse_args() -> argparse.Namespace:
         help="Game observation contract; multi_hot requires a matching new model.",
     )
     parser.add_argument(
+        "--grid-encoder",
+        default="mlp",
+        choices=("mlp", "legacy_cnn", "legacy_autoencoder", "semantic_autoencoder"),
+        help="Legacy 58 only: tile embedding + 7x7 CNN instead of a flat MLP. "
+        "legacy_autoencoder uses a frozen pretrained legacy grid encoder; "
+        "semantic_autoencoder uses the frozen 754-value semantic MAE.",
+    )
+    parser.add_argument(
+        "--autoencoder-path",
+        type=Path,
+        help="Checkpoint for a frozen autoencoder grid encoder.",
+    )
+    parser.add_argument(
+        "--init-head",
+        type=Path,
+        help="Initialize the PPO policy/action head from a behavior-cloned "
+        "frozen-encoder head; the value head remains random.",
+    )
+    parser.add_argument(
         "--force-start-jump",
         dest="force_start_jump",
         action="store_true",
-        help="Diagnostic only: force the first action to jump. Default is policy-owned.",
+        help="Press jump once during reset, then hand control to the policy "
+        "(default: on).",
     )
     parser.add_argument(
         "--no-force-start-jump",
         dest="force_start_jump",
         action="store_false",
-        help="Explicitly keep the first action policy-owned (default).",
+        help="Leave the first start action policy-owned (legacy behavior).",
     )
-    parser.set_defaults(force_start_jump=False)
+    parser.set_defaults(force_start_jump=True)
     parser.add_argument("--skip-eval", action="store_true")
+    parser.add_argument(
+        "--training-no-cosmetics",
+        action="store_true",
+        help="Training-only A/B: suppress effect scenes, player particles, and animations.",
+    )
     parser.add_argument(
         "--baseline-eval",
         action="store_true",
@@ -857,11 +1454,72 @@ def initialize_policy_from_student(
     )
 
 
+def restore_frozen_encoder(model: PPO, context: str) -> None:
+    """Reload a frozen autoencoder after SB3 rebuilds a policy."""
+    extractor = getattr(model.policy, "features_extractor", None)
+    if extractor is not None and hasattr(extractor, "reload_encoder"):
+        extractor.reload_encoder()
+        print(f"restored frozen autoencoder weights ({context})", flush=True)
+
+
+def initialize_policy_head_from_checkpoint(
+    model: PPO,
+    head_path: Path,
+    args: argparse.Namespace,
+) -> None:
+    """Warm-start the PPO policy/action head from a frozen-encoder BC run.
+
+    The input dimension is ``latent_dim + 9``, so this is intentionally
+    separate from ``--init-student`` (which expects the raw 58-value input).
+    The value head stays randomly initialized.
+    """
+    payload = torch.load(head_path, map_location="cpu", weights_only=False)
+    if str(payload.get("obs_encoding", "legacy")) != args.obs_encoding:
+        raise ValueError(
+            f"{head_path} uses obs_encoding={payload.get('obs_encoding')}, "
+            f"not {args.obs_encoding}"
+        )
+    features_dim = int(model.policy.features_dim)
+    if int(payload["features_dim"]) != features_dim:
+        raise ValueError(
+            f"{head_path} expects features_dim={payload['features_dim']}, "
+            f"but the policy produces {features_dim}"
+        )
+    if list(payload.get("net_arch", [])) != list(args.net_arch):
+        raise ValueError(
+            f"{head_path} hidden sizes {payload.get('net_arch')} do not match "
+            f"--net-arch {list(args.net_arch)}"
+        )
+    if str(payload.get("activation", "tanh")).lower() != "tanh":
+        raise ValueError(
+            f"{head_path} was trained with {payload.get('activation')} activation; "
+            "the frozen-autoencoder PPO head uses tanh"
+        )
+
+    state = payload["state_dict"]
+    policy_net = model.policy.mlp_extractor.policy_net
+    device = model.policy.device
+    with torch.no_grad():
+        policy_net[0].weight.copy_(state["0.weight"].to(device))
+        policy_net[0].bias.copy_(state["0.bias"].to(device))
+        policy_net[2].weight.copy_(state["2.weight"].to(device))
+        policy_net[2].bias.copy_(state["2.bias"].to(device))
+        model.policy.action_net.weight.copy_(state["4.weight"].to(device))
+        model.policy.action_net.bias.copy_(state["4.bias"].to(device))
+    print(
+        f"initialized policy head from {head_path} "
+        f"({features_dim} -> {list(args.net_arch)} -> 2); value head random",
+        flush=True,
+    )
+
+
 def main() -> None:
     args = parse_args()
     args.levels = (
         [args.level] if args.level else parse_levels(args.levels)
     )
+    if args.init_head is not None:
+        args.init_head = args.init_head.expanduser().resolve()
     if args.n_envs is None:
         args.n_envs = len(args.levels) if len(args.levels) > 1 else 8
     if len(args.levels) > 1 and args.n_envs < len(args.levels):
@@ -875,13 +1533,40 @@ def main() -> None:
     (args.output_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
     (args.output_dir / "eval").mkdir(parents=True, exist_ok=True)
 
+    args.spawn_pool_data: list[dict] = []
+    if args.spawn_pool is not None:
+        if args.agents_per_process < 2:
+            raise ValueError("--spawn-pool requires --agents-per-process >= 2")
+        args.spawn_pool_data = load_spawn_pool(args.spawn_pool.expanduser().resolve())
+        print(
+            f"spawn pool: {len(args.spawn_pool_data)} checkpoints from "
+            f"{args.spawn_pool}",
+            flush=True,
+        )
+
+    args.start_pool_data: list[dict] = []
+    if args.start_pool is not None:
+        if args.agents_per_process != 1:
+            raise ValueError("--start-pool requires --agents-per-process 1")
+        args.start_pool_data = load_start_pool(
+            args.start_pool.expanduser().resolve()
+        )
+        print(
+            f"start pool: {len(args.start_pool_data)} weighted starts from "
+            f"{args.start_pool}",
+            flush=True,
+        )
+
     env_path = resolve_env_path()
     model_path = args.output_dir / (
         "ppo_all.zip" if len(args.levels) > 1 else "ppo_pilot.zip"
     )
+    total_agents = args.n_envs * args.agents_per_process
     print(
-        f"PPO levels={','.join(args.levels)} n_envs={args.n_envs} "
-        f"timesteps={args.timesteps} action_repeat={args.action_repeat}",
+        f"PPO levels={','.join(args.levels)} processes={args.n_envs} "
+        f"agents_per_process={args.agents_per_process} "
+        f"total_agents={total_agents} timesteps={args.timesteps} "
+        f"action_repeat={args.action_repeat} grid_encoder={args.grid_encoder}",
         flush=True,
     )
 
@@ -890,20 +1575,31 @@ def main() -> None:
         if not path.exists():
             raise FileNotFoundError(path)
         model = PPO.load(str(path), device=args.device)
+        restore_frozen_encoder(model, "eval-only")
         evaluate_levels(model, args, env_path)
         return
 
     vec_env = build_vec_env(args, env_path)
     if args.resume:
         model = PPO.load(str(args.resume), env=vec_env, device=args.device)
+        restore_frozen_encoder(model, "resume")
         # Saved PPO hyperparameters win over CLI defaults on load. Repair runs
         # deliberately change the exploration pressure and learning rate to
         # sharpen or re-explore a stalled per-level teacher.
         model.ent_coef = args.ent_coef
         model.learning_rate = args.learning_rate
         model.lr_schedule = lambda _progress: args.learning_rate
+        # Resume overrides: SB3 restores the saved n_epochs, so a resumed run
+        # would otherwise ignore --epochs. This is what lets a checkpoint be
+        # extended with more PPO passes without rebuilding the policy.
+        model.n_epochs = args.epochs
         for group in model.policy.optimizer.param_groups:
             group["lr"] = args.learning_rate
+        print(
+            f"resume overrides: n_epochs={model.n_epochs} "
+            f"lr={args.learning_rate} ent_coef={args.ent_coef}",
+            flush=True,
+        )
         reset_num_timesteps = False
         # SB3 adds the loaded counter when reset_num_timesteps=False.
         # Passing an already-offset target would double-count the offset.
@@ -916,6 +1612,66 @@ def main() -> None:
             if args.init_student is not None
             else torch.nn.Tanh
         )
+        if args.grid_encoder == "legacy_cnn":
+            if args.obs_encoding != "legacy":
+                raise ValueError("--grid-encoder=legacy_cnn requires --obs-encoding=legacy")
+            if args.init_student is not None:
+                raise ValueError("--grid-encoder=legacy_cnn cannot use --init-student")
+            if args.init_head is not None:
+                raise ValueError("--grid-encoder=legacy_cnn cannot use --init-head")
+        if args.grid_encoder == "legacy_autoencoder":
+            if args.obs_encoding != "legacy":
+                raise ValueError(
+                    "--grid-encoder=legacy_autoencoder requires --obs-encoding=legacy"
+                )
+            if args.autoencoder_path is None:
+                raise ValueError(
+                    "--grid-encoder=legacy_autoencoder requires --autoencoder-path"
+                )
+            if args.init_student is not None:
+                raise ValueError(
+                    "--grid-encoder=legacy_autoencoder cannot use --init-student"
+                )
+            args.autoencoder_path = args.autoencoder_path.expanduser().resolve()
+        elif args.grid_encoder == "semantic_autoencoder":
+            if args.obs_encoding != "multi_hot":
+                raise ValueError(
+                    "--grid-encoder=semantic_autoencoder requires "
+                    "--obs-encoding=multi_hot"
+                )
+            if args.autoencoder_path is None:
+                raise ValueError(
+                    "--grid-encoder=semantic_autoencoder requires --autoencoder-path"
+                )
+            if args.init_student is not None:
+                raise ValueError(
+                    "--grid-encoder=semantic_autoencoder cannot use --init-student"
+                )
+            args.autoencoder_path = args.autoencoder_path.expanduser().resolve()
+        elif args.init_head is not None:
+            raise ValueError(
+                "--init-head requires a frozen autoencoder grid encoder"
+            )
+        policy_kwargs = {
+            "net_arch": dict(pi=args.net_arch, vf=args.net_arch),
+            "activation_fn": activation_fn,
+        }
+        if args.grid_encoder == "legacy_cnn":
+            policy_kwargs["features_extractor_class"] = LegacyGridExtractor
+            policy_kwargs["features_extractor_kwargs"] = {
+                "features_dim": 128,
+                "embedding_dim": 8,
+            }
+        elif args.grid_encoder == "legacy_autoencoder":
+            policy_kwargs["features_extractor_class"] = FrozenLegacyAutoencoderExtractor
+            policy_kwargs["features_extractor_kwargs"] = {
+                "checkpoint_path": str(args.autoencoder_path),
+            }
+        elif args.grid_encoder == "semantic_autoencoder":
+            policy_kwargs["features_extractor_class"] = FrozenSemanticAutoencoderExtractor
+            policy_kwargs["features_extractor_kwargs"] = {
+                "checkpoint_path": str(args.autoencoder_path),
+            }
         model = PPO(
             "MlpPolicy",
             vec_env,
@@ -930,16 +1686,14 @@ def main() -> None:
             vf_coef=args.vf_coef,
             max_grad_norm=args.max_grad_norm,
             target_kl=args.target_kl,
-            policy_kwargs={
-                "net_arch": dict(pi=args.net_arch, vf=args.net_arch),
-                "activation_fn": activation_fn,
-            },
+            policy_kwargs=policy_kwargs,
             seed=args.seed,
             device=args.device,
             verbose=args.verbose,
         )
         reset_num_timesteps = True
         target_timesteps = args.timesteps
+        restore_frozen_encoder(model, "new policy")
 
     if args.init_student is not None:
         if args.resume is not None:
@@ -947,7 +1701,26 @@ def main() -> None:
         initialize_policy_from_student(model, args.init_student, args)
         args.baseline_eval = True
 
+    if args.init_head is not None:
+        if args.resume is not None:
+            raise ValueError("--init-head cannot be combined with --resume")
+        initialize_policy_head_from_checkpoint(model, args.init_head, args)
+        args.baseline_eval = True
+
+    if args.spawn_pool is not None and args.spawn_learning_rate is not None:
+        model.learning_rate = args.spawn_learning_rate
+        if hasattr(model, "_setup_lr_schedule"):
+            model._setup_lr_schedule()
+        print(
+            f"spawn fine-tune learning rate: {args.spawn_learning_rate}",
+            flush=True,
+        )
+
     callbacks = [EpisodeCSVCallback(args)]
+    spawn_callback: SpawnEvalCallback | None = None
+    if args.spawn_pool is not None and args.spawn_eval_every > 0:
+        spawn_callback = SpawnEvalCallback(args, env_path)
+        callbacks.append(spawn_callback)
     if args.eval_every > 0 and args.patience > 0:
         callbacks.append(EvalPatienceCallback(args, env_path))
     callback = CallbackList(callbacks)
@@ -961,7 +1734,17 @@ def main() -> None:
         best_path = args.output_dir / "best_model.zip"
         if args.eval_every > 0 and args.patience > 0 and best_path.exists():
             model = PPO.load(str(best_path), device=args.device)
+            restore_frozen_encoder(model, "best checkpoint")
             print(f"using best eval checkpoint: {best_path}", flush=True)
+        spawn_best = args.output_dir / "spawn_best.zip"
+        if spawn_callback is not None and spawn_best.exists():
+            model = PPO.load(
+                str(spawn_best),
+                env=vec_env,
+                device=args.device,
+            )
+            restore_frozen_encoder(model, "spawn best checkpoint")
+            print(f"using best spawn checkpoint: {spawn_best}", flush=True)
         model.save(str(model_path))
         print(f"saved model: {model_path}", flush=True)
     finally:

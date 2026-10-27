@@ -37,11 +37,15 @@ bookkeeping.
 
 The pilot uses 8 worlds. That is enough to establish whether PPO learns the
 level; it is not the 100-agent evaluation population. **8 is the pilot default,
-not a measured optimum.** The game now supports optional per-agent reset
-indices (`GodotEnv.reset(agents=...)`), but the pilot stays 8×1 until a
-multi-agent VecEnv exists, so the completed 512 width A/B remained comparable.
-See [model-improvement-experiments.md](model-improvement-experiments.md) §
-Training topology.
+not a measured optimum.** The game supports optional per-agent reset indices
+(`GodotEnv.reset(agents=...)`) and clean route checkpoints
+(`GodotEnv.reset(spawns=...)`); a multi-agent VecEnv exists. Current-code sweeps
+put the **one-process** environment knee at **16 agents** (~1,106 decisions/s),
+while machine-level environment throughput peaks at **8×8** (~2,301/s). Fresh
+30k PPO smokes instead favor **16×2** (~817 decisions/s) over 8×8 (~468), 16×3
+(~669), and 16×4 (~656); 8×8 spent 136.7 s of system time vs 43.7 s. See
+[model-improvement-experiments.md](model-improvement-experiments.md) § Training
+topology and the game repo's A31/A26 for route setup and game-side throughput.
 
 ## Isolation
 
@@ -84,6 +88,11 @@ survival. No second fitness function is added. Add `--obs-encoding multi_hot`
 for the 754-value semantic-grid observation; a resumed model and its environment
 must use the same encoding and control cadence.
 
+`--agents-per-process N --n-envs P` uses one Godot process per P and exposes
+`N × P` virtual SB3 environments. `--timesteps` remains total decisions across
+all agents, so scale it with the agent count when preserving per-agent
+experience. The one-agent-per-process path is unchanged when N=1.
+
 `--init-student <student.pt>` warm-starts the PPO policy/action head from a
 distillation checkpoint while leaving the value head random. This is used for
 multi-hot teachers that start from a behavior clone of the legacy champions.
@@ -121,7 +130,14 @@ Evaluate a saved policy without training:
 ```
 
 Add `--eval-stochastic` to evaluate the sampled policy. The deterministic
-mode is the default; the first start action is chosen by the policy.
+mode is the default; the first start action is chosen by the policy. The
+100-agent evaluation now batches the policy forward for all active agents
+(same argmax semantics) instead of calling `model.predict` 100 times per step.
+`--eval-legacy-per-agent` keeps the old loop for diagnostics. Policy-only
+parity on 100 random 754-value observations is exact; 100 repeats took 0.167 s
+batched vs 1.067 s per-agent (6.4×). Full 100-agent 1-11 evaluation was
+~14.0 s batched and ~13.8 s legacy, both 100/100 at 3.7500 s: the policy forward
+is no longer visible above game/socket variance at this scale.
 
 ## Baseline
 

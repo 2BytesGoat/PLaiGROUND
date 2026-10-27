@@ -27,6 +27,34 @@ from gymnasium import spaces
 from wrappers.utils import ActionSpaceProcessor, convert_macos_path
 
 
+def _normalise_spawn(entry: dict) -> dict:
+    """Validate one reset-spawn entry before sending it to Godot."""
+    if not isinstance(entry, dict):
+        raise ValueError(f"spawn entry must be a dict, got {type(entry)!r}")
+    try:
+        agent = int(entry["agent"])
+        cell = entry["cell"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"spawn entry needs agent and cell: {entry!r}") from exc
+    if not isinstance(cell, (list, tuple)) or len(cell) != 2:
+        raise ValueError(f"spawn cell must be [x, y], got {cell!r}")
+    try:
+        facing = int(entry.get("facing", 1))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"spawn facing must be numeric: {entry!r}") from exc
+    result = {
+        "agent": agent,
+        "cell": [int(cell[0]), int(cell[1])],
+        "facing": 1 if facing >= 0 else -1,
+    }
+    state = entry.get("state")
+    if isinstance(state, dict):
+        # Optional grounded trajectory snapshot. The game validates the cell
+        # first, then restores position/velocity/run state after Player.reset().
+        result["state"] = state
+    return result
+
+
 class GodotEnv:
     MAJOR_VERSION = "0"  # Versioning for the environment
     MINOR_VERSION = "7"
@@ -87,7 +115,14 @@ class GodotEnv:
         self.connection = self._start_server()
         self.num_envs = None
         self.supports_agent_reset = False
+        self.supports_spawn_cells = False
+        self.supports_state_reset = False
         self.last_reset_agents: list[int] = []
+        self.last_reset_spawns: list[dict] = []
+        self.info_schema = 1
+        self.static_info: dict = {}
+        self.last_profile: dict = {}
+        self._spawn_cells: list[list[int]] = []
         self._handshake()
 
         # Action and observation spaces for each in-game agent/env/AIController (used only for multi-agent case with Rllib for now)
@@ -228,7 +263,7 @@ class GodotEnv:
         Returns:
             tuple: Tuple containing observation, reward, done flag, termination flag, and info.
         """
-        response = self._get_json_dict()
+        response = self._get_response()
         response["obs"] = self._process_obs(response["obs"])
 
         # Kept for backward compatibility if the plugin doesn't send info.
@@ -239,7 +274,7 @@ class GodotEnv:
             response["reward"],
             np.array(response["done"]).tolist(),
             np.array(response["done"]).tolist(),  # TODO update API to term, trunc
-            response.get("info", default_info),
+            self._decode_info(response.get("info", default_info)),
         )
 
     def _process_obs(self, response_obs: dict):
@@ -259,7 +294,79 @@ class GodotEnv:
 
         return response_obs
 
-    def reset(self, seed=None, agents: Optional[list[int]] = None):
+    def _apply_reset_info(self, response: dict) -> None:
+        """Cache per-episode spawn cells sent only on reset."""
+        reset_info = response.get("reset_info")
+        if not isinstance(reset_info, dict):
+            return
+        agents = reset_info.get("agents", [])
+        cells = reset_info.get("spawn_cell", [])
+        for position, agent in enumerate(agents):
+            try:
+                index = int(agent)
+            except (TypeError, ValueError):
+                continue
+            if position >= len(cells):
+                continue
+            cell = cells[position]
+            if (
+                isinstance(cell, (list, tuple))
+                and len(cell) == 2
+                and 0 <= index < len(self._spawn_cells)
+            ):
+                self._spawn_cells[index] = [int(cell[0]), int(cell[1])]
+
+    def _decode_info(self, info):
+        """Reconstruct the legacy per-agent info list from the columnar wire
+        format. Static fields and spawn cells are merged from env_info/reset
+        caches, so no information is dropped."""
+        if not isinstance(info, dict) or info.get("schema") != 2:
+            return info
+
+        count = len(info.get("run_time", []))
+        if len(self._spawn_cells) < count:
+            self._spawn_cells.extend(
+                [[-1, -1] for _ in range(count - len(self._spawn_cells))]
+            )
+        static = self.static_info
+        decoded: list[dict] = []
+        for index in range(count):
+            item = {
+                "global_position": info["global_position"][index],
+                "spawn_cell": self._spawn_cells[index],
+                "facing_direction": info["facing_direction"][index],
+                "state": info["state"][index],
+                "cell": info.get("cell", [[-1, -1]] * count)[index],
+                "velocity": info.get("velocity", [[0.0, 0.0]] * count)[index],
+                "on_floor": bool(info.get("on_floor", [False] * count)[index]),
+                "on_wall": bool(info.get("on_wall", [False] * count)[index]),
+                "perc_to_peak": float(info.get("perc_to_peak", [0.0] * count)[index]),
+                "powerup_count": int(info.get("powerup_count", [0] * count)[index]),
+                "run_active": bool(info.get("run_active", [False] * count)[index]),
+                "started_walking": bool(
+                    info.get("started_walking", [False] * count)[index]
+                ),
+                "obs_encoding": static.get("obs_encoding", "legacy"),
+                "obs_size": int(static.get("obs_size", 0)),
+                "distinct_cells_touched": info["distinct_cells_touched"][index],
+                "run_time": info["run_time"][index],
+                "best_run_time": info["best_run_time"][index],
+                "finished": bool(info["finished"][index]),
+                "deaths": int(info["deaths"][index]),
+                "efficiency": info["efficiency"][index],
+                "flow": info["flow"][index],
+            }
+            if "tile_names" in static:
+                item["tile_names"] = static["tile_names"]
+            decoded.append(item)
+        return decoded
+
+    def reset(
+        self,
+        seed=None,
+        agents: Optional[list[int]] = None,
+        spawns: Optional[list[dict]] = None,
+    ):
         """
         Reset the Godot environment.
 
@@ -269,6 +376,11 @@ class GodotEnv:
                 empty list resets all agents for backward compatibility. The
                 response always contains every agent's observation; the reset
                 subset is available as ``last_reset_agents``.
+            spawns: Optional entries ``{"agent": int, "cell": [x, y],
+                "facing": 1|-1}`` selecting clean standable checkpoints. Only
+                agents being reset may have a spawn entry; other agents use the
+                level's canonical start. Spawns are ignored (with a warning)
+                when the game does not advertise support.
 
         Returns:
             dict: The initial observation data.
@@ -284,17 +396,46 @@ class GodotEnv:
                     flush=True,
                 )
             message["agents"] = [int(index) for index in agents]
+
+        if spawns:
+            if not self.supports_spawn_cells:
+                print(
+                    "warning: game does not advertise spawn-cell reset; "
+                    "ignoring spawns",
+                    flush=True,
+                )
+            else:
+                message["spawns"] = [
+                    _normalise_spawn(entry) for entry in spawns
+                ]
+
         self._send_as_json(message)
-        response = self._get_json_dict()
+        response = self._get_response()
         response["obs"] = self._process_obs(response["obs"])
         assert response["type"] == "reset"
+        self._apply_reset_info(response)
         returned_agents = response.get("agents")
         if isinstance(returned_agents, list):
             self.last_reset_agents = [int(index) for index in returned_agents]
         else:
             self.last_reset_agents = list(range(self.num_envs))
+        returned_spawns = response.get("spawns")
+        if isinstance(returned_spawns, list):
+            self.last_reset_spawns = returned_spawns
+        elif isinstance(returned_spawns, dict):
+            self.last_reset_spawns = [
+                {**entry, "agent": int(agent)}
+                for agent, entry in returned_spawns.items()
+            ]
+        else:
+            self.last_reset_spawns = []
         obs = response["obs"]
-        return obs, [{}] * self.num_envs
+        infos = self._decode_info(response.get("info", []))
+        if not isinstance(infos, list):
+            infos = [{}] * self.num_envs
+        if not infos:
+            infos = [{}] * self.num_envs
+        return obs, infos
 
     def call(self, method):
         message = {
@@ -417,6 +558,15 @@ class GodotEnv:
         self.supports_agent_reset = bool(
             json_dict.get("supports_agent_reset", False)
         )
+        self.supports_spawn_cells = bool(
+            json_dict.get("supports_spawn_cells", False)
+        )
+        self.supports_state_reset = bool(
+            json_dict.get("supports_state_reset", False)
+        )
+        self.info_schema = int(json_dict.get("info_schema", 1))
+        self.static_info = dict(json_dict.get("static_info") or {})
+        self._spawn_cells = [[-1, -1] for _ in range(self.num_envs)]
 
         # actions can be "single" for a single action head
         # or "multi" for several outputeads
@@ -506,8 +656,36 @@ class GodotEnv:
         self._send_string(message_json)
 
     def _get_json_dict(self):
+        return self._get_response()
+
+    def _get_response(self):
         data = self._get_data()
-        return json.loads(data)
+        if data is None:
+            raise RuntimeError("Godot connection closed while reading a response")
+        if data[:1] == b"B":
+            response = self._decode_binary_response(data)
+        else:
+            response = json.loads(data.decode())
+        self.last_profile = response.get("profile", {})
+        return response
+
+    def _decode_binary_response(self, data: bytes) -> dict:
+        if len(data) < 5:
+            raise ValueError("truncated binary response")
+        header_size = int.from_bytes(data[1:5], "little")
+        header_start = 5
+        raw_start = header_start + header_size
+        header = json.loads(data[header_start:raw_start].decode())
+        count = int(header["obs_count"])
+        size = int(header["obs_size"])
+        values = np.frombuffer(data[raw_start:], dtype="<f4")
+        if values.size != count * size:
+            raise ValueError(
+                f"binary observation size mismatch: {values.size} != {count * size}"
+            )
+        values = values.reshape(count, size)
+        header["obs"] = [{"obs": values[index]} for index in range(count)]
+        return header
 
     def _get_obs(self):
         return self._get_data()
@@ -540,23 +718,22 @@ class GodotEnv:
             length = int.from_bytes(string_size_bytes, "little")
 
             # Receive the rest of the data
-            string_bytes: bytearray = bytearray()
+            payload: bytearray = bytearray()
             received_length = 0
 
             while received_length < length:
                 data = self.connection.recv(length - received_length)
                 received_length += len(data)
-                string_bytes.extend(data)
+                payload.extend(data)
 
-            string: str = string_bytes.decode()
-
-            return string
+            return bytes(payload)
         except socket.timeout as e:
             print("env timed out", e)
         return None
 
     def _send_string(self, string):
-        message = len(string).to_bytes(4, "little") + bytes(string.encode())
+        encoded = string.encode()
+        message = len(encoded).to_bytes(4, "little") + encoded
         self.connection.sendall(message)
 
     def _send_action(self, action):

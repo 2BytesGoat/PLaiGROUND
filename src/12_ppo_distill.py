@@ -211,7 +211,10 @@ def collect_level(
         log_path=str(log_path),
         env=isolated_home(args.output_dir, f"collect_{level}"),
         obs_encoding=args.obs_encoding,
-        emit_legacy_obs=teacher_uses_legacy,
+        emit_legacy_obs=(
+            teacher_uses_legacy
+            and args.obs_encoding != obs_spec.ENCODING_LEGACY
+        ),
     )
     try:
         obs, _ = env.reset()
@@ -223,7 +226,10 @@ def collect_level(
                     dtype=np.float32,
                 )
                 teacher_obs_np = student_obs_np
-                if teacher_uses_legacy:
+                if (
+                    teacher_uses_legacy
+                    and args.obs_encoding != obs_spec.ENCODING_LEGACY
+                ):
                     teacher_obs_np = np.asarray(
                         [obs[i]["legacy_obs"] for i in range(n)],
                         dtype=np.float32,
@@ -500,7 +506,10 @@ def dagger_collect(
         log_path=str(log_path),
         env=isolated_home(args.output_dir, f"dagger_{level}"),
         obs_encoding=args.obs_encoding,
-        emit_legacy_obs=teacher_uses_legacy,
+        emit_legacy_obs=(
+            teacher_uses_legacy
+            and args.obs_encoding != obs_spec.ENCODING_LEGACY
+        ),
     )
     try:
         obs, _ = env.reset()
@@ -512,7 +521,10 @@ def dagger_collect(
                     dtype=np.float32,
                 )
                 teacher_obs_np = student_obs_np
-                if teacher_uses_legacy:
+                if (
+                    teacher_uses_legacy
+                    and args.obs_encoding != obs_spec.ENCODING_LEGACY
+                ):
                     teacher_obs_np = np.asarray(
                         [obs[i]["legacy_obs"] for i in range(n)],
                         dtype=np.float32,
