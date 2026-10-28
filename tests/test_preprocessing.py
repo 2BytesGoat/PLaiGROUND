@@ -3,17 +3,10 @@
 from __future__ import annotations
 
 import pickle
-import sys
 import unittest
-from pathlib import Path
-
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-
-import obs_spec  # noqa: E402
-from preprocessing import build_lean_pipeline  # noqa: E402
+from plaiground.observations import build_lean_pipeline, spec as obs_spec
 
 
 def _lean() -> np.ndarray:

@@ -4,7 +4,7 @@ Status: **core implementation complete 2026-10-28; 1-1 smoke passed; validation/
 Started: 2026-10-28
 Last updated: 2026-10-28
 Levels: all; 1-1 first
-Driver: [`../../src/41_dqn_route_spawns.py`](../../src/41_dqn_route_spawns.py)
+Driver: [`../../scripts/reinforcement/02_dqn.py`](../../scripts/reinforcement/02_dqn.py)
 Decision record:
 [`../audit/2026-10-28-clean-start-state-capture.md`](../audit/2026-10-28-clean-start-state-capture.md)
 Related: [`dqn-route-spawns.md`](dqn-route-spawns.md),
@@ -295,7 +295,7 @@ blocks with the same message.
   `start_kind`.
 - `load_start_pool()`: preserve and validate the physical fields, `run_time`,
   held powerup IDs/stack, and `world_state`.
-- `src/41_dqn_route_spawns.py`:
+- `scripts/reinforcement/02_dqn.py`:
   - replace the 794 clean-start path with raw state;
   - extend extraction with route signatures, checkpoint snapshots, source
     times, and route-registry best-per-signature selection;

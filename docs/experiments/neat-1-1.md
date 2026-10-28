@@ -19,7 +19,7 @@ reference artifacts are in `runs/neat_1_1_8x24_archive/`; see
 
 ## How it works
 
-`src/07_neat_agent.py` uses the game's existing training environment:
+`scripts/genetic/01_neat.py` uses the game's existing training environment:
 
 - one Godot process runs `N` isolated agents
 - agent `i` is driven by NEAT genome `i`
@@ -65,7 +65,7 @@ python -m pip install neat-python
 From the `PLaiGROUND` repository:
 
 ```bash
-python src/07_neat_agent.py \
+python scripts/genetic/01_neat.py \
   --generations 20 \
   --population 32 \
   --max-steps 500 \
@@ -88,7 +88,7 @@ persistent log is useful.
 Play the best genome:
 
 ```bash
-python src/07_neat_agent.py \
+python scripts/genetic/01_neat.py \
   --play runs/neat_1_1/best_genome.pkl \
   --max-steps 600
 ```
@@ -101,7 +101,7 @@ Training can render every agent as a ghost in one shared scene:
 
 ```bash
 # Fresh population: 24 agents, 5 generations, 2x wall-clock speed
-python src/07_neat_agent.py \
+python scripts/genetic/01_neat.py \
   --generations 5 \
   --population 24 \
   --max-steps 400 \
@@ -109,7 +109,7 @@ python src/07_neat_agent.py \
   --show
 
 # Resume the trained 32-agent population (checkpoint from the result below)
-python src/07_neat_agent.py \
+python scripts/genetic/01_neat.py \
   --resume runs/neat_1_1/neat-checkpoint-20 \
   --generations 3 \
   --max-steps 400 \
@@ -127,13 +127,13 @@ Validation examples:
 
 ```bash
 # Same policy, different action cadence
-python src/07_neat_agent.py --play runs/neat_1_1/best_genome.pkl --action-repeat 2
+python scripts/genetic/01_neat.py --play runs/neat_1_1/best_genome.pkl --action-repeat 2
 
 # Same policy after a delayed first jump
-python src/07_neat_agent.py --play runs/neat_1_1/best_genome.pkl --start-delay 10
+python scripts/genetic/01_neat.py --play runs/neat_1_1/best_genome.pkl --start-delay 10
 
 # Held-out level sanity check (not used for selection)
-python src/07_neat_agent.py --play runs/neat_1_1/best_genome.pkl --level 1-3
+python scripts/genetic/01_neat.py --play runs/neat_1_1/best_genome.pkl --level 1-3
 ```
 
 Because the environment is deterministic, repeating the same command should
@@ -167,14 +167,14 @@ campaign solver.
 
 ## All campaign levels
 
-`src/08_neat_all_levels.py` trains one independent NEAT population per
+`scripts/genetic/02_neat_all_levels.py` trains one independent NEAT population per
 campaign level (`1-1` … `1-16`). Training is headless and can use one Godot /
 Python worker per port; checkpoints are saved every five generations. After
 training, each checkpoint is replayed for one generation with the window open,
 so the population's behaviour is visible as it evolved.
 
 ```bash
-.venv/bin/python src/08_neat_all_levels.py \
+.venv/bin/python scripts/genetic/02_neat_all_levels.py \
   --levels all \
   --population 100 \
   --generations 10 \

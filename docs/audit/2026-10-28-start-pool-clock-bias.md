@@ -2,12 +2,12 @@
 
 **Date:** 2026-10-28
 **Status:** investigation + design decision; no new training result.
-**Scope:** `src/10_ppo_pilot.py` start-pool resets, `src/34_make_ppo_start_pool.py`,
-`src/41_dqn_route_spawns.py`, the game reset/reward contract, and the PPO
+**Scope:** `scripts/reinforcement/01_ppo.py` start-pool resets, `tools/make_ppo_start_pool.py`,
+`scripts/reinforcement/02_dqn.py`, the game reset/reward contract, and the PPO
 754/794 results.
 **Game state at writing:** `../../dragon-jump-remaster` HEAD `360b055`
 (`idk anymore`), clean. PLaiGROUND HEAD `b9dd103` (`update docs`), with an
-uncommitted WIP in `src/41_dqn_route_spawns.py`.
+uncommitted WIP in `scripts/reinforcement/02_dqn.py`.
 
 > **2026-10-28 update:** the `time`/`time_speed` finish ratios described below
 > were replaced by the simplified fixed `+500` finish and clamped `gold_ratio`
@@ -70,7 +70,7 @@ validation. See
 
 ### 1.2 Wrapper path
 
-`SingleAgentGodotEnv.reset()` (`src/10_ppo_pilot.py:359`) samples a start by
+`SingleAgentGodotEnv.reset()` (`scripts/reinforcement/01_ppo.py:359`) samples a start by
 weight and branches in this order:
 
 1. `prefix_actions`: reset canonical, step the recorded actions, discard the
@@ -90,7 +90,7 @@ keeps weights, `prefix_actions`, and `cell`/`facing`. `build_vec_env()` uses
 
 The DQN driver currently loads the PPO module through `importlib` to reuse
 `SingleAgentGodotEnv`, `resolve_env_path()`, and `isolated_home()`
-(`src/41_dqn_route_spawns.py:37–47`). That coupling is known issue #7.
+(`scripts/reinforcement/02_dqn.py:37–47`). That coupling is known issue #7.
 
 ### 1.3 Reward contract
 
@@ -118,18 +118,18 @@ checkpoint under `runs/ppo_fresh_1_1_sensor_794/run_1m_resume400k/`).
 
 ### 1.5 Start-pool provenance
 
-`src/34_make_ppo_start_pool.py` builds:
+`tools/make_ppo_start_pool.py` builds:
 
 - one canonical entry;
-- medium/hard strata cells from `33_start_strata.py`;
+- medium/hard strata cells from `tools/start_strata.py`;
 - optional focus cells (one facing in train, the mirror held out);
 - prefix entries: 5–80% of a clean route's actions, replayed from canonical;
 - weights normalized to 1.0.
 
 ```text
 NEAT clean routes ─┐
-                   ├─▶ 34_make_ppo_start_pool.py ─▶ start_pool JSON
-33_start_strata ───┘                                  │
+                   ├─▶ tools/make_ppo_start_pool.py ─▶ start_pool JSON
+tools/start_strata.py ┘                               │
                                                       ├─ canonical
                                                       ├─ cell + facing
                                                       └─ prefix_actions
@@ -414,7 +414,7 @@ Caveats:
 6. **Log start metadata:** the multilevel `episodes.csv` has no `start_kind`;
    add it before the next long run.
 
-Operational note: `34_make_ppo_start_pool.py` writes
+Operational note: `tools/make_ppo_start_pool.py` writes
 `start_pool_summary.json` and `eval_starts_heldout.json` next to its
 `--output`. Use a new output directory when generating an experimental pool so
 the focus pool's sidecars are not overwritten.
@@ -432,11 +432,11 @@ the focus pool's sidecars are not overwritten.
 
 ## 9. References
 
-- `src/10_ppo_pilot.py` — `SingleAgentGodotEnv`, `load_start_pool`,
+- `scripts/reinforcement/01_ppo.py` — `SingleAgentGodotEnv`, `load_start_pool`,
   `build_vec_env`.
-- `src/34_make_ppo_start_pool.py` — pool construction.
-- `src/35_eval_ppo_strata.py` — persistent-env evaluation pattern.
-- `src/41_dqn_route_spawns.py` — DQN extractor/train/eval.
+- `tools/make_ppo_start_pool.py` — pool construction.
+- `scripts/evaluation/01_evaluate_strata.py` — persistent-env evaluation pattern.
+- `scripts/reinforcement/02_dqn.py` — DQN extractor/train/eval.
 - `../../dragon-jump-remaster/godot/src/player/controllers/player_ai_training_controller.gd`
   — reset and reward contract.
 - `../../dragon-jump-remaster/godot/src/level/level.gd` — flow field and

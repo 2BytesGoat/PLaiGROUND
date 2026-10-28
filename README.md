@@ -19,9 +19,11 @@ development/research repo, not part of the shipped game.
 ## Repository map
 
 ```text
-src/                 active drivers (see src/README.md)
-src/wrappers/        socket client, Gymnasium wrappers, SB3 VecEnv, encoders
-docs/                index, status, architecture, experiments, reference, audit
+src/plaiground/      importable training/data/evaluation package (see src/README.md)
+scripts/             thin baselines, genetic, supervised, reinforcement entry points
+tools/               route filtering, start-pool building, checks, reporting
+experiments/         committed experiment manifests and results
+docs/                index, status, architecture, reference, audit
 runs/                generated artifacts (gitignored)
 archive/             historical scripts/runs/docs (start at its README.md)
 environments/        game binary / macOS source shim (contents gitignored)
@@ -35,6 +37,7 @@ data/                small tutorial dataset
 |---|---|
 | See what is active and what has been verified | [`docs/status.md`](docs/status.md) |
 | Find a script or run artifact | [`src/README.md`](src/README.md) → [`docs/reference/run-artifacts.md`](docs/reference/run-artifacts.md) |
+| See what experiments exist and which game commit they used | [`experiments/README.md`](experiments/README.md) |
 | Understand the game ↔ Python protocol | [`docs/architecture.md`](docs/architecture.md) |
 | Read the DQN plan and review | [`docs/experiments/dqn-route-spawns.md`](docs/experiments/dqn-route-spawns.md) → [`docs/audit/2026-10-28-dqn-pipeline-review.md`](docs/audit/2026-10-28-dqn-pipeline-review.md) |
 | Read the PPO/distillation docs | [`docs/experiments/`](docs/experiments/) |
@@ -54,9 +57,9 @@ a container.
    python -m venv .venv
    source .venv/bin/activate        # Windows: .\.venv\Scripts\activate
    ```
-3. Install dependencies:
+3. Install the package and dependencies in editable mode:
    ```bash
-   python -m pip install -r requirements.txt
+   uv pip install --python .venv/bin/python -e .
    # or: python -m pip install poetry && poetry install
    ```
 4. Put the exported game binary in `environments/` (see `src/.config` for
@@ -91,13 +94,13 @@ crash. Prefer explicit CLI flags.
 Smoke test the game/socket setup:
 
 ```bash
-.venv/bin/python src/00_random_agent.py
+.venv/bin/python scripts/baselines/00_random.py
 ```
 
 NEAT, 1-1 (the current reference path uses the 8×24 persistent evaluator):
 
 ```bash
-.venv/bin/python src/07_neat_agent.py \
+.venv/bin/python scripts/genetic/01_neat.py \
   --generations 2 --population 192 --parallel 8 \
   --max-steps 150 --action-repeat 4 --speedup 8 \
   --record-paths \
@@ -107,7 +110,7 @@ NEAT, 1-1 (the current reference path uses the 8×24 persistent evaluator):
 PPO, 1-1:
 
 ```bash
-.venv/bin/python src/10_ppo_pilot.py \
+.venv/bin/python scripts/reinforcement/01_ppo.py \
   --level 1-1 --n-envs 8 --timesteps 100000 \
   --max-decisions 150 --action-repeat 4 --speedup 8 \
   --output-dir runs/ppo_1_1
@@ -117,9 +120,9 @@ DQN route-spawns (1-1):
 
 ```bash
 # The first extraction has not produced a pool yet; read the audit before running.
-.venv/bin/python src/41_dqn_route_spawns.py extract
-.venv/bin/python src/41_dqn_route_spawns.py train
-.venv/bin/python src/41_dqn_route_spawns.py eval
+.venv/bin/python scripts/reinforcement/02_dqn.py extract
+.venv/bin/python scripts/reinforcement/02_dqn.py train
+.venv/bin/python scripts/reinforcement/02_dqn.py eval
 ```
 
 ## Current results (selected)
@@ -139,7 +142,7 @@ These are baselines/reference results, not installed models. The game ships the
 
 ## Notebooks and tutorials
 
-`notebooks/` and `src/processing/` are the tutorial/notebook path (data
+`notebooks/` and `src/plaiground/legacy/src/plaiground/legacy/processing/` are the tutorial/notebook path (data
 exploration, decision trees, random forests, early neural nets). They are not
 the active training pipeline. The active scripts are in `src/` and documented in
 [`src/README.md`](src/README.md).

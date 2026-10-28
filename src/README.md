@@ -1,83 +1,64 @@
-# `src/` — script map
+# Source layout
 
-Active drivers are numbered. The numbering is historical; gaps are archived
-experiments. Run from the repository root with `.venv/bin/python`.
+`src/` is the installable Python package root. Entry points live outside it.
 
-## Active drivers
-
-| Script | Status | What it does | Typical entry point |
-|---|---|---|---|
-| `00_random_agent.py` | onboarding | Random-action smoke test through the legacy `StableBaselinesGodotEnv` path. Use it to verify the game/socket setup, not for training. | `.venv/bin/python src/00_random_agent.py` |
-| `07_neat_agent.py` | active | NEAT population trainer/evaluator. Uses one Godot process with N agents; fitness is the game reward. Supports resume, persistent evaluator, `--record-paths`, `--target-time`, `--min-clean-routes`, and play/visualise modes. With `--record-paths` it also captures per-checkpoint reset state + dynamic `world_state` for the clean-start pool. `--min-clean-routes` stops after that many unique clean route signatures have checkpoint snapshots. Training reset force-starts the run; the genome owns the first decision. | `... src/07_neat_agent.py --generations 80 --population 192 --parallel 8 --record-paths --min-clean-routes 450` |
-| `08_neat_all_levels.py` | available | Thin batch layer over `07`: one independent population per campaign level, then a visible checkpoint replay. | `... src/08_neat_all_levels.py --levels 1-1,1-2 --workers 2` |
-| `09_neat_lineage.py` | available | One population carried through levels in order, with zero-shot/post-stage evals and stage snapshots. | `... src/09_neat_lineage.py --levels all` |
-| `10_ppo_pilot.py` | active | The main PPO pipeline: multi-level, multi-agent/process, start pools, prefix replay, eval patience, 754/794 encodings, sensor expansion, frozen encoders, trajectory saving. ~83 KB monolith. | `... src/10_ppo_pilot.py --level 1-1 --n-envs 8 --timesteps 100000` |
-| `32_clean_archive_coverage.py` | active | Collapses NEAT finishers into clean routes, enumerates standable starts, runs top genomes from every start, writes coverage. | `... src/32_clean_archive_coverage.py` |
-| `33_start_strata.py` | active | Converts standable starts into canonical/medium/hard/easy strata by BFS distance. | `... src/33_start_strata.py --level 1-1` |
-| `34_make_ppo_start_pool.py` | legacy/reference | Builds weighted PPO start pools from strata + clean-route prefixes; optional focus cells. Not the clean-start path. | `... src/34_make_ppo_start_pool.py --level 1-1` |
-| `35_eval_ppo_strata.py` | active | Deterministic evaluation of a PPO model on canonical/medium/hard/focus starts. Reuses one env; this is the pattern DQN eval should follow. | `... src/35_eval_ppo_strata.py --model runs/.../best.zip` |
-| `36_episode_stats.py` | active | Summarises `episodes.csv` by start source; `--canonical-only` is the required speed view. | `... src/36_episode_stats.py runs/.../episodes.csv --canonical-only` |
-| `41_dqn_route_spawns.py` | **active, no result; clean-start core implemented** | Double DQN from NEAT clean-start states. Uses raw/lean state, source-checkpoint time, held powerups, and dynamic `world_state`; extracts one-pass checkpoint files from `07` and builds canonical 0.70 / state 0.30 pools. The 794 sensor + prefix pool is a historical baseline, not the clean-start target. Uses the simplified game-side reward (fixed 500 finish, clamped `gold_ratio` time term); reset force-starts the run. 1-1 raw smoke passed; lean driver wiring and full gates pending. | `... src/41_dqn_route_spawns.py --start-pool ... train` |
-| `42_filter_clean_routes.py` | **post-processing CLI** | Thin CLI over `postprocessing.route_filter`: filters clean NEAT routes after collection with exact dedupe, greedy Jaccard path clustering, per-cluster caps, and optional whole-cluster train/holdout split. Does not build state pools yet. | `... src/42_filter_clean_routes.py --routes .../clean_routes.json --output-dir .../filtered --holdout-fraction 0.25` |
-| `43_check_raw_obs.py` | **validation** | Runs one world with `obs_encoding=raw`, decodes the 342-value packet, and checks shapes, cell alignment, and `gold_ratio`/info agreement. | `... src/43_check_raw_obs.py --level 1-1 --steps 30` |
-
-## Shared modules
-
-| Path | Status | What it does |
-|---|---|---|
-| `obs_spec.py` | active | Python mirror of the game's observation schema; validates widths and labels fields. |
-| `wrappers/godot_env.py` | active | Low-level TCP client; launches the game, encodes reset/spawns/state, decodes the columnar info schema and binary observation frames. |
-| `wrappers/multi_agent_vec_env.py` | active | SB3 `VecEnv` for N agents in one Godot process, with per-agent auto-reset. |
-| `wrappers/legacy_autoencoder.py` | experimental | Frozen 7×7 grid autoencoder for the legacy 58 observation. |
-| `wrappers/legacy_grid_extractor.py` | experimental | Joint tile-embedding + CNN feature extractor for the legacy 58 observation. |
-| `wrappers/semantic_autoencoder.py` | experimental | Frozen semantic MAE for the 754 observation. |
-| `wrappers/stable_baselines_wrapper.py` | legacy | Older Gym wrapper used by `00_random_agent.py` / notebooks. Not used by active drivers. |
-| `preprocessing/` | active | Lean-only observation transforms: `StatePipeline`, `DecodeLeanState`, `LeanFeatures`, and `build_lean_pipeline()` for the 188-value game packet plus categorical one-hot. |
-| `models/` | active | Lean v1 architecture: `LeanMLP` (512 × 512), `build_lean_mlp()`, and `lean_policy_kwargs()` for SB3. |
-| `postprocessing/route_filter.py` | active | Pure clean-route post-processing: exact dedupe, greedy Jaccard path clustering, per-cluster caps, and whole-cluster train/holdout split. |
-| `utils.py` | legacy | `setup_environment()` for the legacy wrapper/notebook path. |
-| `processing/` | legacy | Notebook-era data processing/visualisation helpers. |
-
-## Archived drivers
-
-Historical scripts moved to
-`archive/2026-10-27-cleanup/src/` include:
-
-- `00_data_exploration.py`, `01_if_else_agent.py`, `02_record_gameplay.py`,
-  `03_decision_tree.py`, `04_random_forest.py`, `playground.py` — tutorials;
-- `11_ppo_lineage.py`, `12_ppo_distill.py`, `13_ppo_retrain_all.py`,
-  `14_select_teachers.py`, `15_recovery_test.py`, `16_ppo_seed_restarts.py`,
-  `17_multi_hot_teachers.py`, `18_state_size_matrix.py`,
-  `19_agent_topology_bench.py`, `20_train_all_levels_8x8.py`,
-  `21_curriculum_8x8.py` — old PPO lineage/teacher/topology/curriculum work;
-- `22_train_legacy_autoencoder.py`, `23_generate_level_windows.py`,
-  `24_train_semantic_autoencoder.py`, `25_train_semantic_head.py` — encoder
-  experiments (wrappers remain in `src/wrappers/`);
-- `30_trajectory_holdout.py` — full-state trajectory holdout; contains the
-  `state_from_info()` helper used by the state-snapshot path;
-- `38_self_distill.py`, `39_merge_distill.py`, `40_train_trajectories.py` —
-  distillation/merge/trajectory drivers.
-
-Do not edit archived scripts in place. Copy the file back to `src/` if you need
-it, and document why.
-
-## Tests
-
-```bash
-.venv/bin/python -m unittest discover -s tests
+```text
+scripts/        thin user-facing CLIs
+tools/          data/evaluation utilities
+src/plaiground/ importable library
+experiments/    committed experiment manifests and result notes
+runs/           generated artifacts (gitignored)
 ```
 
-Current coverage is the socket/info protocol, binary observation frame
-decoding, raw observation/reward constants, lean preprocessing, the lean MLP
-architecture, and clean-route filtering. Pool construction and end-to-end
-state-start evaluation still need integration tests.
+The package is installed editable once:
 
-## Adding a new experiment
+```bash
+uv pip install --python .venv/bin/python -e . --no-deps
+```
 
-1. Add `src/NN_<name>.py` with a module docstring that states the question,
-   level, observation, reward, and output directory.
-2. Reuse `GodotEnv` / `SingleAgentGodotEnv`; do not duplicate the socket client.
-3. Add `docs/experiments/<name>.md` with status, plan, command, and results.
-4. Add a row to this file and to `docs/index.md`; update `docs/status.md` when
-   it starts/produces a result.
-5. Keep generated output in `runs/<name>/`; do not commit it.
+## Package map
+
+| Path | Responsibility |
+|---|---|
+| `src/plaiground/envs/` | `GodotEnv`, Gymnasium/SB3 adapters, vector env, legacy wrapper. |
+| `src/plaiground/models/extractors/` | Frozen legacy grid/autoencoder feature extractors. |
+| `src/plaiground/observations/` | Observation contract (`spec.py`), lean decoder, sklearn-style preprocessing. |
+| `src/plaiground/data/` | Route filtering and clean-start pool construction. |
+| `src/plaiground/models/` | Model architectures (`LeanMLP`) and frozen legacy extractors. |
+| `src/plaiground/algorithms/genetic/` | NEAT population, all-level, and lineage trainers. |
+| `src/plaiground/algorithms/reinforcement/` | PPO and DQN trainers. |
+| `src/plaiground/algorithms/supervised/` | Reserved for behavior cloning, DAgger, and distillation workflows. |
+| `src/plaiground/evaluation/` | Canonical, start-pool, and strata evaluation. |
+| `src/plaiground/experiments/` | Experiment TOML loading and game/code provenance capture. |
+| `src/plaiground/legacy/` | Notebook/course compatibility path; not used by clean-start training. |
+
+## Entry points
+
+| Script | Purpose |
+|---|---|
+| `scripts/baselines/00_random.py` | Random-action smoke test. |
+| `scripts/baselines/01_heuristic.py` | Course-era if/else heuristic. |
+| `scripts/genetic/01_neat.py` | NEAT population train/evaluate/play. |
+| `scripts/genetic/02_neat_all_levels.py` | Independent population per level. |
+| `scripts/genetic/03_neat_lineage.py` | One population carried across levels. |
+| `scripts/reinforcement/01_ppo.py` | PPO train/evaluate. |
+| `scripts/reinforcement/02_dqn.py` | DQN extract/train/evaluate. |
+| `scripts/evaluation/01_evaluate_strata.py` | Strata evaluation. |
+| `tools/filter_routes.py` | Route dedupe/clustering/holdout split. |
+| `tools/build_start_pool.py` | Validated train/holdout start pools. |
+| `tools/check_observation.py` | Raw observation smoke check. |
+| `tools/summarize_episodes.py` | Episode CSV summaries. |
+| `tools/clean_archive_coverage.py` | Legacy start-cell coverage. |
+| `tools/start_strata.py` | Legacy start stratification. |
+| `tools/make_ppo_start_pool.py` | Legacy prefix/strata pool builder. |
+
+## Rules
+
+- Do not add new numbered scripts under `src/`.
+- Scripts are thin; reusable logic belongs in `src/plaiground/`.
+- New experiments go in `experiments/<id>_<name>/` with `README.md` and
+  `config.toml`; generated outputs go in `runs/`.
+- Every experiment records the game branch, commit, dirty state, and any dirty
+  diff needed to reproduce it.
+- Run tests with `.venv/bin/python -m unittest discover -s tests`.
+- Do not edit `archive/`; it is history.

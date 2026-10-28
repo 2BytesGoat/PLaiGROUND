@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 import unittest
-from pathlib import Path
-
 import torch
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from models import LeanMLP, build_lean_mlp, lean_policy_kwargs  # noqa: E402
+from plaiground.models import LeanMLP, build_lean_mlp, lean_policy_kwargs
 
 
 class LeanMLPTest(unittest.TestCase):

@@ -4,17 +4,11 @@ from __future__ import annotations
 
 import json
 import struct
-import sys
 import unittest
-from pathlib import Path
-
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from wrappers.godot_env import GodotEnv, _normalise_spawn  # noqa: E402
-from wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv  # noqa: E402
+from plaiground.envs.godot import GodotEnv, _normalise_spawn
+from plaiground.envs.stable_baselines_wrapper import StableBaselinesGodotEnv
 
 
 def _env() -> GodotEnv:

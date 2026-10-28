@@ -2,13 +2,11 @@
 
 **Updated:** 2026-10-28
 **Branch:** `neat`
-**HEAD:** `b9dd103` — `update docs`
-**Working tree:** docs pass, the clean-start state-capture decision, the
-clean-start plan, `src/obs_spec.py`, `src/43_check_raw_obs.py`,
-`src/07_neat_agent.py`, `src/10_ppo_pilot.py`, `src/41_dqn_route_spawns.py`,
-`src/postprocessing/`, `src/models/`, `src/42_filter_clean_routes.py`,
-`src/preprocessing/`, `src/wrappers/godot_env.py`, driver reward/start changes,
-and the reward contract are uncommitted.
+**HEAD:** `707b745` — `lean inputs`
+**Working tree:** the repository restructure (`src/plaiground/`, `scripts/`,
+`tools/`, `experiments/`, `Makefile`, package metadata), the clean-start plan
+and audits, the lean encoder, route filtering/start pools, reward/start
+changes, and the active PPO run docs are uncommitted.
 **Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `adb9278`
 `more state changes`; the raw/lean observation, force-start, reward,
 terminal-death, and clean-start world-state code is in HEAD; game docs are
@@ -21,6 +19,15 @@ not yet run.)
 > [`index.md`](index.md) win.
 
 ## Current focus
+
+**Repository restructure (2026-10-28).** The code is now split into an importable
+`src/plaiground/` package, thin `scripts/`, data/evaluation `tools/`, and
+committed `experiments/` manifests. The package is installed editable with
+`uv pip install --python .venv/bin/python -e . --no-deps`. The active 1M PPO run
+was started before the move and is continuing from its already-loaded process;
+new invocations use `scripts/reinforcement/01_ppo.py`. The old-to-new
+mapping and verification are in
+[`audit/2026-10-28-repository-restructure.md`](audit/2026-10-28-repository-restructure.md).
 
 **DQN route-spawns (2026-10-28, design pivoted).** The 794 `multi_hot_sensor`
 prefix run is now a historical baseline, not the clean-start target. The
@@ -36,25 +43,31 @@ pipeline review in
 and the clock-bias audit in
 [`audit/2026-10-28-start-pool-clock-bias.md`](audit/2026-10-28-start-pool-clock-bias.md).
 
-**PPO clean-start baseline (2026-10-28, planned).** A fresh 1-1 PPO policy
-will train for **1,000,000 environment timesteps** using the Godot **lean
-188-value** packet, Python one-hot/categorical preprocessing, the NEAT
-clean-start states, and a route-level holdout. It deliberately does **not** use
-794 or prefix replay. The budget
-matches the last 794 sensor PPO target: the old “900k” run was a checkpoint and
-resume extension, not 900k PPO updates; 1M timesteps is about 833 rollout
-updates with 8 envs × 150 steps. Training starts are canonical 0.70 / train
-state 0.30; held-out routes are excluded from training and evaluated separately.
-The collection target is 450 unique clean route signatures with checkpoint
-snapshots, treated as a reservoir rather than 450 independent route families.
-`07_neat_agent.py --min-clean-routes 450` now stops on that target.
-`src/postprocessing/route_filter.py` performs the post-collection path filter,
-with `42_filter_clean_routes.py` as its CLI: exact dedupe, greedy Jaccard
-clustering, per-cluster caps, and an optional whole-cluster train/holdout split. On the old 460-route archive at
-`jaccard=0.5, max-per-cluster=8`, it produced 113 clusters and 354 filtered
-routes; the current 8-route capture produced 6 clusters. Pool/evaluator
-integration is still pending. See
-[`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) and
+**PPO clean-start baseline (2026-10-28, running).** A fresh 1-1 PPO policy is
+training for **1,000,000 environment timesteps** in
+`runs/ppo_clean_start_1_1/` using the Godot **lean 188-value** packet, Python
+one-hot/categorical preprocessing (188 → 954), the NEAT clean-start states, and
+a route-cluster holdout. It deliberately does **not** use 794 or prefix replay.
+The budget matches the last 794 sensor PPO target: 1M timesteps is about 833
+rollout updates with 8 envs × 150 steps. Training starts are canonical
+0.70 / train state 0.30; holdout routes are excluded from training and evaluated
+separately.
+
+The collection run stopped at generation 25 with **452 unique clean routes**
+and 1,486 checkpoint files. Filtering at `jaccard=0.5`, `max-per-cluster=8`, and
+`holdout-fraction=0.25` produced **95 clusters / 216 routes**: 158 train and 58
+holdout routes. Checkpoint expansion through the grounded/state/time-to-exit
+gates produced only **13 train states and 10 holdout states** because most
+snapshots are mid-air. All 10 holdout state keys also occur on train routes, so
+this is a route-cluster split, not a state-unseen holdout.
+
+`src/plaiground/data/route_filter.py` + `tools/filter_routes.py` perform the
+path filter; `src/plaiground/data/start_pool.py` +
+`tools/build_start_pool.py` build the train/holdout pools. `scripts/reinforcement/01_ppo.py`
+now accepts `--obs-encoding lean --preprocessing lean`, saves the fitted
+pipeline with the run, and applies it in canonical and start-pool evaluation.
+See [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/),
+[`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md), and
 [`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md).
 
 **Clean-start implementation (2026-10-28).** The one-dict reset, dynamic
@@ -62,12 +75,12 @@ integration is still pending. See
 implemented. The game now exposes `Level.capture_world_state()` /
 `restore_world_state()`, `Powerup.hold()`/`apply_state()`,
 `Player.restore_powerup()`, and an on-demand `info_request` / `world_state`
-block. `07_neat_agent.py` records checkpoint snapshots + world state during the
-population; `32_clean_archive_coverage.py` preserves the checkpoint file;
-`41_dqn_route_spawns.py` builds the canonical 0.70 / state 0.30 pool without
+block. `scripts/genetic/01_neat.py` records checkpoint snapshots + world state during the
+population; `tools/clean_archive_coverage.py` preserves the checkpoint file;
+`scripts/reinforcement/02_dqn.py` builds the canonical 0.70 / state 0.30 pool without
 replay when checkpoints exist. Validation so far: game AI suite 37/37,
 training reset/spawn suites 9/9 (the visuals test requires a truly headless
-GdUnit runner), Python suite 23/23, a 192-agent NEAT evaluation produced
+GdUnit runner), Python suite 28/28, a 192-agent NEAT evaluation produced
 87 finishes and 87 checkpoint files, and a raw-state 1-1 DQN smoke trained from
 the resulting 10-state pool. Training quality/promotion is still pending. See
 [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
@@ -90,17 +103,17 @@ of the old normalized run clock. Godot normalizes units; Python builds the
 feature encoding. The 794 sensor path is unchanged but is not the clean-start
 target. The one-dict reset, dynamic `world_state` snapshot, held-powerup
 restore, and NEAT validation are implemented; the raw 342-value clean-start
-state trains end-to-end. [`src/preprocessing/`](../src/preprocessing/) now
+state trains end-to-end. [`src/plaiground/observations/`](../src/plaiground/observations/) now
 provides the lean-only `StatePipeline` path: `DecodeLeanState` and
 `LeanFeatures` for the game's 188-value packet. Godot emits 49 primary tile IDs
 + 49 rotations + 49 signed phases + 9 player + 24 collision + 8 flow; Python
 one-hots tile IDs, `state_id`, powerup slots, and collision types, so the model
 width is vocabulary-dependent. Game-side primary-symbol priority is implemented;
 card respawn and moving-platform phase are still pending. The lean v1 baseline
-uses Python one-hot features with the declared `src/models/LeanMLP` 512 × 512
-architecture and `lean_policy_kwargs()`; there is no custom extractor. The
-preprocessing package is not wired into the drivers;
-the drivers remain on the 342-value raw identity path.
+uses Python one-hot features with the declared `src/plaiground/models/mlp.py` `LeanMLP` 512 × 512
+architecture and `lean_policy_kwargs()`; there is no custom extractor. The lean path is wired
+into `scripts/reinforcement/01_ppo.py`; the game-side raw 342 encoding remains
+available for diagnostics, not as the active preprocessing path.
 See
 [`audit/2026-10-28-raw-state-observation-decision.md`](audit/2026-10-28-raw-state-observation-decision.md),
 [`audit/2026-10-28-lean-state-encoding.md`](audit/2026-10-28-lean-state-encoding.md),
@@ -161,7 +174,7 @@ re-measured here.
 
 ## DQN status (2026-10-28)
 
-- `src/41_dqn_route_spawns.py` supports `extract`, `train`, `eval`, and `all`,
+- `scripts/reinforcement/02_dqn.py` supports `extract`, `train`, `eval`, and `all`,
   plus start pools, 794 `multi_hot_sensor`, 512×512, `SubprocVecEnv`, and
   batched eval. The 794 path is a legacy baseline; the clean-start target is
   raw state. The 58-value cell extractor is archived/fallback only.
@@ -195,12 +208,11 @@ re-measured here.
    [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
    and [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md).
    Do not start with cell-only spawns or 794.
-4. **Run the PPO clean-start baseline.** Collect 450 unique clean routes with
-   checkpoint snapshots, filter them with `42_filter_clean_routes.py`, then
-   wire `--preprocessing lean` into `10`, add the route-level train/holdout
-   pool and `--eval-start-pool` evaluation, and train 1-1 for 1M timesteps.
-   Evaluate canonical, seen train states, and unseen holdout states separately;
-   select by holdout median with a canonical gate. See
+4. **Finish the PPO clean-start baseline.** The 1M-timestep run is active in
+   `runs/ppo_clean_start_1_1/`. After it finishes, inspect the 100k–1M
+   checkpoints on canonical, train, and holdout pools; select by holdout median
+   with a canonical gate. Treat the current holdout as route-cluster-only, not
+   state-unseen, because its 10 state keys also occur on train routes. See
    [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md).
 5. **Smoke the new reward/start/death contract.** The 10k 794/prefix DQN smoke
    and 42/44 legacy strata eval validate the shipped reset/reward/death paths,
@@ -221,4 +233,4 @@ See [`known-issues.md`](known-issues.md) for the living list. The highest-impact
 current items are clean-start validation/holdout coverage, the one-tick reset
 clock drift, the all-or-nothing extraction, the checkpoint-vs-route holdout
 ambiguity, per-spawn evaluation startup cost, and the coupling of
-`41_dqn_route_spawns.py` to the 83 KB `10_ppo_pilot.py`.
+`scripts/reinforcement/02_dqn.py` to the 83 KB `scripts/reinforcement/01_ppo.py`.

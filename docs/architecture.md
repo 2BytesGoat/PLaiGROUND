@@ -9,11 +9,13 @@ layered. For game-side behavior, the source of truth is the game vault:
 
 ```text
 dragon-jump-remaster/          PLaiGROUND/
-  godot/                         src/            Python drivers
-    src/training/                src/wrappers/   socket + Gymnasium + SB3
-    src/player/controllers/      docs/           this documentation
-    ...                          runs/           generated artifacts
-  docs/                          environments/   game binary / macOS shim
+  godot/                         src/plaiground/  importable Python package
+    src/training/                scripts/        thin training/eval entry points
+    src/player/controllers/      tools/          data/eval utilities
+    ...                          experiments/    committed manifests/results
+  docs/                          docs/           architecture + contracts + audits
+                                 runs/           generated artifacts
+                                 environments/   game binary / macOS shim
 ```
 
 The game owns the simulation, observation construction, reward, and reset
@@ -28,7 +30,7 @@ Godot training scene
         │
   PlayerAITrainingController.get_obs() / get_reward() / get_done()
         │
-  synchronizer.gd  ── TCP JSON ──▶  wrappers/godot_env.py (GodotEnv)
+  synchronizer.gd  ── TCP JSON ──▶  src/plaiground/envs/godot.py (GodotEnv)
                                          │
                     ┌────────────────────┴─────────────────────┐
                     │                                          │
@@ -41,8 +43,9 @@ Godot training scene
 - **`GodotEnv`** is the low-level client. It launches the game process, opens a
   socket, sends `reset`/`step`/`call` messages, and decodes observations and
   info. It can host multiple agents (NEAT, 100-agent evaluation).
-- **`SingleAgentGodotEnv`** exposes one training world as a Gymnasium
-  environment for SB3. It owns the start pool, the optional reset-time start
+- **`SingleAgentGodotEnv`** lives in
+  `src/plaiground/envs/single_agent.py` and exposes one training
+  world as a Gymnasium environment for SB3. It owns the start pool, the optional reset-time start
   jump, observation dropout, optional trajectory saving, and the 5-tuple
   `terminated/truncated` contract. Start-pool entries can be canonical, a
   cell+facing teleport, a NEAT-prefix replay, or a full state snapshot. Only
@@ -57,10 +60,10 @@ Godot training scene
 
 | Family | Driver(s) | What it learns | Action source |
 |---|---|---|---|
-| NEAT | `07_neat_agent.py`, `08_neat_all_levels.py`, `09_neat_lineage.py` | Population of small networks; fitness = game reward | Genome per agent |
-| PPO | `10_ppo_pilot.py` | One shared policy; on-policy | Policy |
+| NEAT | `scripts/genetic/01_neat.py`, `scripts/genetic/02_neat_all_levels.py`, `scripts/genetic/03_neat_lineage.py` | Population of small networks; fitness = game reward | Genome per agent |
+| PPO | `scripts/reinforcement/01_ppo.py` | One shared policy; on-policy | Policy |
 | Distillation / DAgger | archived `12_ppo_distill.py`; deployed student | Supervised student from teacher probabilities/actions | Teacher labels |
-| DQN | `41_dqn_route_spawns.py` | One shared Q-network; off-policy replay | Epsilon-greedy policy |
+| DQN | `scripts/reinforcement/02_dqn.py` | One shared Q-network; off-policy replay | Epsilon-greedy policy |
 
 NEAT evaluates a whole population in one process and uses the game reward
 directly. PPO uses one process per world (or N agents/process) and SB3's
@@ -70,7 +73,7 @@ reward. DQN is the newest branch and has no result yet.
 ## Observation contracts
 
 The game emits a flat float vector. PLaiGROUND mirrors the schema in
-`src/obs_spec.py`; the game owns the canonical definition in
+`src/plaiground/observations/spec.py`; the game owns the canonical definition in
 `godot/src/ai/ai_observation_spec.gd`.
 
 | Encoding | Size | Used by | Notes |
@@ -190,8 +193,8 @@ inventory and what to open first.
 | Change | Location |
 |---|---|
 | New training algorithm / driver | add `src/NN_name.py`, document in `docs/experiments/`, update `src/README.md` + `docs/status.md` |
-| Socket protocol / info decoding | `src/wrappers/godot_env.py` + `tests/test_info_protocol.py` |
-| Observation schema mirror | `src/obs_spec.py` (and the game's `AIObservationSpec` on the game side) |
+| Socket protocol / info decoding | `src/plaiground/envs/godot.py` + `tests/test_info_protocol.py` |
+| Observation schema mirror | `src/plaiground/observations/spec.py` (and the game's `AIObservationSpec` on the game side) |
 | Reward/observation behavior | game repo, not here; update the game vault and this repo's reference docs |
-| Run evaluation | reuse `src/35_eval_ppo_strata.py` patterns; do not launch one process per spawn |
+| Run evaluation | reuse `scripts/evaluation/01_evaluate_strata.py` patterns; do not launch one process per spawn |
 | Deployed model | export JSON from the student checkpoint; install in the game only after the gate |

@@ -1,13 +1,13 @@
 # PPO clean-start on 1-1
 
-Status: **planned; route filter and lean encoder implemented; no run yet**
+Status: **active; 1M training run started 2026-10-28**
 Started: 2026-10-28
 Last updated: 2026-10-28
 Level: 1-1 only
-Driver: [`../../src/10_ppo_pilot.py`](../../src/10_ppo_pilot.py)
-Preprocessing: [`../../src/preprocessing/`](../../src/preprocessing/)
-Route filter: [`../../src/postprocessing/route_filter.py`](../../src/postprocessing/route_filter.py)
-Route filter CLI: [`../../src/42_filter_clean_routes.py`](../../src/42_filter_clean_routes.py)
+Driver: [`../../scripts/reinforcement/01_ppo.py`](../../scripts/reinforcement/01_ppo.py)
+Preprocessing: [`../../src/plaiground/observations/`](../../src/plaiground/observations/)
+Route filter: [`../../src/plaiground/data/route_filter.py`](../../src/plaiground/data/route_filter.py)
+Route filter CLI: [`../../tools/filter_routes.py`](../../tools/filter_routes.py)
 Input decision: [`../audit/2026-10-28-raw-state-observation-decision.md`](../audit/2026-10-28-raw-state-observation-decision.md)
 Lean decision: [`../audit/2026-10-28-lean-state-encoding.md`](../audit/2026-10-28-lean-state-encoding.md)
 Start/reset contract: [`../audit/2026-10-28-clean-start-state-capture.md`](../audit/2026-10-28-clean-start-state-capture.md)
@@ -35,7 +35,7 @@ Previous PPO lineage: [`ppo-pilot.md`](ppo-pilot.md)
 > **Route decision.** The NEAT collection target is **450 unique clean route
 > signatures with checkpoint snapshots**. That is a reservoir, not a claim of
 > 450 independent route families. Path near-duplicates are filtered **after
-> collection** with `42_filter_clean_routes.py`: greedy Jaccard clustering,
+> collection** with `tools/filter_routes.py`: greedy Jaccard clustering,
 > a per-cluster cap, and an optional whole-cluster train/holdout split. If the
 > map yields only one route cluster, use a time/cell holdout and label it
 > accordingly; do not force 450 clusters.
@@ -108,10 +108,32 @@ The real collection target is **450 unique clean route signatures with
 checkpoint snapshots**. The old 8×24 archive shows that this is a realistic
 volume: it crossed 450 at generation 53 and collected 460 by generation 65.
 
+The current run (`runs/neat_clean_450/`) stopped on the target at generation
+25 with **452 unique clean routes**, 1,486 checkpoint files, and 2.4 s wall time
+for collection. Filtering at `jaccard=0.5`, `max_per_cluster=8`, and
+`holdout_fraction=0.25` produced:
+
+```text
+95 clusters
+216 selected routes
+158 train routes / 58 holdout routes
+```
+
+Expanding the selected checkpoint files through the grounded `Idle`/`Move`,
+`run_time > 0.02`, and `time_to_exit >= 0.5` gates produced only:
+
+```text
+13 train states
+10 holdout states
+```
+
+Most snapshots are mid-air. All 10 holdout state keys also occur on train
+routes, so this is a route-cluster split, not a state-unseen holdout.
+
 Collect with the same 8×24 shape and stop on the route target:
 
 ```bash
-.venv/bin/python src/07_neat_agent.py \
+.venv/bin/python scripts/genetic/01_neat.py \
   --level 1-1 \
   --population 192 \
   --parallel 8 \
@@ -145,9 +167,9 @@ variants as independent data.
 Filter paths **after collection**, before expanding checkpoint snapshots:
 
 ```bash
-.venv/bin/python src/42_filter_clean_routes.py \
-  --routes runs/<neat-run>/clean/clean_routes.json \
-  --output-dir runs/<neat-run>/filtered \
+.venv/bin/python tools/filter_routes.py \
+  --routes runs/neat_clean_450/archive/routes.json \
+  --output-dir runs/neat_clean_450/filtered \
   --jaccard 0.5 \
   --max-per-cluster 8 \
   --holdout-fraction 0.25 \
@@ -175,6 +197,20 @@ The route filter is implemented; the pool extractor and PPO evaluator still
 need to consume its filtered route files and preserve the cluster split.
 
 Then expand checkpoint snapshots from the selected routes:
+
+```bash
+.venv/bin/python tools/build_start_pool.py \
+  --filtered-dir runs/neat_clean_450/filtered \
+  --archive-dir runs/neat_clean_450/archive \
+  --analysis /Users/giani.statie/personal/dragon-jump-remaster/runs/level_analysis/1-1.json \
+  --output-dir runs/neat_clean_450/pool \
+  --level 1-1 \
+  --min-time-to-exit 0.5 \
+  --canonical-weight 0.70 \
+  --state-weight 0.30
+```
+
+The extractor:
 
 - no holdout route states in the training pool;
 - no global `(cell, facing)` dedupe that leaks holdout routes into training;
@@ -231,10 +267,10 @@ Per-cell phase:
  0.0   transition boundary
 ```
 
-The lean encoder is implemented in `src/preprocessing/lean.py`:
+The lean encoder is implemented in `src/plaiground/observations/lean.py`:
 
 ```python
-from preprocessing import build_lean_pipeline
+from plaiground.observations import build_lean_pipeline
 
 pre = build_lean_pipeline(tile_names=game_tile_names)
 model_x = pre.fit_transform(lean_batch)
@@ -243,38 +279,39 @@ assert pre.output_size > 188
 ```
 
 The baseline model is intentionally simple: Python one-hot features feed the
-declared `src/models/LeanMLP` with `512 × 512` hidden layers. `lean_policy_kwargs()`
+declared `src/plaiground/models/mlp.py` with `512 × 512` hidden layers. `lean_policy_kwargs()`
 provides the matching SB3 policy configuration. No custom embedding extractor is
 used.
 
-Current limitations before training:
+Current limitations:
 
 - `Level.get_primary_symbol()` implements the terrain → secret → object/static
   priority, but cards/pickups still default to `phase=+1`;
 - card/pickup respawn phase and moving-platform phase are not exposed yet;
-- rotation currently covers bounce orientation;
-- the PPO/DQN driver does not yet expose `--preprocessing lean`.
+- rotation currently covers bounce orientation.
 
-The preprocessor must be saved with the run so evaluation and play use the same
-transform.
+`scripts/reinforcement/01_ppo.py` now accepts `--obs-encoding lean --preprocessing lean`, fits
+the pipeline from the game's advertised 15-tile vocabulary, and saves it as
+`preprocessing.pkl` / `preprocessing.json` in the run directory. Evaluation
+loads the same pipeline and transforms both canonical and start-pool
+observations.
 
-The raw 342 `features` preset remains available as a fallback/reference, but it
-is not the target input.
+The game-side raw 342 encoding remains available for diagnostics/comparison,
+but the Python preprocessing package is lean-only and raw is not the target
+input.
 
 ## 6. Training plan
 
-Match the last 1M run's control cadence and PPO shape. This is the target
-command; `10_ppo_pilot.py` does not accept Lean's `--obs-encoding lean` /
-`--preprocessing lean` flags until the driver wiring in §8 is complete.
+Match the last 1M run's control cadence and PPO shape. The active run uses:
 
 ```bash
-.venv/bin/python src/10_ppo_pilot.py \
+.venv/bin/python scripts/reinforcement/01_ppo.py \
   --level 1-1 \
   --n-envs 8 \
   --timesteps 1000000 \
   --obs-encoding lean \
   --preprocessing lean \
-  --start-pool runs/ppo_clean_start_1_1/pool/train_start_pool.json \
+  --start-pool runs/neat_clean_450/pool/train_start_pool.json \
   --action-repeat 4 \
   --max-decisions 150 \
   --n-steps 150 \
@@ -285,6 +322,8 @@ command; `10_ppo_pilot.py` does not accept Lean's `--obs-encoding lean` /
   --save-freq 100000 \
   --eval-every 0 \
   --patience 0 \
+  --eval-start-pool runs/neat_clean_450/pool/train_start_pool.json \
+  --eval-start-pool runs/neat_clean_450/pool/holdout_start_pool.json \
   --output-dir runs/ppo_clean_start_1_1
 ```
 
@@ -332,55 +371,45 @@ Evaluate every checkpoint from 100k through 1M with the deterministic policy:
 
 A checkpoint that is fast only on seen training states is not a valid result.
 
-## 8. Code changes required before launch
+## 8. Implementation status
 
-- lean preprocessing (**implemented**):
+Implemented:
+
+- lean preprocessing:
   - Godot emits 49 IDs + 49 rotations + 49 signed phases + 9 player +
     collisions + flow = 188;
-  - `preprocessing/lean.py` decodes and one-hots tile IDs, `state_id`,
+  - `src/plaiground/observations/lean.py` decodes and one-hots tile IDs, `state_id`,
     powerup slots, and collision types;
-  - `build_lean_pipeline(tile_names=...)` returns the model input;
-  - tests cover 188 decode, one-hot shape, and categorical values;
-  - card/object phase and moving-platform coverage are pending.
-- `10_ppo_pilot.py` (**remaining**):
-  - add `--preprocessing {raw,features,lean}`;
-  - construct/fit the preprocessor and pass it to `SingleAgentGodotEnv`;
-  - apply it in evaluation too;
-  - save the preprocessor config/pipeline in the run directory;
-  - add an eval start-pool argument and evaluate canonical + state starts;
-  - ensure `EvalPatienceCallback` denominators use the actual eval-pool size
-    if intermediate evaluation is enabled later.
-- `SingleAgentGodotEnv` (**remaining**):
-  - accept a preprocessor;
-  - apply it in `_obs()`;
-  - set `observation_space` from `preprocessor.output_size`.
-- route post-processing (**implemented**):
-  - `postprocessing/route_filter.py` clusters near-duplicate paths;
-  - `42_filter_clean_routes.py` is the thin CLI;
+  - `build_lean_pipeline(tile_names=...)` returns the model input.
+- `scripts/reinforcement/01_ppo.py`:
+  - `--obs-encoding lean --preprocessing lean`;
+  - fits the pipeline from the game's advertised tile vocabulary;
+  - passes it through `SingleAgentGodotEnv`;
+  - applies it in canonical and start-pool evaluation;
+  - saves `preprocessing.pkl` and `preprocessing.json`;
+  - `--eval-start-pool` evaluates every state start in one multi-agent world.
+- route post-processing:
+  - `src/plaiground/data/route_filter.py` clusters near-duplicate paths;
+  - `tools/filter_routes.py` is the thin CLI;
   - caps routes per cluster;
-  - optionally splits whole clusters into train/holdout route files;
-  - tests cover exact dedupe, cluster caps, disjoint split, and output.
-- clean-start extractor (**remaining integration**):
-  - consume `filtered/filtered_clean_routes.json` or the train/holdout route files;
-  - preserve the cluster split while expanding checkpoint snapshots;
-  - build train/holdout pool files;
-  - no holdout leakage;
-  - validate state starts and `world_state`.
-- evaluation:
-  - apply the same preprocessor;
-  - send state resets, not just cells;
-  - report canonical and state groups separately.
-- game observation (**pending for full lean parity**):
-  - expose an explicit primary symbol (terrain → secret → object/static);
-  - expose generic object `rotation` and signed `phase`, including card respawn.
-- tests:
-  - preprocessing parity/round-trip;
-  - lean shape/phase semantics;
-  - route filtering/cluster split;
-  - state start + preprocessor observation shape;
-  - train/holdout disjoint routes;
-  - eval state reset `spawn_ok`;
-  - final metrics by start kind.
+  - splits whole clusters into train/holdout route files.
+- clean-start extractor:
+  - `src/plaiground/data/start_pool.py` + `tools/build_start_pool.py`;
+  - consumes the train/holdout route files;
+  - expands checkpoint snapshots;
+  - validates grounded `Idle`/`Move`, source time, powerup/world-state, and
+    `time_to_exit`;
+  - writes train/holdout start pools with the canonical 0.70 / state 0.30 split.
+- tests: preprocessing, lean shape/one-hot, route filtering/cluster split, and
+  start-pool construction.
+
+Remaining gaps:
+
+- card/pickup respawn phase and moving-platform phase are not exposed;
+- the current route split has no state-unseen holdout: all 10 holdout state keys
+  also occur in train routes;
+- full clean-start validation on 1-8+ powerup routes and in-game promotion
+  gates are still pending.
 
 ## 9. Acceptance and reporting
 
@@ -400,6 +429,7 @@ This run is a smoke-to-real baseline, not a game install:
 - [`../status.md`](../status.md)
 - [`ppo-pilot.md`](ppo-pilot.md)
 - [`dqn-clean-start.md`](dqn-clean-start.md)
+- [`../audit/2026-10-28-clean-route-filter-and-lean-ppo.md`](../audit/2026-10-28-clean-route-filter-and-lean-ppo.md)
 - [`../audit/2026-10-28-clean-route-reservoir.md`](../audit/2026-10-28-clean-route-reservoir.md)
 - [`../audit/2026-10-28-clean-start-state-capture.md`](../audit/2026-10-28-clean-start-state-capture.md)
 - [`../audit/2026-10-28-raw-state-observation-decision.md`](../audit/2026-10-28-raw-state-observation-decision.md)

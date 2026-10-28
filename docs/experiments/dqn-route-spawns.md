@@ -4,7 +4,7 @@ Status: **historical 794/prefix path — no result; clean-start uses raw state**
 Started: 2026-10-28
 Last updated: 2026-10-28
 First level: 1-1
-Driver: [`../../src/41_dqn_route_spawns.py`](../../src/41_dqn_route_spawns.py)
+Driver: [`../../scripts/reinforcement/02_dqn.py`](../../scripts/reinforcement/02_dqn.py)
 Detailed review: [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10-28-dqn-pipeline-review.md)
 Clock-bias audit: [`../audit/2026-10-28-start-pool-clock-bias.md`](../audit/2026-10-28-start-pool-clock-bias.md)
 
@@ -104,13 +104,13 @@ Fallback: 58 observations → 256 → 256 → 2. Action repeat: 4 physics frames
 ```bash
 # Clock-safe pool: canonical + prefix; the 0-weight cell entries are dropped
 # by PPO.load_start_pool, leaving 151 effective starts.
-.venv/bin/python src/34_make_ppo_start_pool.py --level 1-1 \
+.venv/bin/python tools/make_ppo_start_pool.py --level 1-1 \
   --canonical-weight 0.7 --medium-weight 0 --hard-weight 0 \
   --prefix-weight 0.3 --prefix-count 150 --seed 42 \
   --output runs/neat_1_1_8x24_archive/ppo_clock_safe/start_pool.json
 
 # Smoke: 1 env, 10k steps, no patience.
-.venv/bin/python src/41_dqn_route_spawns.py \
+.venv/bin/python scripts/reinforcement/02_dqn.py \
   --run-dir runs/dqn_startpool_1_1_smoke \
   --start-pool runs/neat_1_1_8x24_archive/ppo_clock_safe/start_pool.json \
   --obs-encoding multi_hot_sensor --net-arch 512 512 \
@@ -118,7 +118,7 @@ Fallback: 58 observations → 256 → 256 → 2. Action repeat: 4 physics frames
   --eval-every 0 --patience 0 train
 
 # Full run: 4 envs, 200k steps, checkpoints every 25k.
-.venv/bin/python src/41_dqn_route_spawns.py \
+.venv/bin/python scripts/reinforcement/02_dqn.py \
   --run-dir runs/dqn_startpool_1_1 \
   --start-pool runs/neat_1_1_8x24_archive/ppo_clock_safe/start_pool.json \
   --obs-encoding multi_hot_sensor --net-arch 512 512 \
@@ -126,7 +126,7 @@ Fallback: 58 observations → 256 → 256 → 2. Action repeat: 4 physics frames
   --eval-every 25000 --patience 0 train
 
 # Evaluate the final model on canonical + strata starts.
-.venv/bin/python src/41_dqn_route_spawns.py \
+.venv/bin/python scripts/reinforcement/02_dqn.py \
   --run-dir runs/dqn_startpool_1_1 \
   --obs-encoding multi_hot_sensor --net-arch 512 512 \
   --eval-tag final eval

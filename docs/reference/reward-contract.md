@@ -148,5 +148,5 @@ penalty; otherwise dying early can become better than timing out.
 
 - `godot/tests/ai/test_ai_training_reward.gd` pins force-start, fixed finish,
   gold-ratio clamping, the per-second time term, and terminal death.
-- `src/43_check_raw_obs.py` checks the raw observation/info `gold_ratio`
+- `tools/check_observation.py` checks the raw observation/info `gold_ratio`
   agreement and the 342-value layout.

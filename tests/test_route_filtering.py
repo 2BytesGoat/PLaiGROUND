@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from postprocessing import route_filter  # noqa: E402
+from plaiground.data import route_filter
 
 
 def make_route(
@@ -33,6 +29,24 @@ def make_route(
 
 
 class CleanRouteFilterTest(unittest.TestCase):
+    def test_mapping_keys_become_route_signatures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "routes.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "mapped-signature": {
+                            "run_time": 2.0,
+                            "path_cells": [[0, 0], [1, 0]],
+                            "clean": True,
+                            "checkpoint_file": "checkpoints/a.json",
+                        }
+                    }
+                )
+            )
+            routes = route_filter.load_routes(path)
+        self.assertEqual(routes[0]["route_signature"], "mapped-signature")
+
     def test_exact_duplicates_keep_fastest_signature(self) -> None:
         slow = make_route("same", [[0, 0], [1, 0], [2, 0]], 2.5)
         fast = make_route("same", [[0, 0], [1, 0], [2, 0]], 2.0)

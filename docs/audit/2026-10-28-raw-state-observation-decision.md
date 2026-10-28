@@ -196,7 +196,7 @@ Implemented:
 - `_get_raw_flow_deltas()` returns `(flow[neighbor] - flow[player]) / 4`,
   clamped to [-1, 1].
 - `obs_spec.decode_raw()` decodes the flat vector.
-- `src/43_check_raw_obs.py` validation script.
+- `tools/check_observation.py` validation script.
 - `_register_agent()` split out of `_ensure_sensor()` so raw/legacy controllers
   join the `AGENT` group without instantiating the 20-ray sensor.
 
@@ -218,7 +218,7 @@ Implemented after this note:
 - `BouncePad.get_ai_state()` and `DisolveBlock.get_ai_state()` for rotation and
   signed phase.
 - Python `lean` decoder plus categorical one-hot encoder
-  (`src/preprocessing/lean.py`), covered by
+  (`src/plaiground/observations/lean.py`), covered by
   [`2026-10-28-lean-state-encoding.md`](2026-10-28-lean-state-encoding.md).
 
 Still pending:

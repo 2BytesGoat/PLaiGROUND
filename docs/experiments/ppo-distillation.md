@@ -273,7 +273,7 @@ sum. A second DAgger variant using the 8.05 s 1-11 smoke teacher
 3.77 s, raising the sum to 78.917 s, so it was rejected.
 
 The distillation path also supports the game's **multi-hot observation v2**
-(`--obs-encoding multi_hot`, 754 values; see `src/obs_spec.py`). Teachers,
+(`--obs-encoding multi_hot`, 754 values; see `src/plaiground/observations/spec.py`). Teachers,
 student, DAgger, eval, and export must all use the same encoding and
 `action_repeat`. The existing 58-value champions are legacy. Collection can
 emit both vectors (`--emit_legacy_obs=true`), so a multi-hot student can use a

@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 import unittest
-from pathlib import Path
-
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-
-import obs_spec  # noqa: E402
+from plaiground.observations import spec as obs_spec
 
 
 class RawRewardContractTest(unittest.TestCase):

@@ -11,6 +11,8 @@ Sizes are approximate from 2026-10-28.
 | Directory | Size | Status | What it is | Start here |
 |---|---:|---|---|---|
 | `runs/dqn_route_spawns_1_1/` | 6 MB | **incomplete** | DQN route-spawn extract attempt for 1-1. Routes copied; `spawns/` empty; no `dqn/`, no `eval/`. Design pivoted to the start-pool path; this dir is the fallback. | `godot/route_replay.log`; then [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10-28-dqn-pipeline-review.md) and [`../audit/2026-10-28-start-pool-clock-bias.md`](../audit/2026-10-28-start-pool-clock-bias.md) |
+| `runs/neat_clean_450/` | ~61 MB | active/reference | 1-1 8×24 NEAT collection stopped at gen 25 on the 450-route target. Best **1.6667 s**; **452 clean routes**, 1,486 checkpoint files; filtered to 95 clusters / 216 routes; pools in `pool/`. | `train.console.log`, `filtered/summary.json`, `pool/split.json` |
+| `runs/ppo_clean_start_1_1/` | TBD | **running** | Lean 188→954 PPO, 1M timesteps, 8 envs, canonical 0.70 / 13 train-state 0.30. Checkpoints every 100k; canonical + train/holdout pool eval at the end. | `train.console.log`, `preprocessing.json`, `checkpoints/`, `eval/` |
 | `runs/neat_1_1_8x24_archive/` | 22 MB | reference | 8×24 NEAT 1-1 archive. Best **2.15 s** at gen 9; 4,243 finishers; 460 clean routes; coverage, strata, PPO start pools. | `best_time.json`, `clean/clean_summary.json`, `strata/strata_summary.json`, `coverage/coverage_summary.json` |
 | `runs/neat_1_2_transfer_8x24/` | 12 MB | reference | 1-2 NEAT transfer (resumed 1-1 population at checkpoint 61). Best **3.0167 s**; 3,052 finishers; 12 clean routes; 71/72 starts. | `best_clean.json`, `clean/clean_summary.json`, `strata/strata_summary.json` |
 | `runs/neat_1_3_transfer_8x24/` | 15 MB | reference | 1-3 NEAT transfer (resumed 1-2 at checkpoint 97). Best **3.5667 s**; 3,580 finishers; 26 clean routes; 62/86 starts. | `best_clean.json`, `clean/clean_summary.json`, `strata/strata_summary.json` |
@@ -33,6 +35,10 @@ Sizes are approximate from 2026-10-28.
 | `strata/sampling_plan.json` | Proposed canonical/medium/hard mix. |
 | `ppo/start_pool.json` | Weighted PPO reset pool (canonical/cell/prefix entries). |
 | `ppo/start_pool_summary.json` | Pool counts, weights, focus/heldout starts. |
+| `filtered/summary.json` | Route-filter counts: input/unique routes, clusters, kept train/holdout routes. |
+| `pool/train_start_pool.json`, `pool/holdout_start_pool.json` | Clean-start state pools for PPO; the holdout file is evaluation-only. |
+| `pool/split.json` | Start-pool counts, weights, checkpoint rejection stats, and train/holdout key overlap. |
+| `preprocessing.pkl`, `preprocessing.json` | Fitted lean one-hot pipeline and its input/output metadata; load these with the model. |
 | `monitor.csv` | SB3 `VecMonitor` episode summary. |
 | `episodes.csv` | PPO per-episode rows: start source/kind, finish, timeout, run time, efficiency, flow. |
 | `checkpoints/` | SB3 checkpoints (`.zip`). |

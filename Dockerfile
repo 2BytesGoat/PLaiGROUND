@@ -15,11 +15,12 @@ WORKDIR /app
 # Install torch CPU
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy project metadata and package
+COPY pyproject.toml poetry.lock README.md ./
+COPY src ./src
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install the project and dependencies
+RUN pip install --no-cache-dir -e .
 
 # Install jupyterlab
 RUN pip install jupyterlab

@@ -16,7 +16,7 @@ live in the game repo:
 - `godot/src/training/synchronizer.gd`
 - `docs/technical/training.md` in the game vault
 
-`src/obs_spec.py` is the Python mirror used by drivers and debugging tools.
+`src/plaiground/observations/spec.py` is the Python mirror used by drivers and debugging tools.
 
 ## Observation encodings
 
@@ -70,7 +70,7 @@ Godot sends primitive local state; Python builds the training features:
 - 8 flow deltas: `(flow[neighbor] - flow[player]) / 4`, clamped to [-1, 1].
 
 `obs_spec.RAW_*` defines the offsets; `obs_spec.decode_raw()` splits the
-vector. `src/43_check_raw_obs.py` validates the path. This is the input to the
+vector. `tools/check_observation.py` validates the path. This is the input to the
 Python feature encoders; it is not yet a trained model input.
 
 ### `lean` — 188 values (Godot-emitted)
@@ -104,7 +104,7 @@ size depends on the vocabularies; 188 is the wire size, not the model width.
 `build_lean_pipeline()` requires the game's tile vocabulary.
 
 Implemented in `AIObservationSpec` / `_get_obs_lean()` and
-`src/preprocessing/lean.py`. Card respawn and moving-platform phase, plus
+`src/plaiground/observations/lean.py`. Card respawn and moving-platform phase, plus
 PPO/DQN driver wiring, are still pending.
 
 ## Actions and cadence

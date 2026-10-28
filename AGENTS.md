@@ -31,15 +31,19 @@ The game source lives in a sibling repository:
 
 | Path | What it is |
 |---|---|
-| `src/` | Active experiment drivers (see [`src/README.md`](src/README.md)). |
-| `src/wrappers/` | Game socket client, Gymnasium wrappers, SB3 VecEnv, frozen encoders. |
-| `src/obs_spec.py` | Python mirror of the game's observation contract. |
-| `src/postprocessing/` | Route filtering and related post-run pool processing. |
-| `src/models/` | Declared lean v1 model: `LeanMLP` 512×512 + SB3 policy kwargs. |
+| `src/plaiground/` | Importable package (see [`src/README.md`](src/README.md)). |
+| `scripts/` | Thin training and evaluation entry points. |
+| `tools/` | Data, provenance, and reporting utilities. |
+| `experiments/` | Committed experiment manifests and result notes. |
+| `src/plaiground/envs/` | Game socket client, Gymnasium wrappers, SB3 VecEnv. |
+| `src/plaiground/models/extractors/` | Frozen legacy feature extractors. |
+| `src/plaiground/observations/spec.py` | Python mirror of the game's observation contract. |
+| `src/plaiground/data/` | Route filtering and related post-run pool processing. |
+| `src/plaiground/models/` | Declared lean v1 model: `LeanMLP` 512×512 + SB3 policy kwargs. |
 | `tests/` | Unit tests for the socket/info protocol, preprocessing, model architecture, and route filtering. |
 | `runs/` | Generated run artifacts. **Gitignored; do not delete or rewrite without asking.** |
 | `archive/2026-10-27-cleanup/` | Historical scripts, runs, and docs moved out of the active tree. |
-| `docs/experiments/` | One document per experiment (NEAT, PPO, distillation, DQN). |
+| `docs/experiments/` | Historical/deep-dive experiment documents. New records start in `experiments/`. |
 | `docs/reference/` | Contracts, glossary, deployed model, run-artifact inventory. |
 | `docs/audit/` | Dated investigations and reviews. |
 | `environments/` | Game binaries / macOS source shim. Gitignored contents except `.gitkeep`. |
@@ -49,8 +53,10 @@ The game source lives in a sibling repository:
 ## Working rules
 
 - Use `.venv/bin/python` (Python 3.13). Do not install into the system Python.
-- Active scripts import from `src/`; run them from the repository root, e.g.
-  `.venv/bin/python src/10_ppo_pilot.py ...`.
+- Install the package editable with
+  `uv pip install --python .venv/bin/python -e . --no-deps`, then run entry
+  points from the repository root, e.g.
+  `.venv/bin/python scripts/reinforcement/01_ppo.py ...`.
 - `runs/` is generated and gitignored. Record conclusions in `docs/status.md`,
   `docs/known-issues.md`, or a dated `docs/audit/` note instead of committing
   run artifacts.

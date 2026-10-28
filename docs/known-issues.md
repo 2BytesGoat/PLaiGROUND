@@ -131,12 +131,25 @@ do not globally dedupe `(cell, facing)` across the split. Checkpoint scenarios
 are keyed by `(cell, facing, powerup stack)`.
 
 The PPO clean-start plan explicitly requires this route split before training and
-excludes holdout routes from the train pool. `42_filter_clean_routes.py` now
-performs route clustering, per-cluster caps, and optional whole-cluster
-train/holdout splitting. The remaining gap is making the pool extractor and PPO
-evaluator consume those filtered route files while preserving the cluster split.
-See [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) and
-[`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md).
+excludes holdout routes from the train pool. `tools/filter_routes.py` now
+performs route clustering, per-cluster caps, and whole-cluster train/holdout
+splitting. `tools/build_start_pool.py` consumes those files and preserves the
+split when expanding checkpoint snapshots.
+
+Measured on the current 452-route archive (2026-10-28):
+
+```text
+95 clusters / 216 selected routes
+158 train routes / 58 holdout routes
+13 train states / 10 holdout states after grounded/time-to-exit gates
+10 of 10 holdout state keys also occur on train routes
+```
+
+The pool split is now integrated, but the data has **zero state-unseen holdout
+keys**. Do not call the holdout state result an unseen-route or unseen-state
+result. A valid holdout needs route segments or checkpoint keys that do not occur
+on train routes. See [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md)
+and [`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md).
 
 ### 5. Evaluation launches one Godot process per spawn — high
 
@@ -145,7 +158,7 @@ See [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) and
 ~20 s), plus a new isolated `userdata/eval_<port>` tree each time.
 
 **Fix:** reuse one persistent env and call `reset(spawns=...)` per start, as
-`35_eval_ppo_strata.py` does. This also makes the eval deterministic and much
+`scripts/evaluation/01_evaluate_strata.py` does. This also makes the eval deterministic and much
 faster.
 
 ### 6. Training uses a sequential `DummyVecEnv` — medium
@@ -158,16 +171,16 @@ the decisions. The PPO pilot uses `SubprocVecEnv` for `n_envs > 1`.
 `MultiAgentGodotVecEnv` path) for throughput. `DummyVecEnv` is fine only for a
 debug run.
 
-### 7. The DQN script is coupled to the 83 KB PPO pilot — medium
+### 7. Shared environment helpers still live inside PPO — medium
 
-`41_dqn_route_spawns.py` loads `10_ppo_pilot.py` through `importlib` to get
-`SingleAgentGodotEnv`, `resolve_env_path()`, and `isolated_home()`. Any edit to
-the PPO pilot can break DQN, and the PPO pilot is the largest/most-changed file
-in the repo.
+`SingleAgentGodotEnv` now lives in `src/plaiground/envs/single_agent.py`, but
+`resolve_env_path()`, `isolated_home()`, the start/spawn loaders, and the
+vec-env factory still live in
+`src/plaiground/algorithms/reinforcement/ppo.py`. DQN imports them from the PPO
+module, so the modules remain coupled.
 
-**Fix:** move the shared env factory/helpers into `src/wrappers/` (or a small
-`src/env_factory.py`) and have both PPO and DQN import it normally. Keep the DQN
-driver small and testable.
+**Fix:** move the shared env factory/helpers into `src/plaiground/envs/` and have
+both PPO and DQN import them there. Keep the DQN driver small and testable.
 
 ### 8. The default level-analysis path is machine-specific — medium
 
@@ -177,7 +190,7 @@ driver small and testable.
 /Users/giani.statie/personal/dragon-jump-remaster/runs/level_analysis/1-1.json
 ```
 
-It works on this machine only. `32`/`33`/`35` also embed absolute paths.
+It works on this machine only. Some legacy tools also embed absolute paths.
 
 **Fix:** resolve the game repo relative to this repo (or an env var), and fail
 with a clear message when the analysis file is missing.
@@ -276,16 +289,16 @@ There is no per-run README. Use
 [`reference/run-artifacts.md`](reference/run-artifacts.md) as the index; add a
 row when a run becomes important.
 
-### 20. Test coverage is thin
+### 20. Test coverage is still thin
 
-`tests/` only covers the static/columnar info protocol and binary observation
-frame decoding. There are no tests for route selection, clustering, spawn-pool
-construction, reward-clock handling, or the DQN environment. Add small pure
-tests for the pool builder before another long run.
+`tests/` now covers the static/columnar info protocol, binary observation
+decoding, preprocessing, the lean MLP, route filtering, start-pool construction,
+and experiment manifests. It still has no game-side integration test for the
+DQN environment or for reset/spawn behavior.
 
-### 21. `src/processing/` and the legacy SB3 wrapper are not active
+### 21. `src/plaiground/legacy/processing/` and the legacy SB3 wrapper are not active
 
-`src/processing/` and `src/wrappers/stable_baselines_wrapper.py` are tutorial /
+`src/plaiground/legacy/processing/` and `src/plaiground/envs/stable_baselines_wrapper.py` are tutorial /
 legacy paths. Active drivers use `GodotEnv`, `SingleAgentGodotEnv`, and
 `MultiAgentGodotVecEnv`. Do not add new work to the legacy path without a
 reason.

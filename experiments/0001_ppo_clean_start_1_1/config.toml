@@ -1,0 +1,76 @@
+# Experiment 0001: lean PPO from clean NEAT starts on 1-1.
+
+[experiment]
+id = "0001"
+name = "ppo_clean_start_1_1"
+status = "running"
+started = "2026-10-28"
+
+[workflow]
+name = "reinforcement.ppo"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-1"
+n_envs = 8
+action_repeat = 4
+max_decisions = 150
+speedup = 8.0
+force_start_jump = false
+
+[observation]
+encoding = "lean"
+preprocessing = "lean"
+expected_raw_size = 188
+model_input_size = 954
+
+[model]
+arch = "lean_mlp"
+hidden = [512, 512]
+activation = "tanh"
+
+[algorithm]
+name = "ppo"
+timesteps = 1000000
+n_steps = 150
+batch_size = 120
+epochs = 10
+learning_rate = 0.0003
+gamma = 0.99
+gae_lambda = 0.95
+clip_range = 0.2
+ent_coef = 0.01
+vf_coef = 0.5
+max_grad_norm = 0.5
+target_kl = 0.03
+
+[data]
+archive = "runs/neat_clean_450/archive/routes.json"
+filtered_dir = "runs/neat_clean_450/filtered"
+train_routes = "runs/neat_clean_450/filtered/train_clean_routes.json"
+holdout_routes = "runs/neat_clean_450/filtered/holdout_clean_routes.json"
+train_pool = "runs/neat_clean_450/pool/train_start_pool.json"
+holdout_pool = "runs/neat_clean_450/pool/holdout_start_pool.json"
+canonical_weight = 0.70
+state_weight = 0.30
+state_key = "cell,facing,powerup_stack"
+holdout_is_state_unseen = false
+
+[checkpointing]
+save_freq = 100000
+
+[evaluation]
+canonical_agents = 100
+canonical = true
+train_pool = true
+holdout_pool = true
+selection_metric = "holdout_median_time"
+canonical_gate = true
+
+[output]
+dir = "runs/ppo_clean_start_1_1"

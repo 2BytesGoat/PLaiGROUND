@@ -1,0 +1,31 @@
+[experiment]
+id = "0000"
+name = "neat_clean_450"
+status = "complete"
+started = "2026-10-28"
+completed = "2026-10-28"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-1"
+population = 192
+parallel = 8
+action_repeat = 4
+speedup = 8.0
+
+[collection]
+record_paths = true
+min_clean_routes = 450
+generations = 80
+checkpoint_interval = 5
+
+[output]
+dir = "runs/neat_clean_450"

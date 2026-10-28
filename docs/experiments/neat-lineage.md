@@ -1,13 +1,13 @@
 # NEAT lineage through the campaign
 
 Status: **available/historical** — the current NEAT reference work uses
-`07_neat_agent.py` with the 8×24 archive, not the full lineage runner.
+`scripts/genetic/01_neat.py` with the 8×24 archive, not the full lineage runner.
 Last updated: 2026-10-27
 
 This is the single-population experiment. It is intentionally different from
-`08_neat_all_levels.py`, which trains one independent population per level.
+`scripts/genetic/02_neat_all_levels.py`, which trains one independent population per level.
 
-`09_neat_lineage.py` carries **one population** through campaign order:
+`scripts/genetic/03_neat_lineage.py` carries **one population** through campaign order:
 
 ```text
 1-1 → 1-2 → 1-3 → … → 1-16
@@ -50,7 +50,7 @@ Headless training with live logs:
 ```bash
 cd /Users/giani.statie/personal/PLaiGROUND
 
-.venv/bin/python src/09_neat_lineage.py \
+.venv/bin/python scripts/genetic/03_neat_lineage.py \
   --levels all \
   --output-dir runs/neat_lineage \
   --population 100 \
@@ -73,7 +73,7 @@ To resume one lineage from an existing snapshot without retraining earlier
 levels:
 
 ```bash
-.venv/bin/python src/09_neat_lineage.py \
+.venv/bin/python scripts/genetic/03_neat_lineage.py \
   --levels all \
   --start-level 1-3 \
   --initial-checkpoint runs/neat_lineage/snapshots/1-2/neat-checkpoint-25 \

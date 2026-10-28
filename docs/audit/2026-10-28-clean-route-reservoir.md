@@ -48,7 +48,7 @@ start pool, not the route signature count.
 
 ## Collection target implementation
 
-`07_neat_agent.py` now supports:
+`scripts/genetic/01_neat.py` now supports:
 
 ```text
 --record-paths
@@ -63,9 +63,9 @@ count raw finishers, and it does not count route clusters. Use a hard
 ## Filtering policy
 
 Implemented in
-[`../../src/postprocessing/route_filter.py`](../../src/postprocessing/route_filter.py),
+[`../../src/plaiground/data/route_filter.py`](../../src/plaiground/data/route_filter.py),
 with the numbered CLI in
-[`../../src/42_filter_clean_routes.py`](../../src/42_filter_clean_routes.py).
+[`../../tools/filter_routes.py`](../../tools/filter_routes.py).
 
 - Input: `clean_routes.json` (or a route mapping).
 - Exact duplicate signatures keep the fastest route.

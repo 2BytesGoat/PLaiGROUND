@@ -1,7 +1,7 @@
 # Audit — DQN route-spawn pipeline review
 
 **Date:** 2026-10-28
-**Scope:** `src/41_dqn_route_spawns.py`, `docs/experiments/dqn-route-spawns.md`,
+**Scope:** `scripts/reinforcement/02_dqn.py`, `docs/experiments/dqn-route-spawns.md`,
 `runs/dqn_route_spawns_1_1/`, and the game-side reset/reward contract.
 **Status:** review only; no training run, no game-code change.
 
@@ -48,7 +48,7 @@ on disk, what the driver does, and which design issues need to be fixed before a
   ```
 
   No error, no completion line.
-- Timestamps: run dir created 00:14:50; `src/41_dqn_route_spawns.py` modified
+- Timestamps: run dir created 00:14:50; `scripts/reinforcement/02_dqn.py` modified
   00:16:17; log last written 00:16:21; commit 00:19:19. The process was stopped
   while iterating, not after a completed extract.
 - No Godot/Python process was running when checked.
@@ -185,7 +185,7 @@ on macOS can take ~20 s; the current 23–45 holdout entries imply 8–15+ minut
 just in startup, plus a new `userdata/eval_<port>` tree each time.
 
 **Recommendation:** one persistent env, reset with `spawns` per start, as
-`35_eval_ppo_strata.py` does. Keep the same reset/start-jump contract across
+`scripts/evaluation/01_evaluate_strata.py` does. Keep the same reset/start-jump contract across
 training and eval.
 
 ### F6 — Training VecEnv is sequential
@@ -199,17 +199,17 @@ multi-agent VecEnv.
 `41` does:
 
 ```python
-PPO = load_ppo_module()   # importlib on 10_ppo_pilot.py
+PPO = load_ppo_module()   # importlib on scripts/reinforcement/01_ppo.py
 PPO.SingleAgentGodotEnv
 PPO.resolve_env_path()
 PPO.isolated_home()
 ```
 
-`10_ppo_pilot.py` is ~83 KB and had 484 uncommitted lines before `d7e173d`.
+`scripts/reinforcement/01_ppo.py` is ~83 KB and had 484 uncommitted lines before `d7e173d`.
 This is a fragile dependency for a new algorithm.
 
 **Recommendation:** extract `SingleAgentGodotEnv`, `isolated_home`, and
-`resolve_env_path` into `src/wrappers/` or `src/env_factory.py`; import them
+`resolve_env_path` into `src/plaiground/envs/` or `src/env_factory.py`; import them
 normally from both PPO and DQN. Then `41` can shrink to the DQN-specific parts.
 
 ### F8 — The default analysis path is machine-specific

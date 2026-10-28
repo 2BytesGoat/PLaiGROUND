@@ -5,7 +5,7 @@ reference use this driver; the older 58/512 and pilot results are historical.
 Last updated: 2026-10-28
 
 > **Clean-start PPO plan (2026-10-28):** the next 1-1 run uses raw 342-value
-> features through `src/preprocessing/`, NEAT clean-start states with a
+> features through `src/plaiground/observations/`, NEAT clean-start states with a
 > route-level holdout, and **1,000,000 environment timesteps** — about 833 PPO
 > rollout updates with 8 envs × 150 steps. The older “900k” entry was a
 > checkpoint/resume point in a 1M-timestep run, not 900k updates. See
@@ -43,7 +43,7 @@ The existing multi-agent training wrapper is useful for population inference
 and 100-agent evaluation, but it is not a standard SB3 vector environment:
 the Python wrapper does not yet auto-reset individual agents.
 
-`10_ppo_pilot.py` therefore runs **one isolated Godot training world per
+`scripts/reinforcement/01_ppo.py` therefore runs **one isolated Godot training world per
 process** and wraps each one as a normal Gymnasium environment. SB3's
 `DummyVecEnv`/`SubprocVecEnv` handles per-agent reset, truncation, and episode
 bookkeeping.
@@ -81,7 +81,7 @@ No production menu or export wiring is added.
 ## Command
 
 ```bash
-.venv/bin/python src/10_ppo_pilot.py \
+.venv/bin/python scripts/reinforcement/01_ppo.py \
   --level 1-3 \
   --n-envs 8 \
   --timesteps 100000 \
@@ -132,7 +132,7 @@ runs/<run>/eval/results-*.csv   deterministic 100-agent evaluation
 Evaluate a saved policy without training:
 
 ```bash
-.venv/bin/python src/10_ppo_pilot.py \
+.venv/bin/python scripts/reinforcement/01_ppo.py \
   --level 1-3 \
   --eval-only \
   --resume runs/ppo_1-3/ppo_pilot.zip \

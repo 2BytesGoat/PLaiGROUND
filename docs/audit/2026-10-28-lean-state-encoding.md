@@ -109,7 +109,7 @@ Removed:
 
 ## Python model input
 
-`src/preprocessing/lean.py` now provides:
+`src/plaiground/observations/lean.py` now provides:
 
 - `DecodeLeanState` — validates the 188-value packet and splits it into tile
   IDs, rotations, phases, player, collisions, and flow;
@@ -124,7 +124,7 @@ and tile-vocabulary-dependent. Example: six tile names and the fixed eight
 collision types produce 513 inputs.
 
 ```python
-from preprocessing import build_lean_pipeline
+from plaiground.observations import build_lean_pipeline
 
 pre = build_lean_pipeline(tile_names=game_tile_names)
 model_x = pre.fit_transform(lean_batch)  # 188 -> D
@@ -142,15 +142,15 @@ Game:
 
 Python:
 
-- `src/obs_spec.py` — lean constants, offsets, validation, `decode_lean()`;
-- `src/preprocessing/lean.py` — `DecodeLeanState`, `LeanFeatures`;
-- `src/preprocessing/defaults.py` — `build_lean_pipeline()`;
+- `src/plaiground/observations/spec.py` — lean constants, offsets, validation, `decode_lean()`;
+- `src/plaiground/observations/lean.py` — `DecodeLeanState`, `LeanFeatures`;
+- `src/plaiground/observations/defaults.py` — `build_lean_pipeline()`;
 - `tests/test_preprocessing.py` — 188 decode, one-hot shape, state/powerup/
   collision encodings, single/batch and pickle round-trip.
 
 ## Lean policy baseline
 
-The first model is intentionally simple and declared in `src/models/lean_mlp.py`:
+The first model is intentionally simple and declared in `src/plaiground/models/lean_mlp.py`:
 
 ```text
 Godot lean 188
@@ -177,7 +177,7 @@ baseline has a sample-efficiency or generalization problem.
 
 ## References
 
-- [`../../src/preprocessing/lean.py`](../../src/preprocessing/lean.py)
+- [`../../src/plaiground/observations/lean.py`](../../src/plaiground/observations/lean.py)
 - [`../reference/observation-contracts.md`](../reference/observation-contracts.md)
 - [`2026-10-28-raw-state-observation-decision.md`](2026-10-28-raw-state-observation-decision.md)
 - [`../experiments/ppo-clean-start.md`](../experiments/ppo-clean-start.md)
