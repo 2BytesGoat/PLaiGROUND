@@ -34,7 +34,9 @@ The game source lives in a sibling repository:
 | `src/` | Active experiment drivers (see [`src/README.md`](src/README.md)). |
 | `src/wrappers/` | Game socket client, Gymnasium wrappers, SB3 VecEnv, frozen encoders. |
 | `src/obs_spec.py` | Python mirror of the game's observation contract. |
-| `tests/` | Unit tests for the socket/info protocol. |
+| `src/postprocessing/` | Route filtering and related post-run pool processing. |
+| `src/models/` | Declared lean v1 model: `LeanMLP` 512×512 + SB3 policy kwargs. |
+| `tests/` | Unit tests for the socket/info protocol, preprocessing, model architecture, and route filtering. |
 | `runs/` | Generated run artifacts. **Gitignored; do not delete or rewrite without asking.** |
 | `archive/2026-10-27-cleanup/` | Historical scripts, runs, and docs moved out of the active tree. |
 | `docs/experiments/` | One document per experiment (NEAT, PPO, distillation, DQN). |

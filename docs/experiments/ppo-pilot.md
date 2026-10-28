@@ -2,7 +2,15 @@
 
 Status: active/reference — the 794 sensor lineage and the 754 multilevel
 reference use this driver; the older 58/512 and pilot results are historical.
-Last updated: 2026-10-27
+Last updated: 2026-10-28
+
+> **Clean-start PPO plan (2026-10-28):** the next 1-1 run uses raw 342-value
+> features through `src/preprocessing/`, NEAT clean-start states with a
+> route-level holdout, and **1,000,000 environment timesteps** — about 833 PPO
+> rollout updates with 8 envs × 150 steps. The older “900k” entry was a
+> checkpoint/resume point in a 1M-timestep run, not 900k updates. See
+> [`ppo-clean-start.md`](ppo-clean-start.md). The 794/prefix path is not part of
+> that plan.
 
 > **Current state:** see [`../status.md`](../status.md). The 754 200k
 > checkpoint is the selected 3-map reference; the 794 sensor lineage is the

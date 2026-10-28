@@ -4,10 +4,12 @@ Python-side summary of the game's training contract. The canonical definitions
 live in the game repo:
 
 > **Raw-state change (2026-10-28):** the `raw` encoding is implemented
-> (342 values) and validated; Python feature encoders and the reset/powerup
-> restore are still pending. The 58/754/794 layouts below remain the current
-> runtime/legacy contracts. See
-> [`../audit/2026-10-28-raw-state-observation-decision.md`](../audit/2026-10-28-raw-state-observation-decision.md).
+> (342 values) and validated. Godot also emits the lean **188-value** encoding;
+> Python decodes it and one-hots categorical fields. Card/object phase and
+> driver wiring are still pending. The 58/754/794 layouts below remain the
+> current runtime/legacy contracts. See
+> [`../audit/2026-10-28-raw-state-observation-decision.md`](../audit/2026-10-28-raw-state-observation-decision.md)
+> and [`../audit/2026-10-28-lean-state-encoding.md`](../audit/2026-10-28-lean-state-encoding.md).
 
 - `godot/src/ai/ai_observation_spec.gd`
 - `godot/src/player/controllers/player_ai_training_controller.gd`
@@ -54,7 +56,7 @@ design.
 experiment; no installed runtime. The game creates the ray sensor lazily for
 this encoding.
 
-### `raw` — 342 values (implemented 2026-10-28; Python encoder pending)
+### `raw` — 342 values (implemented 2026-10-28; Python encoders available)
 
 Godot sends primitive local state; Python builds the training features:
 
@@ -70,6 +72,40 @@ Godot sends primitive local state; Python builds the training features:
 `obs_spec.RAW_*` defines the offsets; `obs_spec.decode_raw()` splits the
 vector. `src/43_check_raw_obs.py` validates the path. This is the input to the
 Python feature encoders; it is not yet a trained model input.
+
+### `lean` — 188 values (Godot-emitted)
+
+```text
+49 primary tile IDs
+49 rotation values (radians)
+49 signed phase values
+9 player values: velocity x/y, facing, state ID, jump phase,
+  powerup stack (3), gold_ratio
+24 collision values
+8 flow deltas
+= 188
+```
+
+Tile priority is `terrain → secret → object/static`. A cell has at most one
+non-terrain tile, which wins over secret/terrain.
+
+Phase semantics:
+
+```text
++1.0   solid / present / fully interactable
++1..0  active transition (dissolving)
+-1..0  inactive transition (disabled/repairing)
+ 0.0   transition boundary
+```
+
+Python decodes the packet and one-hots categoricals (49 tile IDs, player
+`state_id`, powerup slots, collision object types). The resulting model input
+size depends on the vocabularies; 188 is the wire size, not the model width.
+`build_lean_pipeline()` requires the game's tile vocabulary.
+
+Implemented in `AIObservationSpec` / `_get_obs_lean()` and
+`src/preprocessing/lean.py`. Card respawn and moving-platform phase, plus
+PPO/DQN driver wiring, are still pending.
 
 ## Actions and cadence
 

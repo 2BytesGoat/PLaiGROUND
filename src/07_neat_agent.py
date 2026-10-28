@@ -83,6 +83,7 @@ class RewardEvaluator:
         self.best_clean_time = float("inf")
         self.best_clean_genome = None
         self.route_archive: dict[str, dict] = {}
+        self.clean_checkpoint_signatures: set[str] = set()
         self.last_improvement_generation = 0
         self.history: list[dict] = []
         self.genome_history: list[dict] = []
@@ -100,6 +101,13 @@ class RewardEvaluator:
                     self.route_archive = payload
             except (OSError, ValueError):
                 self.route_archive = {}
+        self.clean_checkpoint_signatures = {
+            signature
+            for signature, route in self.route_archive.items()
+            if isinstance(route, dict)
+            and route.get("clean")
+            and route.get("checkpoint_file")
+        }
 
         best_time_path = self.output_dir / "best_time.json"
         if best_time_path.exists():
@@ -186,6 +194,11 @@ class RewardEvaluator:
                     self.genome_history = list(csv.DictReader(handle))
             except OSError:
                 pass
+
+    @property
+    def clean_checkpoint_route_count(self) -> int:
+        """Unique clean signatures that also have a checkpoint snapshot."""
+        return len(self.clean_checkpoint_signatures)
 
     def open(self, population: int) -> float:
         """Create the game processes once and reuse them for every generation.
@@ -601,6 +614,8 @@ class RewardEvaluator:
                     json.dumps(checkpoints, indent=2), encoding="utf-8"
                 )
                 checkpoint_file = str(checkpoint_path.relative_to(self.archive_dir))
+            if clean and checkpoint_file:
+                self.clean_checkpoint_signatures.add(signature)
 
             record = {
                 "generation": self.generation,
@@ -871,6 +886,8 @@ def load_config(config_path: Path, population: int | None = None) -> neat.Config
 def train(args: argparse.Namespace) -> None:
     if args.action_repeat < 1:
         raise ValueError("--action-repeat must be >= 1")
+    if args.min_clean_routes and not args.record_paths:
+        raise ValueError("--min-clean-routes requires --record-paths")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -915,6 +932,12 @@ def train(args: argparse.Namespace) -> None:
         for _ in range(args.generations):
             population.run(evaluator, 1)
             if (
+                args.min_clean_routes > 0
+                and evaluator.clean_checkpoint_route_count >= args.min_clean_routes
+            ):
+                stop_reason = "clean route target"
+                break
+            if (
                 args.target_time is not None
                 and evaluator.best_time <= args.target_time
             ):
@@ -937,7 +960,8 @@ def train(args: argparse.Namespace) -> None:
         print(
             f"\ntraining finished in {elapsed:.1f}s ({stop_reason}) | "
             f"best fitness={evaluator.best_fitness:.2f} | "
-            f"best finish time={evaluator.best_time}",
+            f"best finish time={evaluator.best_time} | "
+            f"clean checkpoint routes={evaluator.clean_checkpoint_route_count}",
             flush=True,
         )
     else:
@@ -1072,6 +1096,13 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help="Stop after the generation whose best finish time is <= this value.",
+    )
+    parser.add_argument(
+        "--min-clean-routes",
+        type=int,
+        default=0,
+        help="Stop after this many unique clean route signatures have checkpoint "
+        "snapshots (0 = off). Requires --record-paths.",
     )
     parser.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     parser.add_argument(

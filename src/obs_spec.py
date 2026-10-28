@@ -22,6 +22,10 @@ raw
     Primitive local state for Python-side encoding: 7x7 tile IDs, 7x7 tile
     states, player state (including clamped ``gold_ratio``), 8-way collisions,
     and 8-way flow deltas. 342 values.
+lean
+    Godot-emitted compact state: 49 primary tile IDs, 49 rotations, 49 signed
+    phases, 9 player values, 24 collisions, and 8 flow deltas. 188 values.
+    Python one-hots the categoricals for the model.
 """
 
 from __future__ import annotations
@@ -32,17 +36,20 @@ ENCODING_LEGACY = "legacy"
 ENCODING_MULTI_HOT = "multi_hot"
 ENCODING_MULTI_HOT_SENSOR = "multi_hot_sensor"
 ENCODING_RAW = "raw"
+ENCODING_LEAN = "lean"
 SUPPORTED_ENCODINGS = (
     ENCODING_LEGACY,
     ENCODING_MULTI_HOT,
     ENCODING_MULTI_HOT_SENSOR,
     ENCODING_RAW,
+    ENCODING_LEAN,
 )
 
 SPEC_VERSION_LEGACY = 1
 SPEC_VERSION_MULTI_HOT = 2
 SPEC_VERSION_MULTI_HOT_SENSOR = 3
 SPEC_VERSION_RAW = 4
+SPEC_VERSION_LEAN = 5
 
 LEGACY_OBSERVATION_SIZE = 58
 
@@ -81,6 +88,10 @@ DISSOLVE_STATE_BITS = 2
 DISSOLVE_STATE_NAMES = ("solid", "dissolving", "disabled", "repairing")
 DISSOLVE_TIMER_FLOATS = 1
 DISSOLVE_TIMER_SCALE = 3.0
+# Game-side collision lifecycle timings. The raw timer is normalized by
+# DISSOLVE_TIMER_SCALE; the lean encoder converts it to a phase.
+DISSOLVE_COLLISION_DISABLE_TIME = 0.7
+DISSOLVE_REPAIR_TIME = 0.5
 
 BOUNCE_ORIENTATION_FLOATS = 2
 
@@ -137,6 +148,34 @@ RAW_COLLISION_OFFSET = RAW_PLAYER_OFFSET + RAW_PLAYER_FLOATS
 RAW_FLOW_OFFSET = RAW_COLLISION_OFFSET + RAW_COLLISION_COUNT
 RAW_OBSERVATION_SIZE = RAW_FLOW_OFFSET + RAW_FLOW_COUNT
 
+# Lean model-facing layout: one primary symbol ID, one rotation, and one
+# signed phase per cell, followed by the player/collision/flow blocks.
+LEAN_TILE_ID_COUNT = GRID_CELLS
+LEAN_ROTATION_COUNT = GRID_CELLS
+LEAN_PHASE_COUNT = GRID_CELLS
+LEAN_CELL_FEATURE_COUNT = (
+    LEAN_TILE_ID_COUNT + LEAN_ROTATION_COUNT + LEAN_PHASE_COUNT
+)
+LEAN_PLAYER_FLOATS = 9
+LEAN_TILE_ID_OFFSET = 0
+LEAN_ROTATION_OFFSET = LEAN_TILE_ID_OFFSET + LEAN_TILE_ID_COUNT
+LEAN_PHASE_OFFSET = LEAN_ROTATION_OFFSET + LEAN_ROTATION_COUNT
+LEAN_PLAYER_OFFSET = LEAN_PHASE_OFFSET + LEAN_PHASE_COUNT
+LEAN_COLLISION_OFFSET = LEAN_PLAYER_OFFSET + LEAN_PLAYER_FLOATS
+LEAN_FLOW_OFFSET = LEAN_COLLISION_OFFSET + RAW_COLLISION_COUNT
+LEAN_OBSERVATION_SIZE = LEAN_FLOW_OFFSET + RAW_FLOW_COUNT
+LEAN_PLAYER_FIELDS = (
+    "velocity_x",
+    "velocity_y",
+    "facing",
+    "state_id",
+    "jump_phase",
+    "powerup_0",
+    "powerup_1",
+    "powerup_2",
+    "gold_ratio",
+)
+
 RAW_TILE_STATE_FIELDS = (
     "powerup_kind",
     "dissolve_state",
@@ -163,6 +202,20 @@ RAW_PLAYER_FIELDS = (
     "finished",
 )
 RAW_DIRECTION_NAMES = ("E", "SE", "S", "SW", "W", "NW", "N", "NE")
+PLAYER_STATE_NAMES = (
+    "Idle",
+    "Move",
+    "Jump",
+    "Fall",
+    "Walled",
+    "Bounce",
+    "Dash",
+    "DoubleJump",
+    "Grapple",
+    "Stomp",
+    "Celebrate",
+    "Die",
+)
 
 
 def expected_obs_size(encoding: str) -> int:
@@ -174,6 +227,8 @@ def expected_obs_size(encoding: str) -> int:
         return MULTI_HOT_SENSOR_OBSERVATION_SIZE
     if encoding == ENCODING_RAW:
         return RAW_OBSERVATION_SIZE
+    if encoding == ENCODING_LEAN:
+        return LEAN_OBSERVATION_SIZE
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
@@ -186,6 +241,8 @@ def spec_version(encoding: str) -> int:
         return SPEC_VERSION_MULTI_HOT_SENSOR
     if encoding == ENCODING_RAW:
         return SPEC_VERSION_RAW
+    if encoding == ENCODING_LEAN:
+        return SPEC_VERSION_LEAN
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
@@ -270,6 +327,32 @@ def decode_multi_hot(obs: np.ndarray) -> dict:
         "powerup_total": player[
             PLAYER_POWERUP_TOTAL_OFFSET - GRID_FEATURE_COUNT
         ],
+    }
+
+
+def decode_lean(obs: np.ndarray) -> dict:
+    """Decode one lean 188-value observation for diagnostics/tests."""
+    array = validate_obs(obs, ENCODING_LEAN)
+    player_values = array[LEAN_PLAYER_OFFSET:LEAN_COLLISION_OFFSET]
+    return {
+        "flat": array,
+        "tile_ids": array[LEAN_TILE_ID_OFFSET:LEAN_ROTATION_OFFSET]
+        .astype(np.int64)
+        .reshape(GRID_SIZE, GRID_SIZE),
+        "rotations": array[LEAN_ROTATION_OFFSET:LEAN_PHASE_OFFSET].reshape(
+            GRID_SIZE, GRID_SIZE
+        ),
+        "phases": array[LEAN_PHASE_OFFSET:LEAN_PLAYER_OFFSET].reshape(
+            GRID_SIZE, GRID_SIZE
+        ),
+        "player": {
+            name: float(value)
+            for name, value in zip(LEAN_PLAYER_FIELDS, player_values)
+        },
+        "collisions": array[LEAN_COLLISION_OFFSET:LEAN_FLOW_OFFSET].reshape(
+            RAW_DIRECTIONS, RAW_COLLISION_FLOATS
+        ),
+        "flow": array[LEAN_FLOW_OFFSET:LEAN_OBSERVATION_SIZE],
     }
 
 

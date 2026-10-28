@@ -9,9 +9,9 @@ Detailed review: [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10
 Clock-bias audit: [`../audit/2026-10-28-start-pool-clock-bias.md`](../audit/2026-10-28-start-pool-clock-bias.md)
 
 > **Superseded for clean-start (2026-10-28).** The 794/prefix plan below is
-> retained as a historical experiment record. The clean-start target is raw
-> state with source-checkpoint time, held powerups, and a dynamic `world_state`
-> snapshot; 794 is not used. See
+> retained as a historical experiment record. The clean-start target is the
+> lean observation built from raw state, with source-checkpoint time, held
+> powerups, and a dynamic `world_state` snapshot; 794 is not used. See
 > [`../audit/2026-10-28-clean-start-state-capture.md`](../audit/2026-10-28-clean-start-state-capture.md)
 > and [`dqn-clean-start.md`](dqn-clean-start.md). Do not start a new clean-start
 > run from the 794 prefix pool or the old cell-only extractor.

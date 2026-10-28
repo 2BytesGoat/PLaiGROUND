@@ -130,6 +130,14 @@ route signature and freeze the train/holdout split before expanding checkpoints;
 do not globally dedupe `(cell, facing)` across the split. Checkpoint scenarios
 are keyed by `(cell, facing, powerup stack)`.
 
+The PPO clean-start plan explicitly requires this route split before training and
+excludes holdout routes from the train pool. `42_filter_clean_routes.py` now
+performs route clustering, per-cluster caps, and optional whole-cluster
+train/holdout splitting. The remaining gap is making the pool extractor and PPO
+evaluator consume those filtered route files while preserving the cluster split.
+See [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) and
+[`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md).
+
 ### 5. Evaluation launches one Godot process per spawn — high
 
 `run_eval_episode()` creates a fresh `GodotEnv` for every holdout spawn. A
@@ -184,8 +192,8 @@ with a clear message when the analysis file is missing.
   convention is retired. Training reset force-starts the run; mid-route states
   need a restored clock, world state, and held powerups, with no injected
   action.
-- The clean-start target is raw state, not 794. Do not treat the old 794 prefix
-  pool as a clean-start source.
+- The clean-start target is raw/lean state, not 794. Do not treat the old 794
+  prefix pool as a clean-start source.
 
 **Fix:** align the plan/code with
 [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
@@ -293,16 +301,22 @@ and hit but no collision type. These are archived baselines; the clean-start
 target is the raw state, not 794. The `raw` encoding is implemented and
 validated (342 values, 1-1 and 1-8): Godot sends a local 7×7 window (tile IDs +
 tile states), player state, 8-way collisions, and 8-way flow. Python builds the
-encoder; normalization stays game-side, one-hot stays Python-side. The optional
-Python lean encoder is still pending; the raw 342-value vector is usable directly
-and has passed a 1-1 DQN smoke. The reset/powerup/world-state restore is
-implemented. The 58 runtime encoder stays in Godot. The default reward is now the
+encoder; normalization stays game-side, one-hot stays Python-side. The Python
+lean encoding is implemented in Godot: 49 primary tile IDs + 49 rotations + 49
+signed phases + 9 player + collisions + flow = 188 values. Python decodes it
+and one-hots tile IDs, `state_id`, powerup slots, and collision types; the
+model width is vocabulary-dependent. The raw 342-value vector remains usable
+directly and has passed a 1-1 DQN smoke. Card respawn/moving-platform phase and
+driver `--preprocessing lean` wiring are still pending. The reset/powerup/world-state restore
+is implemented. The 58 runtime encoder stays in Godot. The default reward is now the
 simplified game-side five-term contract (fixed 500 finish, clamped `gold_ratio`
 time term); `info` also exposes `gold_ratio`, `flow_cost`, `flow_in_bounds`, and
 `wasted_air_frames` so Python can build a custom reward. The clean-start
 one-dict reset and dynamic `world_state` snapshot are implemented; the NN state
 must not carry reset/world-state metadata. See
-[`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
+[`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
+and
+[`audit/2026-10-28-lean-state-encoding.md`](audit/2026-10-28-lean-state-encoding.md).
 The old `reward_profile` values are ignored. See
 [`reference/reward-contract.md`](reference/reward-contract.md). Do not add new
 game-side feature engineering before this refactor finishes.

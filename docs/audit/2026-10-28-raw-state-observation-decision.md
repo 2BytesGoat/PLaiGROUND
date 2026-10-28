@@ -1,8 +1,8 @@
 # Decision — raw-state observation contract and Python encoders
 
 **Date:** 2026-10-28
-**Status:** observation packet implemented and validated; Python lean encoder and
-reset/powerup restore pending
+**Status:** observation packet and Godot/Python lean encoding implemented and
+validated; card phase and driver wiring pending
 **Scope:** the Godot ↔ Python observation path for PPO/DQN training; the
 shipped 58-value runtime model stays in Godot.
 **Related:** [`../reference/observation-contracts.md`](../reference/observation-contracts.md),
@@ -209,14 +209,25 @@ Validation:
 | 794 regression | 1 env × 200 steps, observation space `[794]`, no errors |
 | 58 legacy regression | 1 env × 200 steps, observation space `[58]`, no errors |
 
-Not yet done:
+Implemented after this note:
 
-- Python **lean encoder**. Only `decode_raw()` exists; the raw vector is not
-  yet transformed into a training feature vector.
-- Moving-platform state/phase in `tile_state_window`.
-- Collision type coverage for hazard/exit/powerup hits (the short checks only
-  exercised solid).
-- Reset/powerup restore (one-dict reset payload).
+- Game-side **primary-symbol** query: `Level.get_primary_symbol()` /
+  `get_surrounding_primary_cells()` use terrain → secret → object/static.
+- Godot **lean 188-value** encoding (`AIObservationSpec.ENCODING_LEAN`) with
+  nine player fields.
+- `BouncePad.get_ai_state()` and `DisolveBlock.get_ai_state()` for rotation and
+  signed phase.
+- Python `lean` decoder plus categorical one-hot encoder
+  (`src/preprocessing/lean.py`), covered by
+  [`2026-10-28-lean-state-encoding.md`](2026-10-28-lean-state-encoding.md).
+
+Still pending:
+
+- generic card/pickup respawn phase; those currently default to `phase=+1`;
+- moving-platform state/phase;
+- collision type coverage for hazard/exit/powerup hits (the short checks only
+  exercised solid);
+- driver wiring for `--preprocessing lean`; PPO/DQN still use raw 342 directly.
 
 ## 11. Impact on the clean-start/reset plan
 
@@ -239,7 +250,7 @@ reset: velocity, facing, state_name, powerup_stack, run_active,
   powerup stack, and the dynamic `world_state`.
 - The source time and world state must come from the same run; no mean/min
   across routes.
-- The clean-start target is raw state, not 794. See
+- The clean-start target is raw/lean state, not 794. See
   [`2026-10-28-clean-start-state-capture.md`](2026-10-28-clean-start-state-capture.md).
 
 ## 12. Open questions

@@ -8,7 +8,7 @@ experiments. Run from the repository root with `.venv/bin/python`.
 | Script | Status | What it does | Typical entry point |
 |---|---|---|---|
 | `00_random_agent.py` | onboarding | Random-action smoke test through the legacy `StableBaselinesGodotEnv` path. Use it to verify the game/socket setup, not for training. | `.venv/bin/python src/00_random_agent.py` |
-| `07_neat_agent.py` | active | NEAT population trainer/evaluator. Uses one Godot process with N agents; fitness is the game reward. Supports resume, persistent evaluator, `--record-paths`, `--target-time`, and play/visualise modes. With `--record-paths` it also captures per-checkpoint reset state + dynamic `world_state` for the clean-start pool. Training reset force-starts the run; the genome owns the first decision. | `... src/07_neat_agent.py --generations 2 --population 192 --parallel 8 --record-paths` |
+| `07_neat_agent.py` | active | NEAT population trainer/evaluator. Uses one Godot process with N agents; fitness is the game reward. Supports resume, persistent evaluator, `--record-paths`, `--target-time`, `--min-clean-routes`, and play/visualise modes. With `--record-paths` it also captures per-checkpoint reset state + dynamic `world_state` for the clean-start pool. `--min-clean-routes` stops after that many unique clean route signatures have checkpoint snapshots. Training reset force-starts the run; the genome owns the first decision. | `... src/07_neat_agent.py --generations 80 --population 192 --parallel 8 --record-paths --min-clean-routes 450` |
 | `08_neat_all_levels.py` | available | Thin batch layer over `07`: one independent population per campaign level, then a visible checkpoint replay. | `... src/08_neat_all_levels.py --levels 1-1,1-2 --workers 2` |
 | `09_neat_lineage.py` | available | One population carried through levels in order, with zero-shot/post-stage evals and stage snapshots. | `... src/09_neat_lineage.py --levels all` |
 | `10_ppo_pilot.py` | active | The main PPO pipeline: multi-level, multi-agent/process, start pools, prefix replay, eval patience, 754/794 encodings, sensor expansion, frozen encoders, trajectory saving. ~83 KB monolith. | `... src/10_ppo_pilot.py --level 1-1 --n-envs 8 --timesteps 100000` |
@@ -17,7 +17,8 @@ experiments. Run from the repository root with `.venv/bin/python`.
 | `34_make_ppo_start_pool.py` | legacy/reference | Builds weighted PPO start pools from strata + clean-route prefixes; optional focus cells. Not the clean-start path. | `... src/34_make_ppo_start_pool.py --level 1-1` |
 | `35_eval_ppo_strata.py` | active | Deterministic evaluation of a PPO model on canonical/medium/hard/focus starts. Reuses one env; this is the pattern DQN eval should follow. | `... src/35_eval_ppo_strata.py --model runs/.../best.zip` |
 | `36_episode_stats.py` | active | Summarises `episodes.csv` by start source; `--canonical-only` is the required speed view. | `... src/36_episode_stats.py runs/.../episodes.csv --canonical-only` |
-| `41_dqn_route_spawns.py` | **active, no result; clean-start core implemented** | Double DQN from NEAT clean-start states. Uses raw state (342), source-checkpoint time, held powerups, and dynamic `world_state`; extracts one-pass checkpoint files from `07` and builds canonical 0.70 / state 0.30 pools. The 794 sensor + prefix pool is a historical baseline, not the clean-start target. Uses the simplified game-side reward (fixed 500 finish, clamped `gold_ratio` time term); reset force-starts the run. 1-1 raw smoke passed; full gates pending. | `... src/41_dqn_route_spawns.py --start-pool ... train` |
+| `41_dqn_route_spawns.py` | **active, no result; clean-start core implemented** | Double DQN from NEAT clean-start states. Uses raw/lean state, source-checkpoint time, held powerups, and dynamic `world_state`; extracts one-pass checkpoint files from `07` and builds canonical 0.70 / state 0.30 pools. The 794 sensor + prefix pool is a historical baseline, not the clean-start target. Uses the simplified game-side reward (fixed 500 finish, clamped `gold_ratio` time term); reset force-starts the run. 1-1 raw smoke passed; lean driver wiring and full gates pending. | `... src/41_dqn_route_spawns.py --start-pool ... train` |
+| `42_filter_clean_routes.py` | **post-processing CLI** | Thin CLI over `postprocessing.route_filter`: filters clean NEAT routes after collection with exact dedupe, greedy Jaccard path clustering, per-cluster caps, and optional whole-cluster train/holdout split. Does not build state pools yet. | `... src/42_filter_clean_routes.py --routes .../clean_routes.json --output-dir .../filtered --holdout-fraction 0.25` |
 | `43_check_raw_obs.py` | **validation** | Runs one world with `obs_encoding=raw`, decodes the 342-value packet, and checks shapes, cell alignment, and `gold_ratio`/info agreement. | `... src/43_check_raw_obs.py --level 1-1 --steps 30` |
 
 ## Shared modules
@@ -31,7 +32,9 @@ experiments. Run from the repository root with `.venv/bin/python`.
 | `wrappers/legacy_grid_extractor.py` | experimental | Joint tile-embedding + CNN feature extractor for the legacy 58 observation. |
 | `wrappers/semantic_autoencoder.py` | experimental | Frozen semantic MAE for the 754 observation. |
 | `wrappers/stable_baselines_wrapper.py` | legacy | Older Gym wrapper used by `00_random_agent.py` / notebooks. Not used by active drivers. |
-| `preprocessing/` | active | sklearn-style observation transforms: `StatePipeline`, `FeatureUnion`, raw-state decode, tile/player/collision/flow features, `Clip`, `Standardize`, and `build_raw_state_pipeline()`. |
+| `preprocessing/` | active | Lean-only observation transforms: `StatePipeline`, `DecodeLeanState`, `LeanFeatures`, and `build_lean_pipeline()` for the 188-value game packet plus categorical one-hot. |
+| `models/` | active | Lean v1 architecture: `LeanMLP` (512 × 512), `build_lean_mlp()`, and `lean_policy_kwargs()` for SB3. |
+| `postprocessing/route_filter.py` | active | Pure clean-route post-processing: exact dedupe, greedy Jaccard path clustering, per-cluster caps, and whole-cluster train/holdout split. |
 | `utils.py` | legacy | `setup_environment()` for the legacy wrapper/notebook path. |
 | `processing/` | legacy | Notebook-era data processing/visualisation helpers. |
 
@@ -64,9 +67,10 @@ it, and document why.
 .venv/bin/python -m unittest discover -s tests
 ```
 
-Current coverage is the socket/info protocol and binary observation frame
-decoding. Add pure tests for pool construction/route selection before another
-long DQN run.
+Current coverage is the socket/info protocol, binary observation frame
+decoding, raw observation/reward constants, lean preprocessing, the lean MLP
+architecture, and clean-route filtering. Pool construction and end-to-end
+state-start evaluation still need integration tests.
 
 ## Adding a new experiment
 

@@ -20,8 +20,9 @@ Related: [`dqn-route-spawns.md`](dqn-route-spawns.md),
 
 > **Observation target.** Clean-start training uses the raw state / new lean
 > encoder, not 794. The 58/794 checkpoints remain archived baselines only. The
-> Python lean encoder is still pending; the raw packet is implemented and
-> validated (342 values, 1-1 and 1-8).
+> raw packet is implemented and validated (342 values, 1-1 and 1-8); the Python
+> lean encoding is implemented in Godot (188 values) and Python one-hots its
+> categoricals; driver wiring is still pending.
 
 > **One reset dict.** The per-step observation is one dict; the reset request is
 > another single dict. The observation contains only policy inputs. Restore
@@ -354,7 +355,7 @@ blocks with the same message.
 - Zero-velocity starts are harder than moving source checkpoints; accept and
   measure.
 - The reset reply advances one physics tick past the restored clock; measure
-  the drift. The optional raw/lean encoder is still pending.
+  the drift. The raw/lean encoders exist; driver wiring is still pending.
 
 ## 10. References
 
