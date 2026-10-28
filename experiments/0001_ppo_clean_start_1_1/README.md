@@ -1,7 +1,8 @@
 # 0001 — PPO clean-start 1-1
 
-Status: active; 1M-timestep run in progress
+Status: complete; 225k checkpoint selected
 Started: 2026-10-28
+Completed: 2026-10-28
 
 ## Question
 
@@ -74,5 +75,15 @@ routes; this is **not** a state-unseen holdout.
 
 ## Result
 
-Pending. Final canonical and start-pool evaluation runs at the end of the 1M
-budget. Checkpoints exist every 100k for selection.
+The original 1M run collapsed at ~296k and is preserved in
+`runs/ppo_clean_start_1_1_failed_1m/`. The stable continuation resumed from
+`ppo-200000.zip` and selected `ppo-225008.zip`:
+
+```text
+canonical:    100/100, median 2.3167 s
+train pool:   14/14, median 3.5583 s, best 2.1500 s
+holdout pool: 10/10, median 5.2250 s, best 3.4167 s
+```
+
+The selected model is `runs/ppo_clean_start_1_1/best_model.zip`. It is not
+installed in the game. See `results.md` for the full history.

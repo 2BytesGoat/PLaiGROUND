@@ -3,7 +3,7 @@
 [experiment]
 id = "0001"
 name = "ppo_clean_start_1_1"
-status = "running"
+status = "complete"
 started = "2026-10-28"
 
 [workflow]
@@ -36,7 +36,7 @@ activation = "tanh"
 
 [algorithm]
 name = "ppo"
-timesteps = 1000000
+timesteps = 500000  # resumed from 200k; stopped at 300k by patience
 n_steps = 150
 batch_size = 120
 epochs = 10
@@ -62,15 +62,18 @@ state_key = "cell,facing,powerup_stack"
 holdout_is_state_unseen = false
 
 [checkpointing]
-save_freq = 100000
+save_freq = 25000
 
 [evaluation]
 canonical_agents = 100
 canonical = true
 train_pool = true
 holdout_pool = true
-selection_metric = "holdout_median_time"
+selection_metric = "canonical_median_then_holdout"
 canonical_gate = true
+eval_every = 25000
+patience = 3
+selected_checkpoint = "checkpoints/ppo-225008.zip"
 
 [output]
 dir = "runs/ppo_clean_start_1_1"

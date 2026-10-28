@@ -37,7 +37,8 @@ development/research repo, not part of the shipped game.
 | [`experiments/ppo-pilot.md`](experiments/ppo-pilot.md) | active/reference | Shared-policy PPO, multi-level, start pools, 754/794 observation variants. |
 | [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) | **active; 1M run started** | 1-1 PPO on the lean 188-value packet with Python categorical one-hot, 1M timesteps, NEAT state starts with route-cluster holdout. |
 | [`../experiments/0000_neat_clean_450/`](../experiments/0000_neat_clean_450/) | **complete manifest** | NEAT clean-route collection at game commit `adb9278`. |
-| [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/) | **active manifest** | Exact config, game commit, and result record for the lean PPO run. |
+| [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/) | **complete manifest** | Exact config, game commit, and result record for the lean PPO run; 225k selected at 2.3167 s canonical. |
+| [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md) | **proposed** | Compact flat/embedding student options and the distillation plan for shipping a JSON policy. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |
 | [`experiments/ppo-distillation.md`](experiments/ppo-distillation.md) | deployed/reference | Per-level PPO teachers → one level-agnostic 58-value student; the model installed in the game. |

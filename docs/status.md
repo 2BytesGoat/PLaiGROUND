@@ -23,9 +23,9 @@ not yet run.)
 **Repository restructure (2026-10-28).** The code is now split into an importable
 `src/plaiground/` package, thin `scripts/`, data/evaluation `tools/`, and
 committed `experiments/` manifests. The package is installed editable with
-`uv pip install --python .venv/bin/python -e . --no-deps`. The active 1M PPO run
-was started before the move and is continuing from its already-loaded process;
-new invocations use `scripts/reinforcement/01_ppo.py`. The old-to-new
+`uv pip install --python .venv/bin/python -e . --no-deps`. The 1M PPO process
+that was running during the move has since completed; new invocations use
+`scripts/reinforcement/01_ppo.py`. The old-to-new
 mapping and verification are in
 [`audit/2026-10-28-repository-restructure.md`](audit/2026-10-28-repository-restructure.md).
 
@@ -43,15 +43,27 @@ pipeline review in
 and the clock-bias audit in
 [`audit/2026-10-28-start-pool-clock-bias.md`](audit/2026-10-28-start-pool-clock-bias.md).
 
-**PPO clean-start baseline (2026-10-28, running).** A fresh 1-1 PPO policy is
-training for **1,000,000 environment timesteps** in
-`runs/ppo_clean_start_1_1/` using the Godot **lean 188-value** packet, Python
-one-hot/categorical preprocessing (188 → 954), the NEAT clean-start states, and
-a route-cluster holdout. It deliberately does **not** use 794 or prefix replay.
-The budget matches the last 794 sensor PPO target: 1M timesteps is about 833
-rollout updates with 8 envs × 150 steps. Training starts are canonical
-0.70 / train state 0.30; holdout routes are excluded from training and evaluated
-separately.
+**PPO clean-start baseline (2026-10-28, complete; 225k selected).** The clean
+1M attempt collapsed around 296k and is preserved in
+`runs/ppo_clean_start_1_1_failed_1m/`. A stable continuation resumed from
+`ppo-200000.zip` with `lr=1e-4`, `target_kl=0.02`, `ent_coef=0.02`, and 25k
+checkpoint/evaluation cadence. It stopped at 300k on patience and selected the
+**225k** checkpoint in `runs/ppo_clean_start_1_1/`.
+
+Deterministic results:
+
+```text
+canonical:    100/100 finishes, median 2.3167 s
+train pool:   14/14 finishes, median 3.5583 s, best 2.1500 s
+holdout pool: 10/10 finishes, median 5.2250 s, best 3.4167 s
+```
+
+The policy uses the Godot **lean 188-value** packet, Python one-hot
+preprocessing (188 → 954), and canonical 0.70 / train-state 0.30 sampling. It
+deliberately does **not** use 794 or prefix replay. The holdout is
+route-cluster-level only; it is not state-unseen. The model is not installed.
+Compact JSON/distillation options are in
+[`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md).
 
 The collection run stopped at generation 25 with **452 unique clean routes**
 and 1,486 checkpoint files. Filtering at `jaccard=0.5`, `max-per-cluster=8`, and
@@ -208,12 +220,14 @@ re-measured here.
    [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
    and [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md).
    Do not start with cell-only spawns or 794.
-4. **Finish the PPO clean-start baseline.** The 1M-timestep run is active in
-   `runs/ppo_clean_start_1_1/`. After it finishes, inspect the 100k–1M
-   checkpoints on canonical, train, and holdout pools; select by holdout median
-   with a canonical gate. Treat the current holdout as route-cluster-only, not
-   state-unseen, because its 10 state keys also occur on train routes. See
-   [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md).
+4. **Compact the PPO candidate for deployment.** The 1M run collapsed at ~296k;
+   the stable continuation selected the 225k checkpoint at **2.3167 s** canonical.
+   Preserve that teacher and distill it into a smaller flat MLP for JSON
+   deployment. Start with `954 → 256 → 256`, then 192/128 if quality holds.
+   Review the compact-policy options before building the supervised pipeline.
+   The current holdout is route-cluster-only, not state-unseen. See
+   [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md)
+   and [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/).
 5. **Smoke the new reward/start/death contract.** The 10k 794/prefix DQN smoke
    and 42/44 legacy strata eval validate the shipped reset/reward/death paths,
    not clean-start quality. PPO 10k canonical is 0/100; run a longer smoke
