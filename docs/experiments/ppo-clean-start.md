@@ -1,8 +1,21 @@
 # PPO clean-start on 1-1
 
-Status: **active; 1M training run started 2026-10-28**
+Status: **historical plan; 225k baseline complete; 400k horizon best 2.15 s**
 Started: 2026-10-28
 Last updated: 2026-10-28
+
+> **Harness note (2026-10-28).** The commands below are historical and use the
+> old 45-flag CLI. The active entry point is config-driven:
+>
+> ```bash
+> .venv/bin/python scripts/reinforcement/01_ppo.py \
+>   --config experiments/0001_ppo_clean_start_1_1
+> .venv/bin/python tools/evaluate.py \
+>   --config experiments/0001_ppo_clean_start_1_1 \
+>   --model runs/ppo_clean_start_1_1/ppo_pilot.zip
+> ```
+>
+> See [`docs/status.md`](../status.md) for the current harness.
 Level: 1-1 only
 Driver: [`../../scripts/reinforcement/01_ppo.py`](../../scripts/reinforcement/01_ppo.py)
 Preprocessing: [`../../src/plaiground/observations/`](../../src/plaiground/observations/)
@@ -14,6 +27,13 @@ Start/reset contract: [`../audit/2026-10-28-clean-start-state-capture.md`](../au
 Route reservoir decision: [`../audit/2026-10-28-clean-route-reservoir.md`](../audit/2026-10-28-clean-route-reservoir.md)
 Previous PPO lineage: [`ppo-pilot.md`](ppo-pilot.md)
 
+> **Outcome (2026-10-28).** Experiment 0001 selected the 225k checkpoint at
+> 2.3167 s. Experiment 0002 resumed it and found **400k at 2.1500 s**, then
+> oscillated into deterministic timeout windows and was stopped at 972.6k for
+> investigation. Canonical evaluation now reports one deterministic trial, and
+> the corrected standable pool has 12 train / 8 holdout starts. See
+> [`../audit/2026-10-28-ppo-timeout-root-cause.md`](../audit/2026-10-28-ppo-timeout-root-cause.md).
+>
 > **Budget decision.** This run uses **1,000,000 environment timesteps**,
 > matching the target of the last 794 sensor PPO 1-1 run. It does **not** use
 > 1,000,000 PPO updates. With 8 envs × 150 steps, that is about **833 PPO

@@ -4,6 +4,23 @@ Status: complete; 225k checkpoint selected
 Started: 2026-10-28
 Completed: 2026-10-28
 
+> **Harness note (2026-10-28).** This record was produced with the old
+> flag-based CLI. The current reproduction is config-driven:
+>
+> ```bash
+> .venv/bin/python scripts/reinforcement/01_ppo.py \
+>   --config experiments/0001_ppo_clean_start_1_1
+> .venv/bin/python tools/evaluate.py \
+>   --config experiments/0001_ppo_clean_start_1_1 \
+>   --model runs/ppo_clean_start_1_1/ppo_pilot.zip
+> ```
+>
+> The manifest owns the 512×512 architecture, lean preprocessing, start pool,
+> and PPO hyperparameters. It records the completed run without
+> `[run].resume_from`, so the command above starts a fresh run. To reproduce
+> the continuation, add
+> `--resume runs/ppo_clean_start_1_1_failed_1m/checkpoints/ppo-200000.zip`.
+
 ## Question
 
 Can a simple lean-observation PPO policy learn to execute 1-1 from the clean
@@ -48,7 +65,10 @@ Holdout start pool: runs/neat_clean_450/pool/holdout_start_pool.json
 The route split is cluster-level. All 10 holdout state keys also occur on train
 routes; this is **not** a state-unseen holdout.
 
-## Command
+## Historical command (old flag CLI)
+
+The current config-driven reproduction is in the harness note above. This block
+records the exact old command shape.
 
 ```bash
 .venv/bin/python scripts/reinforcement/01_ppo.py \

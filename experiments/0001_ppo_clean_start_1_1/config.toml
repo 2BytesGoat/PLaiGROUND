@@ -21,6 +21,8 @@ n_envs = 8
 action_repeat = 4
 max_decisions = 150
 speedup = 8.0
+seed = 42
+start_seed = 0
 force_start_jump = false
 
 [observation]
@@ -65,15 +67,14 @@ holdout_is_state_unseen = false
 save_freq = 25000
 
 [evaluation]
-canonical_agents = 100
+# Canonical evaluation is one deterministic trace; 100 identical clones are
+# not independent trials. Start pools remain the multi-scenario test.
 canonical = true
 train_pool = true
 holdout_pool = true
 selection_metric = "canonical_median_then_holdout"
-canonical_gate = true
-eval_every = 25000
-patience = 3
 selected_checkpoint = "checkpoints/ppo-225008.zip"
 
 [output]
 dir = "runs/ppo_clean_start_1_1"
+model_file = "ppo_pilot.zip"

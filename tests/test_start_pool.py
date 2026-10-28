@@ -29,7 +29,18 @@ class StartPoolTest(unittest.TestCase):
             output = root / "pool"
             (archive / "checkpoints").mkdir(parents=True)
             filtered.mkdir()
-            analysis = {"time_to_exit": [[2.0, 2.0], [2.0, 2.0]]}
+            analysis = {
+                "symbols": [
+                    ["W", "W", "W"],
+                    ["W", "E", "W"],
+                    ["W", "W", "W"],
+                ],
+                "time_to_exit": [
+                    [2.0, 2.0, 2.0],
+                    [2.0, 2.0, 2.0],
+                    [2.0, 2.0, 2.0],
+                ],
+            }
             analysis_path = root / "analysis.json"
             analysis_path.write_text(json.dumps(analysis))
 
@@ -54,6 +65,7 @@ class StartPoolTest(unittest.TestCase):
                         {**state, "run_time": 1.2},
                         {**state, "run_time": 0.9},
                         {**state, "on_floor": False},
+                        {**state, "cell": [0, 0], "run_time": 0.8},
                     ]
                 )
             )
@@ -77,6 +89,9 @@ class StartPoolTest(unittest.TestCase):
             self.assertEqual(summary["train_states"], 1)
             self.assertEqual(summary["holdout_states"], 1)
             self.assertEqual(summary["shared_state_keys"], 1)
+            self.assertEqual(
+                summary["train"]["rejected_non_standable"], 1
+            )
             self.assertEqual(result["train_pool"][0]["weight"], 0.7)
             self.assertEqual(result["train_pool"][1]["weight"], 0.3)
             self.assertEqual(result["train_pool"][1]["run_time"], 0.9)

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Report training episodes by start source, with a canonical-only mode.
 
-The aggregate ``episodes.csv`` mixes canonical, medium/hard cell, focus, and
+The aggregate monitor file mixes canonical, medium/hard cell, focus, and
 NEAT-prefix starts. Comparing the best time from one start family with the
 median of the whole mix is misleading. This tool keeps those populations
 separate and makes canonical-only speed reporting the default view when
 ``--canonical-only`` is used.
 
+``VecMonitor`` writes ``monitor.csv`` with a leading ``#`` metadata line;
+historical runs also have ``episodes.csv``. Both are accepted.
+
 Usage:
-    python tools/summarize_episodes.py runs/.../episodes.csv --level 1-3
-    python tools/summarize_episodes.py runs/.../episodes.csv --canonical-only
-    python tools/summarize_episodes.py runs/.../episodes.csv --group-by start_cell
+    python tools/summarize_episodes.py runs/.../monitor.csv --level 1-3
+    python tools/summarize_episodes.py runs/.../monitor.csv --canonical-only
+    python tools/summarize_episodes.py runs/.../monitor.csv --group-by start_cell
 """
 
 from __future__ import annotations
@@ -50,7 +53,8 @@ def start_kind(row: dict) -> str:
 
 def load_rows(path: Path) -> list[dict]:
     with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+        lines = [line for line in handle if not line.startswith("#")]
+    return list(csv.DictReader(lines))
 
 
 def summarise(rows: list[dict]) -> dict:
@@ -59,9 +63,9 @@ def summarise(rows: list[dict]) -> dict:
     ]
     times = [float(row["run_time"]) for row in finished_rows]
     steps = [
-        int(float(row["episode_length"]))
+        int(float(row.get("episode_length") or row["l"]))
         for row in finished_rows
-        if row.get("episode_length")
+        if row.get("episode_length") or row.get("l")
     ]
     return {
         "episodes": len(rows),

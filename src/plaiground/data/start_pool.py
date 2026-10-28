@@ -36,6 +36,40 @@ def _cell_value(grid: list[list[float]], cell: list[int] | tuple[int, int]) -> f
     return -1.0
 
 
+def _is_cell_standable(
+    analysis: dict[str, Any],
+    cell: list[int] | tuple[int, int] | None,
+) -> bool:
+    """Mirror Godot's ``Level.is_cell_standable`` for start-pool expansion.
+
+    A start is valid only when the cell is not a wall/spike/reset/exit and has
+    a permanent wall directly below it. This catches cells that pass the
+    time-to-exit gate but are silently replaced by the game at reset.
+    """
+    if not isinstance(cell, (list, tuple)) or len(cell) != 2:
+        return False
+    symbols = analysis.get("symbols")
+    if not isinstance(symbols, list) or not symbols:
+        raise ValueError("level analysis has no symbols grid")
+    x, y = int(cell[0]), int(cell[1])
+    if not 0 <= y < len(symbols):
+        return False
+    row = symbols[y]
+    if not isinstance(row, (list, tuple, str)) or not 0 <= x < len(row):
+        return False
+    symbol = str(row[x])
+    if any(mark in symbol for mark in ("W", "Y", "R", "Q")):
+        return False
+    if y + 1 >= len(symbols):
+        return False
+    support_row = symbols[y + 1]
+    if not isinstance(support_row, (list, tuple, str)) or not 0 <= x < len(
+        support_row
+    ):
+        return False
+    return "W" in str(support_row[x])
+
+
 def _resolve_checkpoint_path(route_path: Path, checkpoint_file: str) -> Path | None:
     candidate = Path(checkpoint_file)
     if candidate.is_absolute():
@@ -192,6 +226,12 @@ def build_split_pool(
             continue
         accepted = 0
         for checkpoint in checkpoints if isinstance(checkpoints, list) else []:
+            if not _is_cell_standable(
+                analysis,
+                checkpoint.get("cell") if isinstance(checkpoint, dict) else None,
+            ):
+                stats["rejected_non_standable"] += 1
+                continue
             if not _valid_checkpoint(checkpoint, analysis, min_time_to_exit):
                 stats["rejected_checkpoints"] += 1
                 continue
@@ -225,6 +265,7 @@ def build_split_pool(
         "accepted_states": len(states),
         "accepted_checkpoints": stats["accepted_checkpoints"],
         "rejected_checkpoints": stats["rejected_checkpoints"],
+        "rejected_non_standable": stats["rejected_non_standable"],
         "routes_without_checkpoint": stats["routes_without_checkpoint"],
         "missing_checkpoint_files": stats["missing_checkpoint_files"],
         "unreadable_checkpoint_files": stats["unreadable_checkpoint_files"],
@@ -268,6 +309,8 @@ def build_start_pools(
         holdout_routes = load_routes(holdout_path)
 
     analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    if not isinstance(analysis.get("symbols"), list) or not analysis["symbols"]:
+        raise ValueError("level analysis has no symbols grid")
     route_path = archive_dir / "routes.json"
     if not route_path.exists():
         route_path = archive_dir

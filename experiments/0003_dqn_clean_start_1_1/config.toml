@@ -1,0 +1,80 @@
+# Experiment 0003: raw-state DQN from clean NEAT starts on 1-1.
+
+[experiment]
+id = "0003"
+name = "dqn_clean_start_1_1"
+status = "planned"
+started = "2026-10-28"
+
+[workflow]
+name = "reinforcement.dqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-1"
+n_envs = 4
+action_repeat = 4
+max_decisions = 150
+speedup = 8.0
+force_start_jump = false
+reward_profile = "time"
+base_port = 13000
+eval_port = 13100
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "raw"
+preprocessing = "none"
+expected_raw_size = 342
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 200000
+learning_rate = 0.0001
+buffer_size = 100000
+learning_starts = 2000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 1
+target_update_interval = 1000
+exploration_fraction = 0.25
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.05
+
+[data]
+archive = "runs/neat_clean_450/filtered/train_clean_routes.json"
+finishers = "runs/neat_clean_450/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-1.json"
+min_time_to_exit = 0.5
+train_pool = "runs/dqn_clean_start_1_1/spawns/1-1_start_pool.json"
+
+[checkpointing]
+save_freq = 25000
+
+[evaluation]
+canonical = true
+sets = ["runs/neat_1_1_8x24_archive/ppo_clock_safe/eval_starts_heldout.json"]
+
+[run]
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/dqn_clean_start_1_1"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

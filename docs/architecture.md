@@ -52,7 +52,9 @@ Godot training scene
   prefix replay and state snapshots preserve the run clock; a cell reset zeroes
   it. See [`audit/2026-10-28-start-pool-clock-bias.md`](audit/2026-10-28-start-pool-clock-bias.md).
 - **`MultiAgentGodotVecEnv`** exposes N agents in one Godot process as N virtual
-  SB3 environments, using the game's per-agent `reset(agents=...)` support.
+  SB3 environments, using the game's per-agent `reset(agents=...)` support. It
+  is not used by the active PPO/DQN trainers; those use one world per process
+  through `envs/factory.py`.
 - **`StableBaselinesGodotEnv`** is the older Gym wrapper kept for tutorials /
   legacy notebooks. Active drivers use the classes above.
 
@@ -160,14 +162,17 @@ A typical run directory:
 ```text
 runs/<run>/
   monitor.csv                  SB3 VecMonitor episode summary
-  episodes.csv                 one row per episode (PPO, start kind/source)
   checkpoints/                 model checkpoints
-  eval*/summary.json           deterministic evaluation aggregates
-  eval*/results.json           per-start results
+  eval/<tag>/summary.json      deterministic evaluation aggregates
+  eval/<tag>/*.csv             canonical and per-set start rows
   godot/                       raw Godot stdout/stderr per process
   userdata/                    isolated HOME/XDG trees per process
   tensorboard/                 SB3 logs (PPO/DQN)
 ```
+
+Historical PPO runs may also contain `episodes.csv` and
+`eval/summary.csv`; new runs use `monitor.csv` and per-tag evaluation
+directories.
 
 `runs/` is gitignored. See
 [`reference/run-artifacts.md`](reference/run-artifacts.md) for the current
@@ -196,5 +201,5 @@ inventory and what to open first.
 | Socket protocol / info decoding | `src/plaiground/envs/godot.py` + `tests/test_info_protocol.py` |
 | Observation schema mirror | `src/plaiground/observations/spec.py` (and the game's `AIObservationSpec` on the game side) |
 | Reward/observation behavior | game repo, not here; update the game vault and this repo's reference docs |
-| Run evaluation | reuse `scripts/evaluation/01_evaluate_strata.py` patterns; do not launch one process per spawn |
+| Run evaluation | `tools/evaluate.py` + `src/plaiground/evaluation/rollout.py`; one persistent env per set, never one process per spawn |
 | Deployed model | export JSON from the student checkpoint; install in the game only after the gate |

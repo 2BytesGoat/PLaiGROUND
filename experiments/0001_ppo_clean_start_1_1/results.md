@@ -19,7 +19,14 @@ runs/ppo_clean_start_1_1_failed_1m/
 
 ## Final evaluation
 
-Deterministic, 100 canonical agents:
+> **Measurement caveat (fixed 2026-10-28).** The old canonical evaluator reset
+> 100 agents to the same canonical start and reported identical deterministic
+> trajectories as 100 independent trials. The **2.3167 s** result is one
+> deterministic trace, not a 100-trial robustness result. It also used the
+> pre-standability pool (14 train / 10 holdout); the corrected pool is 12 / 8.
+> See [`../../docs/audit/2026-10-28-ppo-timeout-root-cause.md`](../../docs/audit/2026-10-28-ppo-timeout-root-cause.md).
+
+Deterministic, old clone evaluation:
 
 ```text
 level:         1-1

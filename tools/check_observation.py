@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from plaiground.algorithms.reinforcement import ppo as PPO
+from plaiground.envs.runtime import isolated_home, resolve_env_path
 from plaiground.envs.godot import GodotEnv
 from plaiground.observations import spec as obs_spec
 
@@ -35,7 +35,7 @@ def main() -> int:
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
-    env_path = PPO.resolve_env_path()
+    env_path = resolve_env_path()
     env = GodotEnv(
         env_path=env_path,
         port=args.port,
@@ -47,7 +47,7 @@ def main() -> int:
         level=args.level,
         convert_action_space=True,
         log_path=str(args.out / "godot.log"),
-        env=PPO.isolated_home(args.out, "raw_check"),
+        env=isolated_home(args.out, "raw_check"),
         reward_profile="time",
         obs_encoding="raw",
     )

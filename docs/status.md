@@ -50,10 +50,11 @@ and the clock-bias audit in
 checkpoint/evaluation cadence. It stopped at 300k on patience and selected the
 **225k** checkpoint in `runs/ppo_clean_start_1_1/`.
 
-Deterministic results:
+Deterministic results (old clone evaluation: one canonical trace repeated 100
+times, not 100 independent trials):
 
 ```text
-canonical:    100/100 finishes, median 2.3167 s
+canonical:    100/100 clones, median 2.3167 s
 train pool:   14/14 finishes, median 3.5583 s, best 2.1500 s
 holdout pool: 10/10 finishes, median 5.2250 s, best 3.4167 s
 ```
@@ -65,6 +66,86 @@ route-cluster-level only; it is not state-unseen. The model is not installed.
 Compact JSON/distillation options are in
 [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md).
 
+**PPO clean-start horizon test (2026-10-28, stopped at 972.6k; 400k selected).**
+Experiment 0002 resumed the 225k policy and ran to 972,600 timesteps. It found a
+new best at **400k: 2.1500 s canonical**, then oscillated between the healthy
+2.15 s mode and deterministic jump-loop timeouts. The run was stopped manually
+for investigation; no retraining was performed.
+
+The timeout investigation found:
+
+- canonical evaluation was running 100 identical deterministic clones and
+  reporting them as 100 independent trials;
+- the 575k policy diverged from the 400k policy at canonical step 5, jumped into
+  a wall, and looped until timeout;
+- the old pool contained non-standable state starts at `(7,7)` and `(24,10)`.
+
+Fixes now in place:
+
+- canonical evaluation reports **one deterministic trial**;
+- the pool builder rejects non-standable cells, and the runtime env rejects a
+  silent spawn fallback;
+- `tools/trace_ppo.py` records per-step action/state traces.
+
+The corrected 400k evaluation is canonical **1/1 at 2.15 s**, train pool
+**12/12**, holdout pool **8/8**. See
+[`../experiments/0002_ppo_clean_start_1_1_horizon_1m/`](../experiments/0002_ppo_clean_start_1_1_horizon_1m/)
+and
+[`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md).
+
+**Lean training harness (2026-10-28, complete).** Both reinforcement trainers
+are now config-driven and share the non-algorithm plumbing:
+
+```text
+scripts/reinforcement/01_ppo.py     train only, 7 flags
+scripts/reinforcement/02_dqn.py     train only, 7 flags
+tools/evaluate.py                   one evaluator for PPO and DQN
+tools/extract_route_starts.py       DQN route extraction
+
+ppo.py                    154 lines  model + learn
+dqn.py                    116 lines  model + learn
+experiments/runner.py     356 lines  config -> run paths/overrides
+envs/factory.py           159 lines  env, vec env, eval env, ports, HOME
+observations/lean_io.py   131 lines  load/create lean preprocessing
+evaluation/rollout.py     492 lines  canonical/pool rollout + summaries
+data/route_starts.py      505 lines  NEAT checkpoint extraction
+```
+
+The command surface is now `--config`, `--timesteps`, `--resume`,
+`--output-dir`, `--show`, `--device`, `--verbose`. The manifest supplies the
+level, environment shape, observation encoding, model, hyperparameters,
+checkpoint cadence, data paths, and evaluation sets.
+
+Removed from the active path:
+
+- `ppo_cli.py`, `ppo_callbacks.py`, `ppo_env.py`, `ppo_evaluation.py`, and
+  `ppo_preprocessing.py`;
+- the PPO multi-agent `--agents-per-process` branch;
+- DQN `PatienceCallback`, `run_eval_episode`, and the in-trainer extractor;
+- the custom episode CSV callback and per-eval checkpoint writer. `VecMonitor`
+  writes `monitor.csv`, and SB3's `CheckpointCallback` writes checkpoints;
+- in-training eval/patience. Evaluation is a post-run tool, which matches the
+  `eval_every = 0` practice used by the active PPO runs.
+
+Commands:
+
+```bash
+.venv/bin/python scripts/reinforcement/01_ppo.py \
+  --config experiments/0002_ppo_clean_start_1_1_horizon_1m
+.venv/bin/python tools/evaluate.py \
+  --config experiments/0002_ppo_clean_start_1_1_horizon_1m \
+  --model runs/ppo_clean_start_1_1_horizon_1m/checkpoints/ppo-400008.zip \
+  --tag 400k
+```
+
+DQN has a matching manifest at
+[`../experiments/0003_dqn_clean_start_1_1/`](../experiments/0003_dqn_clean_start_1_1/).
+The 400k result remains the acceptance test for evaluation parity
+(canonical 1/1 at 2.15 s, train 12/12, holdout 8/8). The suite is 55 tests.
+See
+[`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md).
+The 0002 training process is stopped.
+
 The collection run stopped at generation 25 with **452 unique clean routes**
 and 1,486 checkpoint files. Filtering at `jaccard=0.5`, `max-per-cluster=8`, and
 `holdout-fraction=0.25` produced **95 clusters / 216 routes**: 158 train and 58
@@ -75,9 +156,10 @@ this is a route-cluster split, not a state-unseen holdout.
 
 `src/plaiground/data/route_filter.py` + `tools/filter_routes.py` perform the
 path filter; `src/plaiground/data/start_pool.py` +
-`tools/build_start_pool.py` build the train/holdout pools. `scripts/reinforcement/01_ppo.py`
-now accepts `--obs-encoding lean --preprocessing lean`, saves the fitted
-pipeline with the run, and applies it in canonical and start-pool evaluation.
+`tools/build_start_pool.py` build the train/holdout pools. The PPO manifest
+selects the lean 188-value encoding and Python preprocessing; the fitted
+pipeline is saved with the run and applied in canonical and start-set
+evaluation.
 See [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/),
 [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md), and
 [`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md).
@@ -88,8 +170,9 @@ implemented. The game now exposes `Level.capture_world_state()` /
 `restore_world_state()`, `Powerup.hold()`/`apply_state()`,
 `Player.restore_powerup()`, and an on-demand `info_request` / `world_state`
 block. `scripts/genetic/01_neat.py` records checkpoint snapshots + world state during the
-population; `tools/clean_archive_coverage.py` preserves the checkpoint file;
-`scripts/reinforcement/02_dqn.py` builds the canonical 0.70 / state 0.30 pool without
+population; the historical clean-archive coverage tool preserved the checkpoint file;
+`src/plaiground/data/route_starts.py` +
+`tools/extract_route_starts.py` build the canonical 0.70 / state 0.30 pool without
 replay when checkpoints exist. Validation so far: game AI suite 37/37,
 training reset/spawn suites 9/9 (the visuals test requires a truly headless
 GdUnit runner), Python suite 28/28, a 192-agent NEAT evaluation produced
@@ -186,10 +269,10 @@ re-measured here.
 
 ## DQN status (2026-10-28)
 
-- `scripts/reinforcement/02_dqn.py` supports `extract`, `train`, `eval`, and `all`,
-  plus start pools, 794 `multi_hot_sensor`, 512×512, `SubprocVecEnv`, and
-  batched eval. The 794 path is a legacy baseline; the clean-start target is
-  raw state. The 58-value cell extractor is archived/fallback only.
+- `scripts/reinforcement/02_dqn.py` trains from a config manifest;
+  `tools/extract_route_starts.py` builds the pool and `tools/evaluate.py`
+  evaluates checkpoints. The 794 path is a legacy baseline; the clean-start
+  target is raw state. The 58-value cell extractor is archived/fallback only.
 - `runs/dqn_startpool_1_1_smoke/` — 10k smoke on the clock-safe pool
   (canonical 0.7 / prefix 0.3): 61/93 finishes, no cell resets.
 - `runs/dqn_startpool_1_1/` — prefix-replay baseline. Stopped at ~129.5k/200k
@@ -220,14 +303,14 @@ re-measured here.
    [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
    and [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md).
    Do not start with cell-only spawns or 794.
-4. **Compact the PPO candidate for deployment.** The 1M run collapsed at ~296k;
-   the stable continuation selected the 225k checkpoint at **2.3167 s** canonical.
-   Preserve that teacher and distill it into a smaller flat MLP for JSON
-   deployment. Start with `954 → 256 → 256`, then 192/128 if quality holds.
+4. **Compact the PPO candidate for deployment.** The original 1M run collapsed
+   at ~296k; the horizon run found the **400k / 2.1500 s** checkpoint before it
+   was stopped. Preserve that teacher and distill it into a smaller flat MLP for
+   JSON deployment. Start with `954 → 256 → 256`, then 192/128 if quality holds.
    Review the compact-policy options before building the supervised pipeline.
    The current holdout is route-cluster-only, not state-unseen. See
    [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md)
-   and [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/).
+   and [`../experiments/0002_ppo_clean_start_1_1_horizon_1m/`](../experiments/0002_ppo_clean_start_1_1_horizon_1m/).
 5. **Smoke the new reward/start/death contract.** The 10k 794/prefix DQN smoke
    and 42/44 legacy strata eval validate the shipped reset/reward/death paths,
    not clean-start quality. PPO 10k canonical is 0/100; run a longer smoke
@@ -240,11 +323,18 @@ re-measured here.
    The old 794/prefix A/B is historical.
 7. **Keep the game baseline frozen.** No DQN/PPO/754/794 model is installed in
    the game until the full 16-level and in-game gates pass.
+8. **Use the lean harness.** PPO and DQN are config-driven thin adapters; the
+   shared evaluator is `tools/evaluate.py`. Do not add in-training eval or
+   algorithm-specific callbacks without a concrete need. The old strata
+   evaluator, archive-coverage tool, and per-spawn DQN evaluator are removed.
+   The 0002 training process is stopped. See
+   [`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md).
 
 ## Known issues
 
 See [`known-issues.md`](known-issues.md) for the living list. The highest-impact
 current items are clean-start validation/holdout coverage, the one-tick reset
-clock drift, the all-or-nothing extraction, the checkpoint-vs-route holdout
-ambiguity, per-spawn evaluation startup cost, and the coupling of
-`scripts/reinforcement/02_dqn.py` to the 83 KB `scripts/reinforcement/01_ppo.py`.
+clock drift, the all-or-nothing extraction, and the checkpoint-vs-route holdout
+ambiguity. The old per-spawn evaluation cost and the separate DQN
+evaluator/patience surface are resolved; evaluation is now
+`tools/evaluate.py`.

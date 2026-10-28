@@ -183,6 +183,25 @@ class SingleAgentGodotEnv(gym.Env):
                 spawn[key] = spec[key]
         return spawn
 
+    @staticmethod
+    def _assert_spawn_applied(spec: dict, info: dict) -> None:
+        """Reject a pool entry if Godot silently falls back to another spawn."""
+        expected = spec.get("cell")
+        actual = info.get("spawn_cell")
+        if expected is None or actual is None:
+            return
+        if not isinstance(actual, (list, tuple)) or len(actual) != 2:
+            return
+        if [int(actual[0]), int(actual[1])] != [
+            int(expected[0]),
+            int(expected[1]),
+        ]:
+            raise ValueError(
+                "start pool spawn was not applied: "
+                f"requested cell={expected}, actual cell={actual}. "
+                "Rebuild the pool with standability validation."
+            )
+
     def _clear_trajectory(self) -> None:
         self._trajectory_obs = []
         self._trajectory_actions = []
@@ -282,6 +301,7 @@ class SingleAgentGodotEnv(gym.Env):
             self.last_start = dict(spec)
             self._steps = 0
             info = dict(infos[0] if infos else {})
+            self._assert_spawn_applied(spec, info)
             self._start_info = {
                 "start_source": (
                     "prefix"
@@ -330,6 +350,9 @@ class SingleAgentGodotEnv(gym.Env):
             "start_source": "canonical_fallback",
             "start_kind": "canonical",
             "prefix_len": 0,
+            "start_cell": None,
+            "start_facing": None,
+            "start_distance": None,
             "start_jump": start_jump,
         }
         info.update(self._start_info)

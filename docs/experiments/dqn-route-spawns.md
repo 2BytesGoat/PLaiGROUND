@@ -5,6 +5,19 @@ Started: 2026-10-28
 Last updated: 2026-10-28
 First level: 1-1
 Driver: [`../../scripts/reinforcement/02_dqn.py`](../../scripts/reinforcement/02_dqn.py)
+
+> **Harness note (2026-10-28).** The commands below use the old subcommand CLI.
+> The active DQN path is config-driven:
+>
+> ```bash
+> .venv/bin/python tools/extract_route_starts.py \
+>   --config experiments/0003_dqn_clean_start_1_1
+> .venv/bin/python scripts/reinforcement/02_dqn.py \
+>   --config experiments/0003_dqn_clean_start_1_1
+> .venv/bin/python tools/evaluate.py \
+>   --config experiments/0003_dqn_clean_start_1_1 \
+>   --model runs/dqn_clean_start_1_1/dqn/dqn_final.zip
+> ```
 Detailed review: [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10-28-dqn-pipeline-review.md)
 Clock-bias audit: [`../audit/2026-10-28-start-pool-clock-bias.md`](../audit/2026-10-28-start-pool-clock-bias.md)
 

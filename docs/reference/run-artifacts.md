@@ -11,9 +11,13 @@ Sizes are approximate from 2026-10-28.
 | Directory | Size | Status | What it is | Start here |
 |---|---:|---|---|---|
 | `runs/dqn_route_spawns_1_1/` | 6 MB | **incomplete** | DQN route-spawn extract attempt for 1-1. Routes copied; `spawns/` empty; no `dqn/`, no `eval/`. Design pivoted to the start-pool path; this dir is the fallback. | `godot/route_replay.log`; then [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10-28-dqn-pipeline-review.md) and [`../audit/2026-10-28-start-pool-clock-bias.md`](../audit/2026-10-28-start-pool-clock-bias.md) |
-| `runs/neat_clean_450/` | ~61 MB | active/reference | 1-1 8×24 NEAT collection stopped at gen 25 on the 450-route target. Best **1.6667 s**; **452 clean routes**, 1,486 checkpoint files; filtered to 95 clusters / 216 routes; pools in `pool/`. | `train.console.log`, `filtered/summary.json`, `pool/split.json` |
-| `runs/ppo_clean_start_1_1/` | 124 MB | **complete; 225k selected** | Lean 188→954 PPO resumed from 200k with lr=1e-4, stopped at 300k on patience. Selected 225k: canonical **100/100 at 2.3167 s**, train 14/14, holdout 10/10. | `train.console.log`, `best_model.zip`, `eval/summary.csv`, `eval/start-pool-*.json` |
+| `runs/neat_clean_450/` | ~61 MB | active/reference | 1-1 8×24 NEAT collection stopped at gen 25 on the 450-route target. Best **1.6667 s**; **452 clean routes**, 1,486 checkpoint files; filtered to 95 clusters / 216 routes. Corrected standable pool has **12 train / 8 holdout** starts. | `train.console.log`, `filtered/summary.json`, `pool/split.json` |
+| `runs/neat_clean_450/pool_pre_standability/` | 184 KB | historical backup | Old 14 train / 10 holdout pool containing non-standable `(7,7)` and `(24,10)` starts. Kept for reproducing the pre-fix run. | `train_start_pool.json`, `holdout_start_pool.json` |
+| `runs/ppo_clean_start_1_1/` | 124 MB | **complete; 225k selected** | Lean 188→954 PPO resumed from 200k with lr=1e-4, stopped at 300k on patience. Selected 225k: old clone evaluation **100/100 at 2.3167 s**, train 14/14, holdout 10/10 (pre-standability pool). | `train.console.log`, `best_model.zip`, `eval/summary.csv`, `eval/start-pool-*.json` |
 | `runs/ppo_clean_start_1_1_failed_1m/` | 199 MB | **failed reference** | Original 1M run collapsed at ~296k (`value_loss` spike, entropy collapse). Preserved for diagnosis; do not use its final model. | `train.console.log`, `checkpoints/ppo-200000.zip` |
+| `runs/ppo_clean_start_1_1_horizon_1m/` | 1.0 GB | **stopped at 972.6k; 400k selected** | Experiment 0002 found **400k / 2.15 s** canonical, then oscillated into deterministic timeout windows. Stopped manually; no retrain. | `train.console.log`, `checkpoints/ppo-400008.zip`, `best_model.zip`, `metadata.json` |
+| `runs/ppo_best_400k_standable_eval/` | 72 KB | **verification eval** | 400k best on the corrected pool: canonical 1/1 at 2.15 s; train 12/12; holdout 8/8. | `eval/summary.csv`, `eval/start-pool-*.json` |
+| `runs/ppo_clean_start_1_1_horizon_1m_failed_start_58/` | 160 KB | **failed startup** | First launch omitted `--obs-encoding lean --preprocessing lean`, exposing legacy 58-value spaces against the 954 checkpoint. Preserved as a command-line gotcha; no training occurred. | `train.console.log` |
 | `runs/neat_1_1_8x24_archive/` | 22 MB | reference | 8×24 NEAT 1-1 archive. Best **2.15 s** at gen 9; 4,243 finishers; 460 clean routes; coverage, strata, PPO start pools. | `best_time.json`, `clean/clean_summary.json`, `strata/strata_summary.json`, `coverage/coverage_summary.json` |
 | `runs/neat_1_2_transfer_8x24/` | 12 MB | reference | 1-2 NEAT transfer (resumed 1-1 population at checkpoint 61). Best **3.0167 s**; 3,052 finishers; 12 clean routes; 71/72 starts. | `best_clean.json`, `clean/clean_summary.json`, `strata/strata_summary.json` |
 | `runs/neat_1_3_transfer_8x24/` | 15 MB | reference | 1-3 NEAT transfer (resumed 1-2 at checkpoint 97). Best **3.5667 s**; 3,580 finishers; 26 clean routes; 62/86 starts. | `best_clean.json`, `clean/clean_summary.json`, `strata/strata_summary.json` |
@@ -40,11 +44,13 @@ Sizes are approximate from 2026-10-28.
 | `pool/train_start_pool.json`, `pool/holdout_start_pool.json` | Clean-start state pools for PPO; the holdout file is evaluation-only. |
 | `pool/split.json` | Start-pool counts, weights, checkpoint rejection stats, and train/holdout key overlap. |
 | `preprocessing.pkl`, `preprocessing.json` | Fitted lean one-hot pipeline and its input/output metadata; load these with the model. |
-| `monitor.csv` | SB3 `VecMonitor` episode summary. |
-| `episodes.csv` | PPO per-episode rows: start source/kind, finish, timeout, run time, efficiency, flow. |
-| `checkpoints/` | SB3 checkpoints (`.zip`). |
-| `eval*/summary.json` | Per-stratum aggregate: `starts`, `finished`, `spawn_ok`, `best`, `median`, `worst`, `failures`. |
-| `eval*/results.json` | Per-start rows. |
+| `monitor.csv` | SB3 `VecMonitor` episode summary: `r`, `l`, `t`, plus start/level/run metadata. New runs use this instead of `episodes.csv`. |
+| `episodes.csv` | Historical PPO per-episode rows (pre-2026-10-28 harness). New runs use `monitor.csv`. |
+| `checkpoints/` | SB3 `CheckpointCallback` files. New PPO runs use `ppo_<steps>_steps.zip`; historical runs use `ppo-<steps>.zip`. |
+| `eval/<tag>/summary.json` | One evaluation run: canonical per-level summaries and per-set summaries (`agents`, `finishes`, `spawn_ok`, `best_time`, `median_time`, `timeouts`). |
+| `eval/<tag>/*.csv` | Per-start rows for canonical and each configured evaluation set. |
+| `eval*/summary.json`, `eval*/results.json` | Historical evaluator output. |
+| `eval*/start-pool-*.json` | Historical start-pool summaries. |
 | `godot/*.log` | Raw Godot stdout/stderr for a worker/eval process. |
 | `userdata/` | Isolated `HOME`/`XDG` tree for a process. Never read a real save from here. |
 | `tensorboard/` | SB3 logs. |
@@ -57,7 +63,10 @@ Sizes are approximate from 2026-10-28.
   these over the unfixed versions.
 - `run_<step>` / `run_<variant>` — training segment.
 - `watch_*` — visible playback of a checkpoint.
-- `checkpoints/ppo-<steps>.zip` — PPO checkpoint naming.
+- `checkpoints/ppo-<steps>.zip` — historical PPO checkpoint naming.
+- `checkpoints/ppo_<steps>_steps.zip` — new SB3 `CheckpointCallback` naming.
+- `eval/<tag>/` — evaluation output for one model/tag; the tag defaults to the
+  model stem.
 
 ## Archive
 

@@ -1,5 +1,16 @@
 # PPO pilot
 
+> **Historical note (2026-10-28).** The legacy PPO flags in this document
+> (`--init-student`, `--eval-stochastic`, `--eval-legacy-per-agent`, and the
+> spawn/autoencoder paths) were removed from the active PPO CLI during the
+> dead-code prune. The active entry points are config-driven
+> (`--config experiments/<id>_<name>`), and evaluation moved to
+> `tools/evaluate.py`. Use [`../status.md`](../status.md) for the current
+> harness and [`../audit/2026-10-28-training-harness-composition.md`](../audit/2026-10-28-training-harness-composition.md)
+> for the history.
+
+
+
 Status: active/reference — the 794 sensor lineage and the 754 multilevel
 reference use this driver; the older 58/512 and pilot results are historical.
 Last updated: 2026-10-28

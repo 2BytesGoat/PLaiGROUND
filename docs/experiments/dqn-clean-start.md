@@ -3,6 +3,11 @@
 Status: **core implementation complete 2026-10-28; 1-1 smoke passed; validation/promotion pending**
 Started: 2026-10-28
 Last updated: 2026-10-28
+
+> **Harness note (2026-10-28).** DQN is now config-driven and train/eval are
+> separate from extraction. The active commands are in
+> [`../../experiments/0003_dqn_clean_start_1_1/README.md`](../../experiments/0003_dqn_clean_start_1_1/README.md).
+> The `02_dqn.py extract/train/eval` sequence below is historical.
 Levels: all; 1-1 first
 Driver: [`../../scripts/reinforcement/02_dqn.py`](../../scripts/reinforcement/02_dqn.py)
 Decision record:
@@ -318,8 +323,9 @@ blocks with the same message.
 
 - **Completed smoke (2026-10-28):** 128 DQN steps on 1-1 raw state (342-value
   input) with a 10-state + canonical pool. The 192-agent NEAT evaluation
-  produced 87 finishes and 87 checkpoint files; `41 extract` built the 10-state
-  pool without replay. This validates plumbing, not training quality.
+  produced 87 finishes and 87 checkpoint files; the route extractor
+  (`tools/extract_route_starts.py`) built the 10-state pool without replay. This
+  validates plumbing, not training quality.
 - **Smoke:** 1 env × 10k, raw state, new encoder, clean-start pool.
   Verify:
   - obs size is the expected raw/lean size;

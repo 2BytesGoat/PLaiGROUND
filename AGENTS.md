@@ -35,12 +35,17 @@ The game source lives in a sibling repository:
 | `scripts/` | Thin training and evaluation entry points. |
 | `tools/` | Data, provenance, and reporting utilities. |
 | `experiments/` | Committed experiment manifests and result notes. |
-| `src/plaiground/envs/` | Game socket client, Gymnasium wrappers, SB3 VecEnv. |
+| `src/plaiground/envs/` | Game socket client, Gymnasium wrappers, shared env factory, SB3 VecEnv. |
 | `src/plaiground/models/extractors/` | Frozen legacy feature extractors. |
 | `src/plaiground/observations/spec.py` | Python mirror of the game's observation contract. |
-| `src/plaiground/data/` | Route filtering and related post-run pool processing. |
+| `src/plaiground/observations/lean_io.py` | Load/create the fitted lean preprocessing pipeline. |
+| `src/plaiground/data/` | Route filtering, start-pool loading, and DQN route extraction. |
+| `src/plaiground/evaluation/rollout.py` | Shared deterministic canonical/start-set evaluator. |
+| `src/plaiground/experiments/runner.py` | Experiment config -> run paths and the common CLI. |
 | `src/plaiground/models/` | Declared lean v1 model: `LeanMLP` 512×512 + SB3 policy kwargs. |
-| `tests/` | Unit tests for the socket/info protocol, preprocessing, model architecture, and route filtering. |
+| `tools/evaluate.py` | Shared PPO/DQN evaluation entry point. |
+| `tools/extract_route_starts.py` | NEAT checkpoint -> clean-start DQN pool. |
+| `tests/` | Unit tests for the socket/info protocol, preprocessing, models, runner, evaluation, and route/pool handling. |
 | `runs/` | Generated run artifacts. **Gitignored; do not delete or rewrite without asking.** |
 | `archive/2026-10-27-cleanup/` | Historical scripts, runs, and docs moved out of the active tree. |
 | `docs/experiments/` | Historical/deep-dive experiment documents. New records start in `experiments/`. |
@@ -56,7 +61,11 @@ The game source lives in a sibling repository:
 - Install the package editable with
   `uv pip install --python .venv/bin/python -e . --no-deps`, then run entry
   points from the repository root, e.g.
-  `.venv/bin/python scripts/reinforcement/01_ppo.py ...`.
+  `.venv/bin/python scripts/reinforcement/01_ppo.py --config experiments/<id>_<name>`.
+- Reinforcement entry points are config-driven. Put experiment details in
+  `experiments/<id>_<name>/config.toml`; the CLI only overrides run-level
+  values (`--timesteps`, `--resume`, `--output-dir`, `--show`, `--device`,
+  `--verbose`). Train and evaluate are separate: `tools/evaluate.py`.
 - `runs/` is generated and gitignored. Record conclusions in `docs/status.md`,
   `docs/known-issues.md`, or a dated `docs/audit/` note instead of committing
   run artifacts.

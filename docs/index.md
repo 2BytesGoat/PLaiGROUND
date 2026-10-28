@@ -23,6 +23,8 @@ development/research repo, not part of the shipped game.
 | Understand the 450-route reservoir and path-filter decision | [`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md) |
 | Review the applied route filter, start pools, and lean PPO launch | [`audit/2026-10-28-clean-route-filter-and-lean-ppo.md`](audit/2026-10-28-clean-route-filter-and-lean-ppo.md) |
 | Review the repository restructure | [`audit/2026-10-28-repository-restructure.md`](audit/2026-10-28-repository-restructure.md) |
+| Review PPO/DQN duplication, dead branches, and the composition plan | [`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md) |
+| Understand the PPO timeout and start-pool root cause | [`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md) |
 | Understand the lean 188-value state decision | [`audit/2026-10-28-lean-state-encoding.md`](audit/2026-10-28-lean-state-encoding.md) |
 | Set up the environment | [`../README.md`](../README.md) § Setup |
 | Read a term you don't recognize | [`reference/glossary.md`](reference/glossary.md) |
@@ -35,9 +37,11 @@ development/research repo, not part of the shipped game.
 | [`experiments/dqn-route-spawns.md`](experiments/dqn-route-spawns.md) | **active, legacy path** | Double DQN on 1-1 NEAT start pools; 794 sensor + 512×512 prefix baseline stopped at ~129.5k. Not the clean-start target; no model promotion. |
 | [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md) | **core implemented; validation pending** | Level-agnostic clean-start contract: raw state, source-checkpoint time, held powerups, dynamic `world_state`, NEAT validation. 1-1 smoke passed. |
 | [`experiments/ppo-pilot.md`](experiments/ppo-pilot.md) | active/reference | Shared-policy PPO, multi-level, start pools, 754/794 observation variants. |
-| [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) | **active; 1M run started** | 1-1 PPO on the lean 188-value packet with Python categorical one-hot, 1M timesteps, NEAT state starts with route-cluster holdout. |
+| [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md) | historical plan; 225k baseline complete | 1-1 PPO on the lean 188-value packet with Python categorical one-hot, 1M timesteps, NEAT state starts with route-cluster holdout. |
 | [`../experiments/0000_neat_clean_450/`](../experiments/0000_neat_clean_450/) | **complete manifest** | NEAT clean-route collection at game commit `adb9278`. |
 | [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/) | **complete manifest** | Exact config, game commit, and result record for the lean PPO run; 225k selected at 2.3167 s canonical. |
+| [`../experiments/0002_ppo_clean_start_1_1_horizon_1m/`](../experiments/0002_ppo_clean_start_1_1_horizon_1m/) | **stopped; 400k selected** | 1M-horizon continuation; found 2.15 s at 400k, then deterministic timeout windows. Stopped at 972.6k for investigation; no retrain. |
+| [`../experiments/0003_dqn_clean_start_1_1/`](../experiments/0003_dqn_clean_start_1_1/) | **planned manifest** | Config-driven raw-state DQN defaults for the 1-1 clean-start path. |
 | [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md) | **proposed** | Compact flat/embedding student options and the distillation plan for shipping a JSON policy. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |
@@ -63,9 +67,14 @@ development/research repo, not part of the shipped game.
 | `experiments/` | Committed experiment manifests and result notes. |
 | `experiments/0000_neat_clean_450/` | NEAT clean-route collection manifest. |
 | `experiments/0001_ppo_clean_start_1_1/` | Lean PPO clean-start manifest. |
-| `src/plaiground/envs/` | `GodotEnv`, Gymnasium/SB3 adapters, vector env, legacy wrapper. |
+| `experiments/0002_ppo_clean_start_1_1_horizon_1m/` | 1M-horizon continuation manifest. |
+| `src/plaiground/envs/` | `GodotEnv`, Gymnasium/SB3 adapters, shared env factory, vector env, legacy wrapper. |
 | `src/plaiground/observations/spec.py` | Python mirror of the game's `AIObservationSpec`. |
-| `tests/` | Protocol, preprocessing, model, route, pool, and experiment tests. |
+| `src/plaiground/observations/lean_io.py` | Lean preprocessing load/create. |
+| `src/plaiground/evaluation/rollout.py` | Shared canonical/start-set evaluator. |
+| `src/plaiground/experiments/runner.py` | Config -> run paths and common CLI. |
+| `tools/evaluate.py` | Shared PPO/DQN evaluation entry point. |
+| `tests/` | Protocol, preprocessing, model, runner, evaluation, route, pool, and experiment tests. |
 | `runs/` | Generated artifacts (gitignored): checkpoints, eval summaries, logs, per-run userdata. |
 | `archive/2026-10-27-cleanup/` | Historical scripts/runs/docs. Start at its `README.md`. |
 | `docs/` | Architecture, contracts, audits, and historical experiment deep-dives. |

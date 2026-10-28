@@ -107,23 +107,32 @@ NEAT, 1-1 (the current reference path uses the 8×24 persistent evaluator):
   --output-dir runs/neat_1_1_smoke --port 15500
 ```
 
-PPO, 1-1:
+PPO, 1-1 (the manifest owns levels, env shape, PPO hyperparameters, and paths):
 
 ```bash
 .venv/bin/python scripts/reinforcement/01_ppo.py \
-  --level 1-1 --n-envs 8 --timesteps 100000 \
-  --max-decisions 150 --action-repeat 4 --speedup 8 \
-  --output-dir runs/ppo_1_1
+  --config experiments/0001_ppo_clean_start_1_1
+
+# Smoke override:
+.venv/bin/python scripts/reinforcement/01_ppo.py \
+  --config experiments/0001_ppo_clean_start_1_1 \
+  --timesteps 10000 --output-dir runs/ppo_1_1_smoke
 ```
 
-DQN route-spawns (1-1):
+DQN clean-start (1-1):
 
 ```bash
-# The first extraction has not produced a pool yet; read the audit before running.
-.venv/bin/python scripts/reinforcement/02_dqn.py extract
-.venv/bin/python scripts/reinforcement/02_dqn.py train
-.venv/bin/python scripts/reinforcement/02_dqn.py eval
+.venv/bin/python tools/extract_route_starts.py \
+  --config experiments/0003_dqn_clean_start_1_1
+.venv/bin/python scripts/reinforcement/02_dqn.py \
+  --config experiments/0003_dqn_clean_start_1_1
+.venv/bin/python tools/evaluate.py \
+  --config experiments/0003_dqn_clean_start_1_1 \
+  --model runs/dqn_clean_start_1_1/dqn/dqn_final.zip
 ```
+
+Do not use the old 45-flag PPO command or `02_dqn.py extract/train/eval`; the
+active entry points are config-driven.
 
 ## Current results (selected)
 

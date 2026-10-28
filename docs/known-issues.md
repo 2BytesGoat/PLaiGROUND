@@ -151,49 +151,40 @@ result. A valid holdout needs route segments or checkpoint keys that do not occu
 on train routes. See [`experiments/ppo-clean-start.md`](experiments/ppo-clean-start.md)
 and [`audit/2026-10-28-clean-route-reservoir.md`](audit/2026-10-28-clean-route-reservoir.md).
 
-### 5. Evaluation launches one Godot process per spawn — high
+### 5. Evaluation launches one Godot process per spawn — resolved
 
-`run_eval_episode()` creates a fresh `GodotEnv` for every holdout spawn. A
-23–45-spawn eval means 23–45 cold game launches (macOS cold start can take
-~20 s), plus a new isolated `userdata/eval_<port>` tree each time.
+`run_eval_episode()` was removed. `evaluation/rollout.py` now uses one
+persistent `GodotEnv` per canonical trace or start set and calls
+`reset(spawns=...)` once, so a 23–45-spawn eval is one cold launch instead of
+23–45. `tools/evaluate.py` is the only evaluation entry point.
 
-**Fix:** reuse one persistent env and call `reset(spawns=...)` per start, as
-`scripts/evaluation/01_evaluate_strata.py` does. This also makes the eval deterministic and much
-faster.
+### 6. Training uses a sequential `DummyVecEnv` — resolved
 
-### 6. Training uses a sequential `DummyVecEnv` — medium
+`envs/factory.py` uses `DummyVecEnv` only for `n_envs == 1` and
+`SubprocVecEnv(start_method="spawn")` for larger runs. PPO and DQN share it.
 
-`train()` wraps 4 envs in `DummyVecEnv`, which steps them one at a time in the
-parent process. Each game process is separate, but the Python loop serializes
-the decisions. The PPO pilot uses `SubprocVecEnv` for `n_envs > 1`.
+### 7. Shared environment helpers partially extracted — resolved
 
-**Fix:** start with 1 env for a smoke, then use `SubprocVecEnv` (or the
-`MultiAgentGodotVecEnv` path) for throughput. `DummyVecEnv` is fine only for a
-debug run.
-
-### 7. Shared environment helpers still live inside PPO — medium
-
-`SingleAgentGodotEnv` now lives in `src/plaiground/envs/single_agent.py`, but
-`resolve_env_path()`, `isolated_home()`, the start/spawn loaders, and the
-vec-env factory still live in
-`src/plaiground/algorithms/reinforcement/ppo.py`. DQN imports them from the PPO
-module, so the modules remain coupled.
-
-**Fix:** move the shared env factory/helpers into `src/plaiground/envs/` and have
-both PPO and DQN import them there. Keep the DQN driver small and testable.
-
-### 8. The default level-analysis path is machine-specific — medium
-
-`DEFAULT_ANALYSIS` is an absolute path:
+The shared layers are now:
 
 ```text
-/Users/giani.statie/personal/dragon-jump-remaster/runs/level_analysis/1-1.json
+experiments/runner.py       config resolution and the common CLI
+envs/factory.py             env, vec env, eval env, ports, isolated HOME
+observations/lean_io.py     lean preprocessing load/create
+evaluation/rollout.py       canonical/pool rollout and summaries
+data/pools.py               start-pool loading
+data/route_starts.py        DQN route extraction
 ```
 
-It works on this machine only. Some legacy tools also embed absolute paths.
+PPO and DQN are thin adapters (154 and 116 lines). Neither imports the other.
 
-**Fix:** resolve the game repo relative to this repo (or an env var), and fail
-with a clear message when the analysis file is missing.
+### 8. The default level-analysis path is machine-specific — resolved
+
+`DEFAULT_ANALYSIS` was removed. The path comes from `[data].level_analysis` in
+the experiment manifest, resolved relative to the repository root, and
+`tools/extract_route_starts.py` fails with a clear message if it is missing.
+Legacy tools may still embed absolute paths; do not copy those defaults into
+new manifests.
 
 ### 9. Doc/code drift inside the DQN plan — low
 
@@ -333,6 +324,57 @@ and
 The old `reward_profile` values are ignored. See
 [`reference/reward-contract.md`](reference/reward-contract.md). Do not add new
 game-side feature engineering before this refactor finishes.
+
+### 23. PPO/DQN harness is config-driven and shared — resolved
+
+The active reinforcement surface is now:
+
+```text
+ppo.py                    154 lines  model + learn
+dqn.py                    116 lines  model + learn
+experiments/runner.py     356 lines  config -> run paths/overrides
+envs/factory.py           159 lines  env/vec-env/eval-env construction
+observations/lean_io.py   131 lines  lean preprocessing
+evaluation/rollout.py     492 lines  one canonical/pool evaluator
+data/route_starts.py      505 lines  NEAT checkpoint extraction
+tools/evaluate.py          41 lines  shared evaluation CLI
+tools/extract_route_starts.py 91 lines
+```
+
+The CLI is `--config`, `--timesteps`, `--resume`, `--output-dir`, `--show`,
+`--device`, `--verbose`. The manifest is the source of truth.
+
+Removed: the PPO-specific CLI/callbacks/env/eval/preprocessing modules, the
+PPO multi-agent `--agents-per-process` branch, DQN `PatienceCallback` and
+`run_eval_episode`, in-training eval/patience, and the custom episode CSV. New
+runs use `VecMonitor`'s `monitor.csv` and SB3's `CheckpointCallback`.
+
+There is **no automatic best-checkpoint selection during training** now. Train
+a fixed budget, then evaluate selected checkpoints with `tools/evaluate.py`.
+If selection is needed later, add one shared callback rather than algorithm
+specific ones. See
+[`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md).
+
+### 24. Canonical eval is one deterministic trace; policy robustness still needs work — medium
+
+The old canonical evaluator reset 100 agents to the same canonical start and
+reported identical deterministic trajectories as 100 independent trials. It now
+reports **one deterministic trial**. The 400k horizon checkpoint is **1/1 at
+2.15 s** canonical, 12/12 train, and 8/8 holdout on the corrected pool.
+
+This fixes the measurement, not the policy. The 575k checkpoint enters a
+deterministic jump-loop and times out; it diverged from the 400k policy at
+canonical step 5. Do not treat `2.15 s` as a 100-trial robustness result.
+Re-run with
+`tools/evaluate.py --config experiments/0002_ppo_clean_start_1_1_horizon_1m --model runs/ppo_clean_start_1_1_horizon_1m/checkpoints/ppo-400008.zip`.
+
+The old train pool also contained non-standable state starts `(7,7)` and
+`(24,10)`. The builder now rejects them, the runtime env rejects a silent spawn
+fallback, and the corrected pool has 12 train / 8 holdout starts. The old pool is
+at `runs/neat_clean_450/pool_pre_standability/`.
+
+See
+[`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md).
 
 ## Historical experiment caveats
 
