@@ -2,10 +2,19 @@
 
 **Updated:** 2026-10-28
 **Branch:** `neat`
-**HEAD:** `d7e173d` — `checkpointing before i lose my mind`
-**Working tree:** clean at `d7e173d` before the 2026-10-28 docs pass; the docs
-restructure is uncommitted at the time of writing.
-**Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `bb76299`, dirty with the 794 sensor/docs changes)
+**HEAD:** `b9dd103` — `update docs`
+**Working tree:** docs pass, the clean-start state-capture decision, the
+clean-start plan, `src/obs_spec.py`, `src/43_check_raw_obs.py`,
+`src/07_neat_agent.py`, `src/10_ppo_pilot.py`, `src/41_dqn_route_spawns.py`,
+`src/preprocessing/`, `src/wrappers/godot_env.py`, driver reward/start changes,
+and the reward contract are uncommitted.
+**Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `360b055`,
+dirty with uncommitted raw-state, force-start, reward, terminal-death, and
+clean-start world-state changes in `ai_observation_spec.gd`,
+`player_ai_training_controller.gd`, `player.gd`, `powerup.gd`,
+`level.gd`, `synchronizer.gd`, and the AI tests; world-state/powerup restore
+and `info_request` are implemented, but the clean-start pool/eval gates are
+not yet run)
 
 > This page is the current state. Historical sections in `README.md` and older
 > experiment docs are not authoritative. When they disagree, this page and
@@ -13,14 +22,63 @@ restructure is uncommitted at the time of writing.
 
 ## Current focus
 
-**DQN route-spawns (new, 2026-10-28).** A fresh 58-value Double DQN
-(`58 → 256 → 256 → 2`) is planned for 1-1. NEAT is used only to generate clean
-route checkpoints; no NEAT actions are imitation labels. The script and plan are
-committed, but the first extraction run did **not** produce a spawn pool, and no
-training or evaluation has run. See
-[`experiments/dqn-route-spawns.md`](experiments/dqn-route-spawns.md) and the
-detailed review in
-[`audit/2026-10-28-dqn-pipeline-review.md`](audit/2026-10-28-dqn-pipeline-review.md).
+**DQN route-spawns (2026-10-28, design pivoted).** The 794 `multi_hot_sensor`
+prefix run is now a historical baseline, not the clean-start target. The
+simplified reward, force-start reset, and terminal spike death are shipped.
+The prefix baseline was stopped at ~129.5k/200k for the clean-start design
+discussion; checkpoints 25k–125k exist, with no final model or eval. The
+clean-start core is now implemented: raw state, source-checkpoint time, held
+powerups, dynamic `world_state`, one-pass NEAT capture, and a canonical/state
+pool. The next step is full clean-start validation and evaluation. See
+[`experiments/dqn-route-spawns.md`](experiments/dqn-route-spawns.md), the
+pipeline review in
+[`audit/2026-10-28-dqn-pipeline-review.md`](audit/2026-10-28-dqn-pipeline-review.md),
+and the clock-bias audit in
+[`audit/2026-10-28-start-pool-clock-bias.md`](audit/2026-10-28-start-pool-clock-bias.md).
+
+**Clean-start implementation (2026-10-28).** The one-dict reset, dynamic
+`world_state` snapshot, held-powerup restore, and NEAT-side state rejection are
+implemented. The game now exposes `Level.capture_world_state()` /
+`restore_world_state()`, `Powerup.hold()`/`apply_state()`,
+`Player.restore_powerup()`, and an on-demand `info_request` / `world_state`
+block. `07_neat_agent.py` records checkpoint snapshots + world state during the
+population; `32_clean_archive_coverage.py` preserves the checkpoint file;
+`41_dqn_route_spawns.py` builds the canonical 0.70 / state 0.30 pool without
+replay when checkpoints exist. Validation so far: game AI suite 36/36,
+training suite 12/12, Python suite 21/21, a 192-agent NEAT evaluation produced
+87 finishes and 87 checkpoint files, and a raw-state 1-1 DQN smoke trained from
+the resulting 10-state pool. Training quality/promotion is still pending. See
+[`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
+and [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md).
+
+**Reward/start/death shipped (2026-10-28).** The training reward is now the
+simplified five-term contract: progress, efficiency, gold-ratio time pressure
+(`-3.75/s * (1 - gold_ratio)`, `gold_ratio` clamped 0–3), fixed `+500` finish,
+and `-50` death. `previous_best` is telemetry only; `reward_profile` is ignored.
+Training reset force-starts the run (no idle, no forced first jump). Spike
+contact is terminal at the hazard; the next reset uses the normal sampled start,
+not canonical. Raw `info` adds `gold_ratio`, `flow_cost`, `flow_in_bounds`, and
+`wasted_air_frames` for Python rewards. See
+[`reference/reward-contract.md`](reference/reward-contract.md).
+
+**Observation path (2026-10-28).** The raw local-state packet is implemented
+and validated: 342 values (7×7 tile IDs + tile states, player state, 8-way
+collisions, 8-way flow). The raw player state now carries `gold_ratio` instead
+of the old normalized run clock. Godot normalizes units; Python builds the
+feature encoding. The 794 sensor path is unchanged but is not the clean-start
+target. The one-dict reset, dynamic `world_state` snapshot, held-powerup
+restore, and NEAT validation are implemented; the raw 342-value clean-start
+state trains end-to-end. [`src/preprocessing/`](../src/preprocessing/) now
+provides a sklearn-style `StatePipeline` / `FeatureUnion` layer: raw identity,
+decoded tile/player/collision/flow features (342 values), optional one-hot tile
+IDs, and `Clip`/`Standardize` steps. The optional Python lean encoder layout is
+still undefined; the current clean-start smoke uses the raw vector directly.
+The preprocessing package is tested but not yet wired into the PPO/DQN drivers;
+the drivers remain on the 342-value raw identity path.
+See
+[`audit/2026-10-28-raw-state-observation-decision.md`](audit/2026-10-28-raw-state-observation-decision.md)
+and
+[`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
 
 **794 sensor PPO lineage (most recent working pipeline).** PPO with the
 794-value `multi_hot_sensor` encoding has 1-1 and 1-2 checkpoints and a 1-3
@@ -58,16 +116,39 @@ re-measured here.
 | 794 distilled | 1-3 | **3.9 s** canonical; medium 43/46, hard 25/27, easy 24/24 | `runs/distill_1_3_merged_available/` |
 | Deployed 58/256 | 1-1…1-16 | 16/16, 100/100, 0 deaths, **78.583 s** sum; 1-1 2.333 s | `godot/src/resources/ai/student_obs58_256.json` in the game repo |
 
+**2026-10-28 contract validation:**
+
+- Game reward tests: **16/16 pass** (force-start, fixed finish, clamped
+  `gold_ratio`, per-second time term, terminal spike death, raw telemetry).
+- Raw observation check: 1-1 and 1-8, **342 values**, cell matches 10/10 and
+  20/20, raw `gold_ratio` matches `info`.
+- 58 and 794 observation regressions: 1 env × 200 steps, no errors.
+- 10k DQN smoke on the clock-safe pool with force-start/new reward: 116
+  episodes, `ep_rew_mean` **≈438**, no crash. A 10k deterministic strata eval
+  finished **42/44** starts (canonical 1/1 at 3.43 s; medium 27/28; hard
+  14/15; no model promotion). Old start-jump checkpoints are out of
+  distribution.
+- 10k PPO 1-env smoke runs end-to-end; canonical eval is **0/100** at 10k
+  (too short to judge; no crash). Use a longer run before comparing.
+
+
 ## DQN status (2026-10-28)
 
-- `src/41_dqn_route_spawns.py` has `extract`, `train`, `eval`, and `all` modes.
-- `runs/dqn_route_spawns_1_1/` contains `routes/` (460 clean routes, ~6 MB) and
-  two Godot logs. `spawns/` is empty; there is no `dqn/` or `eval/`.
-- The first extraction run was created at 00:14, the script was edited at 00:16,
-  and the game log stops at `TRAINING_SPEEDUP x8.0` at 00:16:21. No process was
-  running when this was checked. Treat it as **stopped before writing the pool**,
-  not as a completed extract.
-- No DQN training result exists. Do not quote one.
+- `src/41_dqn_route_spawns.py` supports `extract`, `train`, `eval`, and `all`,
+  plus start pools, 794 `multi_hot_sensor`, 512×512, `SubprocVecEnv`, and
+  batched eval. The 794 path is a legacy baseline; the clean-start target is
+  raw state. The 58-value cell extractor is archived/fallback only.
+- `runs/dqn_startpool_1_1_smoke/` — 10k smoke on the clock-safe pool
+  (canonical 0.7 / prefix 0.3): 61/93 finishes, no cell resets.
+- `runs/dqn_startpool_1_1/` — prefix-replay baseline. Stopped at ~129.5k/200k
+  on 2026-10-28 for the design discussion. Checkpoints 25k–125k exist; no
+  final model or deterministic eval. Training stats: 79% finish, last 200
+  97.5%, median 4.0 s, best 1.62 s stochastic. Do not quote the 1.62 s as a
+  result.
+- `runs/dqn_route_spawns_1_1/` — original extractor attempt; `spawns/` is
+  empty. The first extract stopped before writing the pool.
+- No clean-start run exists; the plan is
+  [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md).
 
 ## Next
 
@@ -75,19 +156,34 @@ re-measured here.
    after the convention (A32/A33, decisions 2026-10-27). This repo says “active
    experiment.” Record the decision in the game vault or keep DQN explicitly
    side-only.
-2. **Fix the extraction before training.** Capture grounded `state` snapshots
-   (run time, velocity, `run_active`, `started_walking`), validate spawn
-   acceptance, and write incremental output. See the audit.
-3. **Run `extract` to completion** and inspect the pool counts/splits.
-4. **Smoke then scale:** 1 env × 10k steps, then 4 envs × 100k, then a
-   persistent-env evaluation. Do not start with 100k and cell-only spawns.
-5. **Keep the game baseline frozen.** No DQN/PPO/754/794 model is installed in
+2. **Raw-state path.** The Godot packet is implemented and validated (342
+   values, 1-1 and 1-8) and now includes `gold_ratio`. Add the Python lean
+   encoder and parity/throughput gates, then cut over. See
+   [`audit/2026-10-28-raw-state-observation-decision.md`](audit/2026-10-28-raw-state-observation-decision.md).
+3. **Validate the clean-start contract.** The game world-state/powerup
+   restore, one-dict reset, `info_request`, Python pass-through, and NEAT
+   one-pass checkpoint capture are implemented. Re-record 1-8+ powerup routes
+   and run the full 1-1/1-8 round-trip, strict NEAT rejection, and raw smoke
+   gates. Use the source-checkpoint time and the facing/neighbor holdout. See
+   [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md)
+   and [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md).
+   Do not start with cell-only spawns or 794.
+4. **Smoke the new reward/start/death contract.** The 10k 794/prefix DQN smoke
+   and 42/44 legacy strata eval validate the shipped reset/reward/death paths,
+   not clean-start quality. PPO 10k canonical is 0/100; run a longer smoke
+   before 4 envs × 200k.
+5. **Recompute the clean-start pool.** Record checkpoint snapshots and
+   `world_state` during the population (one-pass), keep the best final time per
+   route signature, discard losers, and build the raw-state pool. If capture
+   overhead is too high, use the selected-route replay fallback. The old
+   794/prefix A/B is historical.
+6. **Keep the game baseline frozen.** No DQN/PPO/754/794 model is installed in
    the game until the full 16-level and in-game gates pass.
 
 ## Known issues
 
 See [`known-issues.md`](known-issues.md) for the living list. The highest-impact
-current items are the DQN run-clock/reward mismatch, the all-or-nothing
-extraction, the checkpoint-vs-route holdout ambiguity, per-spawn evaluation
-startup cost, and the coupling of `41_dqn_route_spawns.py` to the 83 KB
-`10_ppo_pilot.py`.
+current items are clean-start validation/holdout coverage, the one-tick reset
+clock drift, the all-or-nothing extraction, the checkpoint-vs-route holdout
+ambiguity, per-spawn evaluation startup cost, and the coupling of
+`41_dqn_route_spawns.py` to the 83 KB `10_ppo_pilot.py`.

@@ -3,6 +3,12 @@
 Python-side summary of the game's training contract. The canonical definitions
 live in the game repo:
 
+> **Raw-state change (2026-10-28):** the `raw` encoding is implemented
+> (342 values) and validated; Python feature encoders and the reset/powerup
+> restore are still pending. The 58/754/794 layouts below remain the current
+> runtime/legacy contracts. See
+> [`../audit/2026-10-28-raw-state-observation-decision.md`](../audit/2026-10-28-raw-state-observation-decision.md).
+
 - `godot/src/ai/ai_observation_spec.gd`
 - `godot/src/player/controllers/player_ai_training_controller.gd`
 - `godot/src/training/synchronizer.gd`
@@ -48,6 +54,23 @@ design.
 experiment; no installed runtime. The game creates the ray sensor lazily for
 this encoding.
 
+### `raw` — 342 values (implemented 2026-10-28; Python encoder pending)
+
+Godot sends primitive local state; Python builds the training features:
+
+- 49 tile IDs (7×7 window, symbol indices).
+- 49 × 5 tile states: powerup kind, dissolve state, dissolve timer,
+  bounce orientation x/y.
+- 16 player values: cell x/y, normalized velocity, facing, state ID,
+  on-floor/on-wall, jump phase, held powerup stack (3), `gold_ratio`
+  (clamped 0–3), run-active/started/finished flags.
+- 8 × 3 collisions: normalized proximity, hit, object type ID.
+- 8 flow deltas: `(flow[neighbor] - flow[player]) / 4`, clamped to [-1, 1].
+
+`obs_spec.RAW_*` defines the offsets; `obs_spec.decode_raw()` splits the
+vector. `src/43_check_raw_obs.py` validates the path. This is the input to the
+Python feature encoders; it is not yet a trained model input.
+
 ## Actions and cadence
 
 - Discrete binary action: `0 = idle`, `1 = jump`.
@@ -72,8 +95,12 @@ fields:
 | `perc_to_peak` | jump-phase percentage |
 | `powerup_count` | number of held powerups |
 | `state` | player state-machine state name |
-| `run_time` | elapsed run clock (seconds) |
-| `best_run_time` | agent's best full run this episode/controller lifetime |
+| `run_time` | elapsed run clock (seconds; includes clean-start offset) |
+| `gold_ratio` | clamped gold-time ratio in `[0, 3]` |
+| `flow_cost` | absolute flow-field cost `C(s)` |
+| `flow_in_bounds` | false when `C(s)` is `INF` |
+| `wasted_air_frames` | cumulative wasted air frames |
+| `best_run_time` | agent's best full run this episode/controller lifetime (telemetry) |
 | `run_active` | whether the run clock is running |
 | `started_walking` | whether the run has started |
 | `finished`, `deaths` | terminal/episode counters |
@@ -84,6 +111,12 @@ fields:
 `spawn_cell` and the wrapper's `last_reset_spawns` are how you verify that a
 requested spawn was accepted. The controller silently falls back to the
 canonical start for invalid cells (non-standable, exit, malformed).
+
+Static info also exposes `gold_time`, `gold_ratio_cap`, and the default reward
+weights (`reward_time_per_second`, `reward_finish_bonus`,
+`reward_death_penalty`, `reward_progress_weight`, `reward_efficiency_weight`,
+`reward_shaping_gamma`) for Python custom rewards. See
+[`reward-contract.md`](reward-contract.md).
 
 ## Reset forms
 
@@ -101,11 +134,14 @@ level's normal start.
 {"agent": 0, "cell": [10, 14], "facing": 1}
 ```
 
-Only position and facing are restored. `run_time` is zeroed. Use the start-jump
-convention for stationary starts: press jump once during reset, then hand
-control to the policy.
+Only position and facing are restored. `run_time` is zeroed. Training reset
+force-starts the run; there is no idle state and no forced first jump. Cell-only
+starts are still clock-biased for mid-route positions because `run_time` is zero;
+use a state snapshot with a route-time offset for mid-route training.
 
 ### 3. Grounded state snapshot
+
+Current game support:
 
 ```json
 {"agent": 0, "cell": [10, 14], "facing": 1,
@@ -116,38 +152,85 @@ control to the policy.
 
 Restores the run clock and velocity after `Player.reset()`. Supported for
 grounded, powerup-free states only. Jump states, powerup stacks, and dissolve
-timers are not supported; filter them in the collector. Do not apply the start
-jump to a snapshot whose run is already active.
+timers are not supported; filter them in the collector. Training reset
+force-starts the run after restoring the state; do not inject a start jump. This
+nested `state` shape is the current compatibility format; the clean-start target
+below uses one reset dict.
+
+### 3a. Clean-start single reset dict
+
+The clean-start contract uses one reset dict. Restore metadata sits alongside
+the physical fields; only `world_state` is nested:
+
+```json
+{"agent": 0, "cell": [12, 18], "facing": 1,
+ "position": [x, y], "velocity": [0.0, 0.0],
+ "state_name": "Move", "powerup_stack": [0],
+ "run_active": true, "started_walking": true,
+ "run_time": 1.08, "best_run_time": 1e9,
+ "world_state": {"version": 1, "objects": {}, "cells": {}}}
+```
+
+- The observation remains a single dict; `run_time`, `best_run_time`, and
+  `world_state` are ignored by the encoder.
+- `run_time` is the source-checkpoint time; `gold_ratio` is computed from it.
+- `world_state` restores dynamic cells/objects and held pickups.
+- The NEAT extraction/pool builder rejects jump states or unsupported dynamic
+  objects; Godot applies the reset or returns an error, not a canonical
+  fallback.
+- Reset order: `Player.reset()` → restore `world_state` → restore player
+  state/clock → rebuild held powerups → force-start.
+
+The game implements this extension. The reset reply advances one physics tick,
+so a source `run_time` of 1.2667 s reports roughly 1.3333 s on the first
+observation; measure that drift in the clean-start gates. See the
+[clean-start decision record](../audit/2026-10-28-clean-start-state-capture.md).
+
+### 3b. World-state request
+
+The clean-start capture path requests a separate optional block after a step,
+at a checkpoint transition:
+
+```json
+{"type": "info_request", "request": ["world_state"], "agents": [0]}
+```
+
+```json
+{"type": "info", "request": ["world_state"],
+ "world_state": {"0": {"version": 1, "objects": {}, "cells": {}}}}
+```
+
+The game is paused between the step reply and the next action, so the snapshot
+matches the observation and `run_time`. This is used during route capture, not
+during normal training; training resets carry the stored snapshot as the
+top-level `world_state` field. The per-step `info` remains columnar and does not
+include the world-state block. The `info_request` protocol is implemented.
 
 ### 4. Prefix replay (PLaiGROUND wrapper)
 
 `SingleAgentGodotEnv` start-pool entries can carry `prefix_actions`. The wrapper
 resets to canonical, replays the actions, then hands control to the policy. This
 preserves the full run clock without a state snapshot. It uses recorded actions
-during reset, not as imitation labels.
+during reset, not as imitation labels. Training reset now force-starts the run,
+so prefix replay is legacy/clock-preserving and should be re-recorded; clean
+state starts are the preferred next path.
 
-## Reward profiles
+## Reward
 
-The game reward is a five-term sum: flow progress, jump-arc efficiency, per-step
-time pressure, finish bonus, death penalty. PLaiGROUND can select a training-only
-profile:
+The training reward is the simplified five-term sum documented in
+[`reward-contract.md`](reward-contract.md):
 
-| Profile | Finish term | Per-step time | Efficiency |
-|---|---|---|---|
-| `default` | `+100 + 50 * previous_best / run_time` | −0.05 | −0.02 |
-| `time` | `+20 + 80 * clamp(gold_time / run_time, 0, 2.5)` | −0.10 | −0.03 |
-| `time_speed` | `+20 + 160 * clamp(1.75 / run_time, 0, 2.0)` | −0.10 | −0.03 |
+```text
+progress + efficiency + time + finish + survival
++1.0*(C(s)-0.99*C(s')) -0.02*dwasted
+-3.75*delta_run_time*(1-gold_ratio) +500 on finish -50 on death
+```
 
-Notes:
+`gold_ratio` is clamped to `[0, 3]`; the time term is per second of run time.
+`best_run_time` is telemetry only. The old `default`/`time`/`time_speed`
+profiles and `--reward_profile` are gone/ignored.
 
-- Progress is potential-based shaping:
-  `+1.0 * (C(s) - 0.99 * C(s'))`, with gamma 0.99 matching PPO.
-- The finish bonus uses the previous best for `default`; the fixed gold/1.75
-  target for `time`/`time_speed`.
-- A death costs −50.
-- The `time`/`time_speed` formulas assume a **full run clock**. Cell-only resets
-  zero it; a short partial run looks extremely fast. Use state snapshots or
-  prefix replay for mid-route training.
-
-See [`../known-issues.md`](../known-issues.md) § DQN for the concrete bias and
-the audit for the math.
+A cell-only reset still zeroes `run_time`; a mid-route start will therefore look
+faster than it is. Use a state snapshot with a route-time offset or prefix
+replay for mid-route training. See [`../known-issues.md`](../known-issues.md)
+§ DQN and the clock-bias audit.

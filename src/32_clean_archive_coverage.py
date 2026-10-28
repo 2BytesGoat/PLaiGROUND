@@ -192,7 +192,10 @@ def clean_archive(args) -> int:
                 "route_signature": signature,
                 "run_time": float(record["run_time"]),
                 "path_cells": record.get("path_cells", []),
+                "path_facings": record.get("path_facings", []),
                 "actions": record.get("actions", []),
+                "checkpoint_file": route.get("checkpoint_file")
+                or record.get("checkpoint_file"),
                 "path_length": int(record.get("path_length", 0)),
                 "unique_cells": int(record.get("unique_cells", 0)),
                 "revisit_ratio": float(record.get("revisit_ratio", 0.0)),
@@ -295,8 +298,8 @@ def run_genome(
                 actions.append([0])
                 continue
             if step == 0:
-                # Same reset contract as NEAT training/eval and PPO: one
-                # forced jump starts the run, then the genome controls.
+                # Legacy coverage of pre-force-start genomes: force the old
+                # first jump. New training/eval does not inject it.
                 jump = 1
             else:
                 jump = int(net.activate(obs[index]["obs"])[0] > 0.5)

@@ -55,15 +55,28 @@ per second at 60 Hz.
 **Speedup** — wall-clock multiplier for the training loop. It scales physics
 ticks and `Engine.time_scale`; per-tick simulation and run times stay the same.
 
-**Start jump** — reset convention: press jump once after a stationary reset so
-the run starts, then hand control to the policy. Not a learned action; apply the
-same way in training and eval. Do not apply to a state snapshot whose run is
-already active.
+**Start jump** — legacy reset convention (retired 2026-10-28): press jump once
+after a stationary reset so the run starts. Training reset now force-starts the
+run in Godot; the agent owns the first decision. `--force-start-jump` /
+`--start-jump` remain compatibility flags for old checkpoints only.
 
-**State snapshot** — optional reset `state` with position, velocity, state name,
-`run_time`, `best_run_time`, `run_active`, `started_walking`. Supported for
-grounded, powerup-free states only; not jump states, powerups, or dissolve
-timers.
+**State snapshot** — current reset form: an optional nested `state` dict with
+position, velocity, state name, `run_time`, `best_run_time`, `run_active`,
+`started_walking`. The current game supports this for grounded, powerup-free
+states only; not jump states, powerups, or dissolve timers. The implemented
+clean-start extension flattens the reset into one dict, keeps `run_time` there,
+adds a nested `world_state`, and restores held powerups.
+
+**World state** — a versioned snapshot of all resettable dynamic level objects
+and cells (powerup pickups, dissolve timers, bounce/reset blocks, moving
+objects). It is reset/restore metadata, not the NN state and not a per-step
+`info` column. `info_request` exposes it on demand at checkpoints; training
+resets carry it as a top-level `world_state` field.
+
+**Clean-start state** — grounded, zero-velocity reset with exact
+position/cell/facing, source-checkpoint `run_time`, held powerups, dynamic
+world state, and force-start. One reset dict, not a separate state/info split.
+Not a cell-only teleport and not prefix replay.
 
 **Prefix replay** — reset to canonical, replay a recorded action prefix, then
 hand control to the policy. Preserves the run clock without a state snapshot.
@@ -77,7 +90,10 @@ defined by the archive tooling), stored with `path_cells` and `actions`.
 
 **Finisher** — one successful trajectory record in the NEAT archive.
 
-**Route signature** — hash identifying a route; used to dedupe finishers.
+**Route signature** — key for a route trajectory, normally the sequence of
+`(cell, facing)` states. Used to group finishers, keep the best final time per
+route, and avoid mixing scenarios from different runs. Checkpoint scenarios are
+keyed by `(cell, facing, powerup stack)`.
 
 **Stratum** — start-cell band by BFS distance to the exit: `canonical`,
 `medium`, `hard`, `easy`/near-exit. `easy` is usually excluded from training.

@@ -13,7 +13,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from wrappers.godot_env import GodotEnv  # noqa: E402
+from wrappers.godot_env import GodotEnv, _normalise_spawn  # noqa: E402
+from wrappers.stable_baselines_wrapper import StableBaselinesGodotEnv  # noqa: E402
 
 
 def _env() -> GodotEnv:
@@ -67,6 +68,24 @@ class InfoProtocolTest(unittest.TestCase):
         self.assertTrue(second["finished"])
         self.assertEqual(second["deaths"], 1)
 
+    def test_reward_telemetry_fields_decode(self) -> None:
+        columns = _columns()
+        columns.update(
+            {
+                "gold_ratio": [3.0, 0.5],
+                "flow_cost": [12.0, 0.0],
+                "flow_in_bounds": [True, False],
+                "wasted_air_frames": [4, 0],
+            }
+        )
+        infos = _env()._decode_info(columns)
+        self.assertAlmostEqual(infos[0]["gold_ratio"], 3.0)
+        self.assertAlmostEqual(infos[0]["flow_cost"], 12.0)
+        self.assertTrue(infos[0]["flow_in_bounds"])
+        self.assertEqual(infos[0]["wasted_air_frames"], 4)
+        self.assertAlmostEqual(infos[1]["gold_ratio"], 0.5)
+        self.assertFalse(infos[1]["flow_in_bounds"])
+
     def test_reset_info_updates_only_reset_spawn_cells(self) -> None:
         env = _env()
         env._apply_reset_info(
@@ -114,6 +133,106 @@ class InfoProtocolTest(unittest.TestCase):
     def test_legacy_list_info_is_untouched(self) -> None:
         legacy = [{"flow": 1.0}, {"flow": 0.5}]
         self.assertIs(_env()._decode_info(legacy), legacy)
+
+    def test_normalise_spawn_flattens_clean_start_state(self) -> None:
+        entry = {
+            "agent": 0,
+            "cell": [4, 7],
+            "facing": -1,
+            "position": [64.0, 112.0],
+            "velocity": [0.0, 0.0],
+            "state_name": "Move",
+            "powerup_stack": [1],
+            "run_time": 1.25,
+            "best_run_time": 9.0,
+            "run_active": True,
+            "started_walking": True,
+            "world_state": {"version": 1, "objects": {}},
+        }
+        result = _normalise_spawn(entry)
+        self.assertEqual(result["agent"], 0)
+        self.assertEqual(result["facing"], -1)
+        self.assertEqual(result["position"], [64.0, 112.0])
+        self.assertEqual(result["powerup_stack"], [1])
+        self.assertAlmostEqual(result["run_time"], 1.25)
+        self.assertEqual(result["world_state"], {"version": 1, "objects": {}})
+        self.assertNotIn("state", result)
+
+    def test_normalise_spawn_reads_legacy_nested_state(self) -> None:
+        result = _normalise_spawn(
+            {
+                "agent": 0,
+                "cell": [4, 7],
+                "facing": 1,
+                "state": {
+                    "velocity": [0.0, 0.0],
+                    "state_name": "Move",
+                    "run_time": 0.5,
+                },
+            }
+        )
+        self.assertAlmostEqual(result["run_time"], 0.5)
+        self.assertEqual(result["state_name"], "Move")
+        self.assertNotIn("state", result)
+
+    def test_powerup_stack_decodes_from_columnar_info(self) -> None:
+        columns = _columns()
+        columns["powerup_stack"] = [[1.0, -1.0, -1.0], [0.0, 2.0, -1.0]]
+        infos = _env()._decode_info(columns)
+        self.assertEqual(infos[0]["powerup_stack"], [1.0, -1.0, -1.0])
+        self.assertEqual(infos[1]["powerup_stack"], [0.0, 2.0, -1.0])
+
+    def test_request_info_round_trip(self) -> None:
+        env = object.__new__(GodotEnv)
+        env.supports_info_request = True
+        sent = {}
+
+        def fake_send(message):
+            sent.update(message)
+
+        env._send_as_json = fake_send
+        env._get_json_dict = lambda: {
+            "type": "info",
+            "request": ["world_state"],
+            "world_state": {"0": {"version": 1, "objects": {}}},
+        }
+        response = env.request_info(["world_state"], agents=[0])
+        self.assertEqual(sent["type"], "info_request")
+        self.assertEqual(sent["agents"], [0])
+        self.assertEqual(
+            response["world_state"]["0"]["version"],
+            1,
+        )
+
+    def test_vec_request_info_maps_global_agent_indices(self) -> None:
+        class FakeEnv:
+            def __init__(self, count: int, offset: int) -> None:
+                self.num_envs = count
+                self.offset = offset
+                self.calls: list[list[int]] = []
+
+            def request_info(self, keys, agents=None):
+                self.calls.append(list(agents))
+                return {
+                    "type": "info",
+                    "request": list(keys),
+                    "world_state": {
+                        str(index): {"version": 1, "offset": self.offset}
+                        for index in agents
+                    },
+                }
+
+        wrapper = object.__new__(StableBaselinesGodotEnv)
+        wrapper.envs = [FakeEnv(2, 0), FakeEnv(2, 2)]
+        response = wrapper.request_info(["world_state"], agents=[1, 3])
+        self.assertEqual(wrapper.envs[0].calls, [[1]])
+        self.assertEqual(wrapper.envs[1].calls, [[1]])
+        self.assertEqual(
+            sorted(response["world_state"].keys()),
+            ["1", "3"],
+        )
+        self.assertEqual(response["world_state"]["1"]["offset"], 0)
+        self.assertEqual(response["world_state"]["3"]["offset"], 2)
 
 
 if __name__ == "__main__":

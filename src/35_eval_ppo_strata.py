@@ -61,7 +61,7 @@ def main() -> int:
     parser.add_argument(
         "--obs-encoding",
         default="multi_hot",
-        choices=("legacy", "multi_hot", "multi_hot_sensor"),
+        choices=("legacy", "multi_hot", "multi_hot_sensor", "raw"),
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
@@ -82,15 +82,16 @@ def main() -> int:
         "--start-jump",
         dest="start_jump",
         action="store_true",
-        help="Press jump once after reset, then evaluate the policy (default: on).",
+        help="Compatibility: press jump once after reset for old checkpoints.",
     )
     parser.add_argument(
         "--no-start-jump",
         dest="start_jump",
         action="store_false",
-        help="Leave the first start action policy-owned.",
+        help="Leave the first action policy-owned (default; training reset "
+        "force-starts the run).",
     )
-    parser.set_defaults(start_jump=True)
+    parser.set_defaults(start_jump=False)
     args = parser.parse_args()
     args.model = args.model.resolve()
     args.starts = args.starts.resolve()
@@ -178,9 +179,7 @@ def main() -> int:
                 steps[index] = 1
                 if bool(start_dones[index]):
                     done[index] = True
-                    finished[index] = bool(
-                        info.get("finished", float(start_rewards[index]) > 0.0)
-                    )
+                    finished[index] = bool(info.get("finished", False))
                     if finished[index]:
                         finish_times[index] = float(
                             info.get("run_time", np.inf)
@@ -209,9 +208,7 @@ def main() -> int:
                 steps[index] = step + 1
                 if bool(dones[index]):
                     done[index] = True
-                    finished[index] = bool(
-                        info.get("finished", float(_rewards[index]) > 0.0)
-                    )
+                    finished[index] = bool(info.get("finished", False))
                     if finished[index]:
                         finish_times[index] = float(info.get("run_time", np.inf))
             if done.all():

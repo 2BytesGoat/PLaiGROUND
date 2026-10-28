@@ -5,6 +5,20 @@
 `runs/dqn_route_spawns_1_1/`, and the game-side reset/reward contract.
 **Status:** review only; no training run, no game-code change.
 
+> **Follow-up (2026-10-28):** the start-pool clock-bias analysis, the measured
+> 794 start-kind effect, and the PPO A/B plan are in
+> [`2026-10-28-start-pool-clock-bias.md`](2026-10-28-start-pool-clock-bias.md).
+> **Reward update (2026-10-28):** the `time`/`time_speed` profiles and
+> previous-best finish ratio described below were replaced by the simplified
+> fixed `+500` finish and clamped `gold_ratio` time term; training reset now
+> force-starts the run and spike death is terminal. See
+> [`../reference/reward-contract.md`](../reference/reward-contract.md). The
+> extractor findings (F1–F9) still apply to the cell-checkpoint fallback path.
+> **Clean-start update (2026-10-28):** 794/prefix is not the clean-start target;
+> the decided contract is raw state with source-checkpoint time, held powerups,
+> and a dynamic `world_state` snapshot. See
+> [`2026-10-28-clean-start-state-capture.md`](2026-10-28-clean-start-state-capture.md).
+
 ## Why this exists
 
 The DQN experiment was committed at `d7e173d` with a plan and a driver, but the
@@ -247,7 +261,8 @@ full-run time.
 ## Recommended order
 
 1. Decide scope (side experiment vs game-vault task).
-2. Add state snapshots + powerup/dissolve/spawn validation to the extractor.
+2. Add one-dict reset snapshots (`run_time` + nested `world_state`) and
+   NEAT-side powerup/dissolve/spawn validation to the extractor.
 3. Add incremental writes and a run log; run `extract` to completion.
 4. Inspect the pool (splits, counts, overlaps) before training.
 5. Smoke: 1 env, 10k steps, check episode returns and finish rate.

@@ -40,7 +40,7 @@ from utils import setup_environment  # noqa: E402
 DEFAULT_LEVEL = "1-1"
 DEFAULT_CONFIG = Path(__file__).with_name("neat_1_1_config.txt")
 DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "runs" / "neat_1_1"
-DEFAULT_MAX_STEPS = 600  # 10 seconds at 60 physics ticks
+DEFAULT_MAX_STEPS = 600  # 10 seconds at 60 decisions/s (action_repeat=1)
 
 
 class RewardEvaluator:
@@ -261,7 +261,10 @@ class RewardEvaluator:
             final_infos = [{} for _ in range(population)]
             last_infos = [{} for _ in range(population)]
             cell_paths: list[list[list[int]]] = [[] for _ in range(population)]
+            facing_paths: list[list[int]] = [[] for _ in range(population)]
             action_paths: list[list[int]] = [[] for _ in range(population)]
+            checkpoint_snapshots: list[list[dict]] = [[] for _ in range(population)]
+            checkpoint_seen: list[set[tuple]] = [set() for _ in range(population)]
             steps_start = time.perf_counter()
 
             for step in range(self.max_steps):
@@ -271,15 +274,9 @@ class RewardEvaluator:
                         actions.append([0])
                         continue
 
-                    # The game starts on the first jump press. A configurable
-                    # delay gives us deterministic timing-robustness variants
-                    # instead of relying on RNG (the level itself has none).
-                    if step < self.start_delay:
-                        jump = 0
-                    elif step == self.start_delay:
-                        jump = 1
-                    else:
-                        jump = int(nets[i].activate(obs["obs"][i])[0] > 0.5)
+                    # The run force-starts on reset; the genome owns every
+                    # decision, including the first jump.
+                    jump = int(nets[i].activate(obs["obs"][i])[0] > 0.5)
                     action_paths[i].append(jump)
                     actions.append([jump])
 
@@ -287,17 +284,40 @@ class RewardEvaluator:
                     np.asarray(actions, dtype=np.int64)
                 )
 
+                new_checkpoint_agents: list[int] = []
+                new_checkpoint_snapshots: dict[int, dict] = {}
                 for i in range(population):
                     if done_once[i]:
                         continue
                     info = infos[i] if i < len(infos) else {}
                     cell = info.get("cell")
+                    facing = int(info.get("facing_direction", 1))
                     if (
                         isinstance(cell, (list, tuple))
                         and len(cell) >= 2
                     ):
                         cell_paths[i].append([int(cell[0]), int(cell[1])])
+                        facing_paths[i].append(1 if facing >= 0 else -1)
                     scores[i] += float(rewards[i])
+                    if not bool(dones[i]) and self.record_paths:
+                        stack = info.get("powerup_stack", [-1, -1, -1])
+                        if not isinstance(stack, (list, tuple)):
+                            stack = [-1, -1, -1]
+                        key = (
+                            int(cell[0]) if isinstance(cell, (list, tuple)) and len(cell) >= 2 else -1,
+                            int(cell[1]) if isinstance(cell, (list, tuple)) and len(cell) >= 2 else -1,
+                            1 if facing >= 0 else -1,
+                            tuple(int(value) for value in stack),
+                        )
+                        if key not in checkpoint_seen[i]:
+                            checkpoint_seen[i].add(key)
+                            snapshot = self._checkpoint_snapshot(
+                                info, step + 1, cell, facing
+                            )
+                            if snapshot is not None:
+                                checkpoint_snapshots[i].append(snapshot)
+                                new_checkpoint_agents.append(i)
+                                new_checkpoint_snapshots[i] = snapshot
                     if dones[i]:
                         done_once[i] = True
                         terminal_rewards[i] = float(rewards[i])
@@ -308,6 +328,24 @@ class RewardEvaluator:
                         final_infos[i] = info
                         if finished[i]:
                             finish_times[i] = float(info.get("run_time", np.inf))
+
+                if new_checkpoint_agents:
+                    try:
+                        response = env.request_info(
+                            ["world_state"], agents=new_checkpoint_agents
+                        )
+                        world_states = response.get("world_state", {})
+                        for i in new_checkpoint_agents:
+                            snapshot = new_checkpoint_snapshots.get(i)
+                            if snapshot is not None:
+                                snapshot["world_state"] = world_states.get(
+                                    str(i), {}
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        print(
+                            f"warning: world_state request failed: {exc}",
+                            flush=True,
+                        )
 
                 last_infos = infos
                 if done_once.all():
@@ -408,8 +446,10 @@ class RewardEvaluator:
             finished,
             finish_times,
             cell_paths,
+            facing_paths,
             action_paths,
             final_infos,
+            checkpoint_snapshots,
             scores,
         )
 
@@ -430,21 +470,53 @@ class RewardEvaluator:
             self.last_improvement_generation = self.generation
             self.save_best()
 
+    def _checkpoint_snapshot(self, info: dict, step: int, cell, facing: int) -> dict | None:
+        if not isinstance(cell, (list, tuple)) or len(cell) < 2:
+            return None
+        stack = info.get("powerup_stack", [-1, -1, -1])
+        if not isinstance(stack, (list, tuple)):
+            stack = [-1, -1, -1]
+        position = info.get("global_position")
+        if isinstance(position, (list, tuple)) and len(position) >= 2:
+            position = [float(position[0]), float(position[1])]
+        else:
+            position = None
+        snapshot = {
+            "step": int(step),
+            "cell": [int(cell[0]), int(cell[1])],
+            "facing": 1 if facing >= 0 else -1,
+            "position": position,
+            "velocity": info.get("velocity", [0.0, 0.0]),
+            "state_name": str(info.get("state", "Move")),
+            "powerup_stack": [int(value) for value in stack],
+            "run_time": float(info.get("run_time", 0.0)),
+            "best_run_time": float(info.get("best_run_time", float("inf"))),
+            "run_active": bool(info.get("run_active", True)),
+            "started_walking": bool(info.get("started_walking", True)),
+            "on_floor": bool(info.get("on_floor", False)),
+        }
+        return snapshot
+
     def _archive_generation(
         self,
         genomes,
         finished,
         finish_times,
         cell_paths,
+        facing_paths,
         action_paths,
         final_infos,
+        checkpoint_snapshots,
         scores,
     ) -> None:
         """Append successful trajectories and keep the fastest per route.
 
         The raw JSONL is intentionally unfiltered: it is the state-source for
-        prefix-replay PPO initialization. Route deduplication and the
-        non-jitter flag are derived metadata, not deletion criteria.
+        prefix replay and clean-start checkpoint selection. Each finisher may
+        point at a ``checkpoint_file`` containing its reset state + world state
+        snapshots; the route archive points at the best finisher per signature.
+        Route deduplication and the non-jitter flag are derived metadata, not
+        deletion criteria.
         """
         if not self.record_paths:
             return
@@ -454,11 +526,19 @@ class RewardEvaluator:
         finishers_path = self.archive_dir / "finishers.jsonl"
         routes_path = self.archive_dir / "routes.json"
 
+        checkpoint_dir = self.archive_dir / "checkpoints"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
         for i in np.flatnonzero(finished):
             cells = []
-            for cell in cell_paths[int(i)]:
+            facings = []
+            for index, cell in enumerate(cell_paths[int(i)]):
                 if isinstance(cell, (list, tuple)) and len(cell) >= 2:
                     cells.append([int(cell[0]), int(cell[1])])
+                    if index < len(facing_paths[int(i)]):
+                        facings.append(int(facing_paths[int(i)][index]))
+                    else:
+                        facings.append(1)
             if len(cells) < 2:
                 continue
             actions = [int(item) for item in action_paths[int(i)]]
@@ -467,9 +547,15 @@ class RewardEvaluator:
             run_time = float(finish_times[int(i)])
 
             compressed = []
-            for cell in cells:
-                if not compressed or compressed[-1] != cell:
+            compressed_facings = []
+            for cell, facing in zip(cells, facings):
+                if (
+                    not compressed
+                    or compressed[-1] != cell
+                    or compressed_facings[-1] != facing
+                ):
                     compressed.append(cell)
+                    compressed_facings.append(facing)
             unique_cells = len({tuple(cell) for cell in compressed})
             revisit_ratio = (
                 1.0 - unique_cells / len(compressed) if compressed else 1.0
@@ -493,15 +579,36 @@ class RewardEvaluator:
                 and backtracks <= 2
                 and action_flips <= 0.75
             )
+            path_pairs = [
+                [cell[0], cell[1], facing]
+                for cell, facing in zip(compressed, compressed_facings)
+            ]
             signature = hashlib.sha1(
-                json.dumps(compressed, separators=(",", ":")).encode("utf-8")
+                json.dumps(path_pairs, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
+
+            checkpoints = (
+                checkpoint_snapshots[int(i)]
+                if int(i) < len(checkpoint_snapshots)
+                else []
+            )
+            checkpoint_file = None
+            if checkpoints:
+                checkpoint_path = checkpoint_dir / (
+                    f"{signature}_g{self.generation}_{genome_id}.json"
+                )
+                checkpoint_path.write_text(
+                    json.dumps(checkpoints, indent=2), encoding="utf-8"
+                )
+                checkpoint_file = str(checkpoint_path.relative_to(self.archive_dir))
+
             record = {
                 "generation": self.generation,
                 "genome_id": genome_id,
                 "fitness": float(scores[int(i)]),
                 "run_time": run_time,
                 "path_cells": compressed,
+                "path_facings": compressed_facings,
                 "actions": actions,
                 "route_signature": signature,
                 "path_length": len(compressed),
@@ -510,6 +617,7 @@ class RewardEvaluator:
                 "backtracks": backtracks,
                 "action_flip_rate": action_flips,
                 "clean": clean,
+                "checkpoint_file": checkpoint_file,
                 "final_info": {
                     key: info.get(key)
                     for key in (
@@ -524,6 +632,7 @@ class RewardEvaluator:
                         "on_floor",
                         "on_wall",
                         "powerup_count",
+                        "powerup_stack",
                     )
                 },
             }
@@ -539,12 +648,15 @@ class RewardEvaluator:
                     "generation": self.generation,
                     "genome_id": genome_id,
                     "run_time": run_time,
+                    "path_cells": compressed,
+                    "path_facings": compressed_facings,
                     "path_length": len(compressed),
                     "unique_cells": unique_cells,
                     "revisit_ratio": revisit_ratio,
                     "backtracks": backtracks,
                     "action_flip_rate": action_flips,
                     "clean": clean,
+                    "checkpoint_file": checkpoint_file,
                     "genome_file": str(genome_path.relative_to(self.archive_dir)),
                 }
             if clean and run_time < self.best_clean_time:
@@ -887,12 +999,7 @@ def play(args: argparse.Namespace) -> None:
         obs = env.reset()
         total_reward = 0.0
         for step in range(args.max_steps):
-            if step < args.start_delay:
-                jump = 0
-            elif step == args.start_delay:
-                jump = 1
-            else:
-                jump = int(net.activate(obs["obs"][0])[0] > 0.5)
+            jump = int(net.activate(obs["obs"][0])[0] > 0.5)
             obs, rewards, dones, infos = env.step(
                 np.asarray([[jump]], dtype=np.int64)
             )
@@ -977,8 +1084,8 @@ def parse_args() -> argparse.Namespace:
         "--start-delay",
         type=int,
         default=0,
-        help="Decision step at which the forced start jump is pressed (default: 0, "
-        "the first decision). This jump is always injected before the genome acts.",
+        help="Deprecated/ignored: training reset force-starts the run, so the "
+        "genome owns the first decision.",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(

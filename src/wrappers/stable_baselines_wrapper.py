@@ -114,6 +114,40 @@ class StableBaselinesGodotEnv(VecEnv):
         obs = lod_to_dol(all_obs)
         return {k: np.array(v) for k, v in obs.items()}
 
+    def request_info(self, keys, agents=None):
+        """Request info blocks across all underlying Godot processes.
+
+        ``agents`` uses the same flattened global indices as the VecEnv. The
+        returned ``world_state`` keys are flattened global indices too.
+        """
+        requested = [str(key) for key in keys]
+        if not requested:
+            raise ValueError("info request needs at least one key")
+        selected = None
+        if agents is not None:
+            selected = {int(index) for index in agents}
+        result = {"type": "info", "request": requested, "world_state": {}}
+        for process, env in enumerate(self.envs):
+            count = int(env.num_envs)
+            offset = process * count
+            if selected is None:
+                local_agents = list(range(count))
+            else:
+                local_agents = sorted(
+                    index - offset
+                    for index in selected
+                    if offset <= index < offset + count
+                )
+            if not local_agents:
+                continue
+            response = env.request_info(requested, agents=local_agents)
+            world_state = response.get("world_state", {})
+            for local_index in local_agents:
+                result["world_state"][str(offset + local_index)] = world_state.get(
+                    str(local_index), {}
+                )
+        return result
+
     def close(self) -> None:
         # Close each environment
         for env in self.envs:

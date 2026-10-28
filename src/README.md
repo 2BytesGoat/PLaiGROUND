@@ -8,16 +8,17 @@ experiments. Run from the repository root with `.venv/bin/python`.
 | Script | Status | What it does | Typical entry point |
 |---|---|---|---|
 | `00_random_agent.py` | onboarding | Random-action smoke test through the legacy `StableBaselinesGodotEnv` path. Use it to verify the game/socket setup, not for training. | `.venv/bin/python src/00_random_agent.py` |
-| `07_neat_agent.py` | active | NEAT population trainer/evaluator. Uses one Godot process with N agents; fitness is the game reward. Supports resume, persistent evaluator, `--record-paths`, `--target-time`, and play/visualise modes. | `... src/07_neat_agent.py --generations 2 --population 192 --parallel 8` |
+| `07_neat_agent.py` | active | NEAT population trainer/evaluator. Uses one Godot process with N agents; fitness is the game reward. Supports resume, persistent evaluator, `--record-paths`, `--target-time`, and play/visualise modes. With `--record-paths` it also captures per-checkpoint reset state + dynamic `world_state` for the clean-start pool. Training reset force-starts the run; the genome owns the first decision. | `... src/07_neat_agent.py --generations 2 --population 192 --parallel 8 --record-paths` |
 | `08_neat_all_levels.py` | available | Thin batch layer over `07`: one independent population per campaign level, then a visible checkpoint replay. | `... src/08_neat_all_levels.py --levels 1-1,1-2 --workers 2` |
 | `09_neat_lineage.py` | available | One population carried through levels in order, with zero-shot/post-stage evals and stage snapshots. | `... src/09_neat_lineage.py --levels all` |
 | `10_ppo_pilot.py` | active | The main PPO pipeline: multi-level, multi-agent/process, start pools, prefix replay, eval patience, 754/794 encodings, sensor expansion, frozen encoders, trajectory saving. ~83 KB monolith. | `... src/10_ppo_pilot.py --level 1-1 --n-envs 8 --timesteps 100000` |
 | `32_clean_archive_coverage.py` | active | Collapses NEAT finishers into clean routes, enumerates standable starts, runs top genomes from every start, writes coverage. | `... src/32_clean_archive_coverage.py` |
 | `33_start_strata.py` | active | Converts standable starts into canonical/medium/hard/easy strata by BFS distance. | `... src/33_start_strata.py --level 1-1` |
-| `34_make_ppo_start_pool.py` | active | Builds a weighted PPO start pool from strata + clean-route prefixes; optional focus cells. | `... src/34_make_ppo_start_pool.py --level 1-1` |
+| `34_make_ppo_start_pool.py` | legacy/reference | Builds weighted PPO start pools from strata + clean-route prefixes; optional focus cells. Not the clean-start path. | `... src/34_make_ppo_start_pool.py --level 1-1` |
 | `35_eval_ppo_strata.py` | active | Deterministic evaluation of a PPO model on canonical/medium/hard/focus starts. Reuses one env; this is the pattern DQN eval should follow. | `... src/35_eval_ppo_strata.py --model runs/.../best.zip` |
 | `36_episode_stats.py` | active | Summarises `episodes.csv` by start source; `--canonical-only` is the required speed view. | `... src/36_episode_stats.py runs/.../episodes.csv --canonical-only` |
-| `41_dqn_route_spawns.py` | **active, no result** | Fresh 58-value Double DQN from NEAT route spawns. `extract` / `train` / `eval` / `all`. The first extract did not produce a pool; read the audit before running. | `... src/41_dqn_route_spawns.py extract` |
+| `41_dqn_route_spawns.py` | **active, no result; clean-start core implemented** | Double DQN from NEAT clean-start states. Uses raw state (342), source-checkpoint time, held powerups, and dynamic `world_state`; extracts one-pass checkpoint files from `07` and builds canonical 0.70 / state 0.30 pools. The 794 sensor + prefix pool is a historical baseline, not the clean-start target. Uses the simplified game-side reward (fixed 500 finish, clamped `gold_ratio` time term); reset force-starts the run. 1-1 raw smoke passed; full gates pending. | `... src/41_dqn_route_spawns.py --start-pool ... train` |
+| `43_check_raw_obs.py` | **validation** | Runs one world with `obs_encoding=raw`, decodes the 342-value packet, and checks shapes, cell alignment, and `gold_ratio`/info agreement. | `... src/43_check_raw_obs.py --level 1-1 --steps 30` |
 
 ## Shared modules
 
@@ -30,6 +31,7 @@ experiments. Run from the repository root with `.venv/bin/python`.
 | `wrappers/legacy_grid_extractor.py` | experimental | Joint tile-embedding + CNN feature extractor for the legacy 58 observation. |
 | `wrappers/semantic_autoencoder.py` | experimental | Frozen semantic MAE for the 754 observation. |
 | `wrappers/stable_baselines_wrapper.py` | legacy | Older Gym wrapper used by `00_random_agent.py` / notebooks. Not used by active drivers. |
+| `preprocessing/` | active | sklearn-style observation transforms: `StatePipeline`, `FeatureUnion`, raw-state decode, tile/player/collision/flow features, `Clip`, `Standardize`, and `build_raw_state_pipeline()`. |
 | `utils.py` | legacy | `setup_environment()` for the legacy wrapper/notebook path. |
 | `processing/` | legacy | Notebook-era data processing/visualisation helpers. |
 

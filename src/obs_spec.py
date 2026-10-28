@@ -17,6 +17,11 @@ multi_hot
 
     Empty cells are all zeros. A cell can set multiple type bits (for
     example wall + secret, or wall + powerup).
+
+raw
+    Primitive local state for Python-side encoding: 7x7 tile IDs, 7x7 tile
+    states, player state (including clamped ``gold_ratio``), 8-way collisions,
+    and 8-way flow deltas. 342 values.
 """
 
 from __future__ import annotations
@@ -26,15 +31,18 @@ import numpy as np
 ENCODING_LEGACY = "legacy"
 ENCODING_MULTI_HOT = "multi_hot"
 ENCODING_MULTI_HOT_SENSOR = "multi_hot_sensor"
+ENCODING_RAW = "raw"
 SUPPORTED_ENCODINGS = (
     ENCODING_LEGACY,
     ENCODING_MULTI_HOT,
     ENCODING_MULTI_HOT_SENSOR,
+    ENCODING_RAW,
 )
 
 SPEC_VERSION_LEGACY = 1
 SPEC_VERSION_MULTI_HOT = 2
 SPEC_VERSION_MULTI_HOT_SENSOR = 3
+SPEC_VERSION_RAW = 4
 
 LEGACY_OBSERVATION_SIZE = 58
 
@@ -110,6 +118,52 @@ MULTI_HOT_SENSOR_OBSERVATION_SIZE = (
     MULTI_HOT_OBSERVATION_SIZE + SENSOR_FEATURE_COUNT
 )
 
+# Raw local-state encoding. The game sends primitive state; Python builds the
+# learning features. Keep in sync with AIObservationSpec.RAW_*.
+RAW_TILE_ID_COUNT = GRID_CELLS
+RAW_TILE_STATE_FLOATS = 5
+RAW_TILE_STATE_COUNT = GRID_CELLS * RAW_TILE_STATE_FLOATS
+RAW_PLAYER_FLOATS = 16
+RAW_GOLD_RATIO_CAP = 3.0
+RAW_DIRECTIONS = 8
+RAW_COLLISION_FLOATS = 3
+RAW_COLLISION_COUNT = RAW_DIRECTIONS * RAW_COLLISION_FLOATS
+RAW_FLOW_COUNT = RAW_DIRECTIONS
+RAW_FLOW_DELTA_SCALE = 4.0
+RAW_TILE_ID_OFFSET = 0
+RAW_TILE_STATE_OFFSET = RAW_TILE_ID_OFFSET + RAW_TILE_ID_COUNT
+RAW_PLAYER_OFFSET = RAW_TILE_STATE_OFFSET + RAW_TILE_STATE_COUNT
+RAW_COLLISION_OFFSET = RAW_PLAYER_OFFSET + RAW_PLAYER_FLOATS
+RAW_FLOW_OFFSET = RAW_COLLISION_OFFSET + RAW_COLLISION_COUNT
+RAW_OBSERVATION_SIZE = RAW_FLOW_OFFSET + RAW_FLOW_COUNT
+
+RAW_TILE_STATE_FIELDS = (
+    "powerup_kind",
+    "dissolve_state",
+    "dissolve_timer",
+    "bounce_x",
+    "bounce_y",
+)
+RAW_PLAYER_FIELDS = (
+    "cell_x",
+    "cell_y",
+    "velocity_x",
+    "velocity_y",
+    "facing",
+    "state_id",
+    "on_floor",
+    "on_wall",
+    "jump_phase",
+    "powerup_0",
+    "powerup_1",
+    "powerup_2",
+    "gold_ratio",
+    "run_active",
+    "started_walking",
+    "finished",
+)
+RAW_DIRECTION_NAMES = ("E", "SE", "S", "SW", "W", "NW", "N", "NE")
+
 
 def expected_obs_size(encoding: str) -> int:
     if encoding == ENCODING_LEGACY:
@@ -118,6 +172,8 @@ def expected_obs_size(encoding: str) -> int:
         return MULTI_HOT_OBSERVATION_SIZE
     if encoding == ENCODING_MULTI_HOT_SENSOR:
         return MULTI_HOT_SENSOR_OBSERVATION_SIZE
+    if encoding == ENCODING_RAW:
+        return RAW_OBSERVATION_SIZE
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
@@ -128,6 +184,8 @@ def spec_version(encoding: str) -> int:
         return SPEC_VERSION_MULTI_HOT
     if encoding == ENCODING_MULTI_HOT_SENSOR:
         return SPEC_VERSION_MULTI_HOT_SENSOR
+    if encoding == ENCODING_RAW:
+        return SPEC_VERSION_RAW
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
@@ -212,4 +270,36 @@ def decode_multi_hot(obs: np.ndarray) -> dict:
         "powerup_total": player[
             PLAYER_POWERUP_TOTAL_OFFSET - GRID_FEATURE_COUNT
         ],
+    }
+
+
+def decode_raw(obs: np.ndarray) -> dict:
+    """Decode one raw local-state observation for diagnostics/tests.
+
+    Returns named slices; the flat array is also kept. This is not used in the
+    training hot path.
+    """
+    array = validate_obs(obs, ENCODING_RAW)
+    tile_ids = array[
+        RAW_TILE_ID_OFFSET:RAW_TILE_STATE_OFFSET
+    ].astype(np.int64).reshape(GRID_SIZE, GRID_SIZE)
+    tile_states = array[
+        RAW_TILE_STATE_OFFSET:RAW_PLAYER_OFFSET
+    ].reshape(GRID_CELLS, RAW_TILE_STATE_FLOATS)
+    player_values = array[RAW_PLAYER_OFFSET:RAW_COLLISION_OFFSET]
+    player = {
+        name: float(value)
+        for name, value in zip(RAW_PLAYER_FIELDS, player_values)
+    }
+    collisions = array[
+        RAW_COLLISION_OFFSET:RAW_FLOW_OFFSET
+    ].reshape(RAW_DIRECTIONS, RAW_COLLISION_FLOATS)
+    flow = array[RAW_FLOW_OFFSET:RAW_OBSERVATION_SIZE]
+    return {
+        "flat": array,
+        "tile_ids": tile_ids,
+        "tile_states": tile_states,
+        "player": player,
+        "collisions": collisions,
+        "flow": flow,
     }

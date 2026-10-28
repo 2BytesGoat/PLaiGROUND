@@ -120,7 +120,9 @@ For every level:
 
 The collection produced **263,519 samples** across all 16 levels.
 
-The agent owns the first jump. There is no forced start action.
+The agent owned the first jump during this historical collection; there was no
+forced start action. Training reset now force-starts the run (2026-10-28); this
+does not change the shipped inference model.
 
 ### 3. Train the base student
 

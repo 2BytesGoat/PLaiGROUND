@@ -105,11 +105,11 @@ multi-hot teachers that start from a behavior clone of the legacy champions.
 and seeds eval patience with it, so a bad PPO run cannot replace a good clone.
 `src/17_multi_hot_teachers.py` wraps the per-level warm-start loop.
 
-The agent owns the first jump. Every training episode resets to idle and the
-policy must start the run; evaluation uses the policy's first action too.
-`--force-start-jump` remains available as a diagnostic override, but it is not
-part of the competence gate. This keeps the start decision in the same
-distribution as training.
+Training reset force-starts the run (2026-10-28); there is no idle state and no
+forced first jump. The agent's first action is a normal policy decision.
+`--force-start-jump` remains only as a compatibility diagnostic for old
+checkpoints. This keeps the first decision in the same distribution as
+training.
 
 ## Outputs
 

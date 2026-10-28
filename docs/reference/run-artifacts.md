@@ -10,7 +10,7 @@ Sizes are approximate from 2026-10-28.
 
 | Directory | Size | Status | What it is | Start here |
 |---|---:|---|---|---|
-| `runs/dqn_route_spawns_1_1/` | 6 MB | **incomplete** | DQN route-spawn extract attempt for 1-1. Routes copied; `spawns/` empty; no `dqn/`, no `eval/`. | `godot/route_replay.log`; then [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10-28-dqn-pipeline-review.md) |
+| `runs/dqn_route_spawns_1_1/` | 6 MB | **incomplete** | DQN route-spawn extract attempt for 1-1. Routes copied; `spawns/` empty; no `dqn/`, no `eval/`. Design pivoted to the start-pool path; this dir is the fallback. | `godot/route_replay.log`; then [`../audit/2026-10-28-dqn-pipeline-review.md`](../audit/2026-10-28-dqn-pipeline-review.md) and [`../audit/2026-10-28-start-pool-clock-bias.md`](../audit/2026-10-28-start-pool-clock-bias.md) |
 | `runs/neat_1_1_8x24_archive/` | 22 MB | reference | 8×24 NEAT 1-1 archive. Best **2.15 s** at gen 9; 4,243 finishers; 460 clean routes; coverage, strata, PPO start pools. | `best_time.json`, `clean/clean_summary.json`, `strata/strata_summary.json`, `coverage/coverage_summary.json` |
 | `runs/neat_1_2_transfer_8x24/` | 12 MB | reference | 1-2 NEAT transfer (resumed 1-1 population at checkpoint 61). Best **3.0167 s**; 3,052 finishers; 12 clean routes; 71/72 starts. | `best_clean.json`, `clean/clean_summary.json`, `strata/strata_summary.json` |
 | `runs/neat_1_3_transfer_8x24/` | 15 MB | reference | 1-3 NEAT transfer (resumed 1-2 at checkpoint 97). Best **3.5667 s**; 3,580 finishers; 26 clean routes; 62/86 starts. | `best_clean.json`, `clean/clean_summary.json`, `strata/strata_summary.json` |

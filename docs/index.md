@@ -17,6 +17,9 @@ development/research repo, not part of the shipped game.
 | Understand the game ↔ Python architecture | [`architecture.md`](architecture.md) |
 | Know what is broken, stale, or confusing | [`known-issues.md`](known-issues.md) |
 | Read the detailed DQN review from 2026-10-28 | [`audit/2026-10-28-dqn-pipeline-review.md`](audit/2026-10-28-dqn-pipeline-review.md) |
+| Understand the start-pool clock bias and the PPO hypothesis | [`audit/2026-10-28-start-pool-clock-bias.md`](audit/2026-10-28-start-pool-clock-bias.md) |
+| Understand the raw-state observation decision | [`audit/2026-10-28-raw-state-observation-decision.md`](audit/2026-10-28-raw-state-observation-decision.md) |
+| Understand the clean-start state/world-state decisions | [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md) |
 | Set up the environment | [`../README.md`](../README.md) § Setup |
 | Read a term you don't recognize | [`reference/glossary.md`](reference/glossary.md) |
 | Check the deployed game model | [`reference/deployed-model-58.md`](reference/deployed-model-58.md) |
@@ -25,7 +28,8 @@ development/research repo, not part of the shipped game.
 
 | Doc | Status | One-line |
 |---|---|---|
-| [`experiments/dqn-route-spawns.md`](experiments/dqn-route-spawns.md) | **active, no result** | Fresh 58-value Double DQN on 1-1 NEAT route spawns. Script/doc committed; no spawn pool or training yet. |
+| [`experiments/dqn-route-spawns.md`](experiments/dqn-route-spawns.md) | **active, legacy path** | Double DQN on 1-1 NEAT start pools; 794 sensor + 512×512 prefix baseline stopped at ~129.5k. Not the clean-start target; no model promotion. |
+| [`experiments/dqn-clean-start.md`](experiments/dqn-clean-start.md) | **core implemented; validation pending** | Level-agnostic clean-start contract: raw state, source-checkpoint time, held powerups, dynamic `world_state`, NEAT validation. 1-1 smoke passed. |
 | [`experiments/ppo-pilot.md`](experiments/ppo-pilot.md) | active/reference | Shared-policy PPO, multi-level, start pools, 754/794 observation variants. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |
@@ -35,7 +39,8 @@ development/research repo, not part of the shipped game.
 
 | Doc | What it covers |
 |---|---|
-| [`reference/observation-contracts.md`](reference/observation-contracts.md) | 58 / 754 / 794 observation layouts, action cadence, reset forms, reward profiles. |
+| [`reference/observation-contracts.md`](reference/observation-contracts.md) | 58 / 754 / 794 / raw observation layouts, action cadence, reset forms. |
+| [`reference/reward-contract.md`](reference/reward-contract.md) | Shipped five-term training reward, `gold_ratio`, raw telemetry, force-start, terminal death. |
 | [`reference/glossary.md`](reference/glossary.md) | Teacher, student, specialist, lineage, prefix replay, start-jump, canonical, clean route, etc. |
 | [`reference/run-artifacts.md`](reference/run-artifacts.md) | What each `runs/` directory contains and how to read its summaries. |
 | [`reference/deployed-model-58.md`](reference/deployed-model-58.md) | The frozen 58→256→256→2 JSON student shipped in the game. |

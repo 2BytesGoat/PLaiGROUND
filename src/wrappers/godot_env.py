@@ -27,6 +27,24 @@ from gymnasium import spaces
 from wrappers.utils import ActionSpaceProcessor, convert_macos_path
 
 
+RESET_STATE_KEYS = (
+    "position",
+    "velocity",
+    "state_name",
+    "powerup_stack",
+    "run_time",
+    "best_run_time",
+    "run_active",
+    "started_walking",
+    "world_state",
+)
+
+
+def _require_pair(value, label: str) -> None:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError(f"{label} must be [x, y], got {value!r}")
+
+
 def _normalise_spawn(entry: dict) -> dict:
     """Validate one reset-spawn entry before sending it to Godot."""
     if not isinstance(entry, dict):
@@ -47,11 +65,39 @@ def _normalise_spawn(entry: dict) -> dict:
         "cell": [int(cell[0]), int(cell[1])],
         "facing": 1 if facing >= 0 else -1,
     }
-    state = entry.get("state")
-    if isinstance(state, dict):
-        # Optional grounded trajectory snapshot. The game validates the cell
-        # first, then restores position/velocity/run state after Player.reset().
-        result["state"] = state
+
+    # Clean-start reset is one flat dict. Accept the old nested `state` form
+    # too so archived pools remain readable, then normalise it away.
+    legacy_state = entry.get("state")
+    if isinstance(legacy_state, dict):
+        for key in RESET_STATE_KEYS:
+            if key in legacy_state:
+                result[key] = legacy_state[key]
+    for key in RESET_STATE_KEYS:
+        if key in entry:
+            result[key] = entry[key]
+
+    if "position" in result:
+        _require_pair(result["position"], "position")
+    if "velocity" in result:
+        _require_pair(result["velocity"], "velocity")
+    if "powerup_stack" in result:
+        stack = result["powerup_stack"]
+        if not isinstance(stack, (list, tuple)) or len(stack) > 3:
+            raise ValueError(f"powerup_stack must be a list[0..3], got {stack!r}")
+        result["powerup_stack"] = [int(value) for value in stack]
+    if "run_time" in result:
+        result["run_time"] = float(result["run_time"])
+        if result["run_time"] < 0.0:
+            raise ValueError(f"run_time must be non-negative: {result['run_time']!r}")
+    if "best_run_time" in result:
+        best = float(result["best_run_time"])
+        result["best_run_time"] = best if np.isfinite(best) else 1e9
+    for key in ("run_active", "started_walking"):
+        if key in result:
+            result[key] = bool(result[key])
+    if "world_state" in result and not isinstance(result["world_state"], dict):
+        raise ValueError(f"world_state must be an object: {result['world_state']!r}")
     return result
 
 
@@ -117,6 +163,8 @@ class GodotEnv:
         self.supports_agent_reset = False
         self.supports_spawn_cells = False
         self.supports_state_reset = False
+        self.supports_info_request = False
+        self.world_state_version = 0
         self.last_reset_agents: list[int] = []
         self.last_reset_spawns: list[dict] = []
         self.info_schema = 1
@@ -342,6 +390,9 @@ class GodotEnv:
                 "on_wall": bool(info.get("on_wall", [False] * count)[index]),
                 "perc_to_peak": float(info.get("perc_to_peak", [0.0] * count)[index]),
                 "powerup_count": int(info.get("powerup_count", [0] * count)[index]),
+                "powerup_stack": list(
+                    info.get("powerup_stack", [[-1.0, -1.0, -1.0]] * count)[index]
+                ),
                 "run_active": bool(info.get("run_active", [False] * count)[index]),
                 "started_walking": bool(
                     info.get("started_walking", [False] * count)[index]
@@ -351,6 +402,14 @@ class GodotEnv:
                 "distinct_cells_touched": info["distinct_cells_touched"][index],
                 "run_time": info["run_time"][index],
                 "best_run_time": info["best_run_time"][index],
+                "gold_ratio": float(info.get("gold_ratio", [1.0] * count)[index]),
+                "flow_cost": float(info.get("flow_cost", [0.0] * count)[index]),
+                "flow_in_bounds": bool(
+                    info.get("flow_in_bounds", [False] * count)[index]
+                ),
+                "wasted_air_frames": int(
+                    info.get("wasted_air_frames", [0] * count)[index]
+                ),
                 "finished": bool(info["finished"][index]),
                 "deaths": int(info["deaths"][index]),
                 "efficiency": info["efficiency"][index],
@@ -436,6 +495,28 @@ class GodotEnv:
         if not infos:
             infos = [{}] * self.num_envs
         return obs, infos
+
+    def request_info(self, keys, agents: Optional[list[int]] = None):
+        """Request an auxiliary info block while the game is paused between
+        steps. Returns the raw ``info`` response, including ``world_state``
+        when requested.
+        """
+        if not self.supports_info_request:
+            raise RuntimeError("game does not advertise info_request support")
+        requested = [str(key) for key in keys]
+        if not requested:
+            raise ValueError("info request needs at least one key")
+        message = {"type": "info_request", "request": requested}
+        if agents is not None:
+            message["agents"] = [int(index) for index in agents]
+        self._send_as_json(message)
+        response = self._get_json_dict()
+        if not isinstance(response, dict) or response.get("type") != "info":
+            raise RuntimeError(f"unexpected info response: {response!r}")
+        unsupported = response.get("unsupported", [])
+        if unsupported:
+            raise ValueError(f"game does not support info keys: {unsupported!r}")
+        return response
 
     def call(self, method):
         message = {
@@ -564,6 +645,10 @@ class GodotEnv:
         self.supports_state_reset = bool(
             json_dict.get("supports_state_reset", False)
         )
+        self.supports_info_request = bool(
+            json_dict.get("supports_info_request", False)
+        )
+        self.world_state_version = int(json_dict.get("world_state_version", 0))
         self.info_schema = int(json_dict.get("info_schema", 1))
         self.static_info = dict(json_dict.get("static_info") or {})
         self._spawn_cells = [[-1, -1] for _ in range(self.num_envs)]

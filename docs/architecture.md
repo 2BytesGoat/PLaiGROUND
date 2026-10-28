@@ -44,7 +44,10 @@ Godot training scene
 - **`SingleAgentGodotEnv`** exposes one training world as a Gymnasium
   environment for SB3. It owns the start pool, the optional reset-time start
   jump, observation dropout, optional trajectory saving, and the 5-tuple
-  `terminated/truncated` contract.
+  `terminated/truncated` contract. Start-pool entries can be canonical, a
+  cell+facing teleport, a NEAT-prefix replay, or a full state snapshot. Only
+  prefix replay and state snapshots preserve the run clock; a cell reset zeroes
+  it. See [`audit/2026-10-28-start-pool-clock-bias.md`](audit/2026-10-28-start-pool-clock-bias.md).
 - **`MultiAgentGodotVecEnv`** exposes N agents in one Godot process as N virtual
   SB3 environments, using the game's per-agent `reset(agents=...)` support.
 - **`StableBaselinesGodotEnv`** is the older Gym wrapper kept for tutorials /
@@ -75,6 +78,14 @@ The game emits a flat float vector. PLaiGROUND mirrors the schema in
 | `legacy` | 58 | deployed 58/256 student, NEAT, DQN, most PPO baselines | 7×7 tile IDs + 9 player/route values. |
 | `multi_hot` | 754 | 754 PPO teachers/students | 7×7×15 semantic grid + 19 player/route values. |
 | `multi_hot_sensor` | 794 | 794 sensor PPO lineage | 754 + 20 head-ray distances + 20 hit flags. |
+| `raw` | 342 | validation only; Python encoder pending | 7×7 tile IDs + tile states, player state, 8-way collisions, 8-way flow. |
+
+> **Observation change (2026-10-28, in progress):** the `raw` encoding is
+> implemented and validated (1-1 and 1-8); Python feature encoders and the
+> reset/powerup restore are still pending. The 58 runtime encoder stays in
+> Godot; the 754/794 layouts above remain the current reference until the
+> cutover. See
+> [`audit/2026-10-28-raw-state-observation-decision.md`](audit/2026-10-28-raw-state-observation-decision.md).
 
 Action space is binary `{idle, jump}`. The default control cadence is
 `action_repeat=4`: one decision every four physics frames, 15 decisions/s at
@@ -90,8 +101,9 @@ The game's training reset supports three useful forms:
 
 1. **Canonical** — the level's normal start.
 2. **Cell + facing** — `{"cell": [x, y], "facing": 1|-1}`. Only position and
-   facing are restored. The run clock starts at zero, so a `time`-reward run
-   from a mid-route cell is not comparable to a full run.
+   facing are restored. The run clock starts at zero, so a mid-route start
+   reads `gold_ratio = 3` and is not comparable to a full run. Training reset
+   force-starts the run; there is no idle state or forced first jump.
 3. **Grounded state snapshot** — an optional `state` dictionary with position,
    velocity, state name, `run_time`, `best_run_time`, `run_active`, and
    `started_walking`. The game supports this for grounded, powerup-free states;
@@ -99,30 +111,44 @@ The game's training reset supports three useful forms:
    the preferred form for mid-route DQN/PPO checkpoints because the run clock is
    preserved.
 
+The clean-start target extends this contract to one flat reset dict: the
+physical fields and source-checkpoint `run_time` are top-level, and the general
+dynamic `world_state` snapshot (powerups, dissolve/moving/reset objects) is
+nested. There is no separate `state`/`info` reset split; the observation encoder
+ignores the restore metadata. Powerups are restored into the player stack while
+their pickup nodes remain held/despawned. NEAT extraction/pooling rejects a
+candidate that cannot be reproduced; Godot applies the reset or returns an
+error. This extension is implemented and smoke-tested; the 1-8+ route and
+promotion gates remain pending. See
+[`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
+
 The low-level wrapper also supports **prefix replay**: reset to canonical, then
 replay a recorded action prefix before handing control to the policy. This
 preserves the full run clock without a state snapshot, but it uses recorded
-actions during reset (not as imitation labels).
+actions during reset (not as imitation labels). Training reset now force-starts
+the run, so old prefix pools should be re-recorded; clean state starts replace
+prefix replay for clean-start training.
 
-The optional **start jump** is a reset convention: for stationary cell/canonical
-starts, press jump once during reset so the run starts, then hand control to the
-policy. Do not apply it to a state snapshot whose run is already active.
+Training death is **terminal at the hazard**: the game freezes the player in the
+Die state, the controller applies `-50`/`done`, and the next reset uses the
+normal sampled start (never canonical). Normal play keeps the death cinematic.
 
-## Reward profiles
+## Reward
 
-The game computes five terms: flow progress, jump-arc efficiency, per-step time
-pressure, finish bonus, and death penalty. PLaiGROUND can select:
+The game computes one simplified five-term reward (2026-10-28):
 
-| Profile | Finish term | Per-step time | Efficiency |
-|---|---|---|---|
-| `default` | `+100 + 50 * previous_best / run_time` | −0.05 | −0.02 |
-| `time` | `+20 + 80 * clamp(gold_time / run_time, 0, 2.5)` | −0.10 | −0.03 |
-| `time_speed` | `+20 + 160 * clamp(1.75 / run_time, 0, 2.0)` | −0.10 | −0.03 |
+```text
+progress + efficiency + time + finish + survival
++1.0*(C(s)-0.99*C(s')) -0.02*dwasted
+-3.75*delta_run_time*(1-gold_ratio) +500 finish -50 death
+```
 
-`time`/`time_speed` compare against a fixed target, not the agent's own best.
-They are only meaningful for full runs; a reset that zeroes `run_time` makes a
-short partial run look extremely fast. See
-[`known-issues.md`](known-issues.md) § DQN.
+`gold_ratio` is clamped to `[0, 3]`; `best_run_time` is telemetry only. The old
+`default`/`time`/`time_speed` profiles and `--reward_profile` are gone/ignored.
+`info` also exposes `gold_ratio`, `flow_cost`, `flow_in_bounds`, and
+`wasted_air_frames` for Python custom rewards. See
+[`reference/reward-contract.md`](reference/reward-contract.md) and
+[`known-issues.md`](known-issues.md) § DQN for the mid-route clock caveat.
 
 ## Run artifacts
 

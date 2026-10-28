@@ -58,6 +58,42 @@ DEFAULT_LEVEL = "1-3"
 LEVELS = [f"1-{i}" for i in range(1, 17)]
 DEFAULT_ENV_PATH = Path(__file__).resolve().parent.parent / "environments"
 
+RESET_STATE_KEYS = (
+    "position",
+    "velocity",
+    "state_name",
+    "powerup_stack",
+    "run_time",
+    "best_run_time",
+    "run_active",
+    "started_walking",
+    "world_state",
+)
+
+
+def _flatten_reset_state(entry: dict) -> dict:
+    """Return a clean-start entry with legacy nested ``state`` flattened."""
+    item = dict(entry)
+    legacy = item.pop("state", None)
+    if isinstance(legacy, dict):
+        for key in RESET_STATE_KEYS:
+            if key in legacy and key not in item:
+                item[key] = legacy[key]
+    if "powerup_stack" in item:
+        stack = item["powerup_stack"]
+        if not isinstance(stack, (list, tuple)) or len(stack) > 3:
+            raise ValueError(f"powerup_stack must be a list[0..3], got {stack!r}")
+        item["powerup_stack"] = [int(value) for value in stack]
+    if "run_time" in item:
+        item["run_time"] = float(item["run_time"])
+        if item["run_time"] < 0.0:
+            raise ValueError(f"run_time must be non-negative: {item['run_time']!r}")
+    if "best_run_time" in item:
+        item["best_run_time"] = float(item["best_run_time"])
+    if "world_state" in item and not isinstance(item["world_state"], dict):
+        raise ValueError(f"world_state must be an object: {item['world_state']!r}")
+    return item
+
 
 def tensorboard_available() -> bool:
     """Return whether SB3 can create a TensorBoard output format."""
@@ -127,10 +163,20 @@ def load_spawn_pool(path: Path) -> list[dict]:
         facing = int(entry.get("facing", 1))
         if not isinstance(cell, (list, tuple)) or len(cell) != 2:
             raise ValueError(f"{path} spawn[{index}].cell must be [x, y]")
-        pool.append({
+        item = _flatten_reset_state(entry)
+        if "position" in item:
+            position = item["position"]
+            if not isinstance(position, (list, tuple)) or len(position) != 2:
+                raise ValueError(f"{path} spawn[{index}].position must be [x, y]")
+        if "velocity" in item:
+            velocity = item["velocity"]
+            if not isinstance(velocity, (list, tuple)) or len(velocity) != 2:
+                raise ValueError(f"{path} spawn[{index}].velocity must be [x, y]")
+        item.update({
             "cell": [int(cell[0]), int(cell[1])],
             "facing": 1 if facing >= 0 else -1,
         })
+        pool.append(item)
     return pool
 
 
@@ -149,10 +195,12 @@ def load_spawn_holdout(path: Path) -> list[dict]:
         cell = entry.get("cell")
         if not isinstance(cell, (list, tuple)) or len(cell) != 2:
             continue
-        holdout.append({
+        item = _flatten_reset_state(entry)
+        item.update({
             "cell": [int(cell[0]), int(cell[1])],
             "facing": 1 if int(entry.get("facing", 1)) >= 0 else -1,
         })
+        holdout.append(item)
     return holdout
 
 
@@ -166,7 +214,7 @@ def load_start_pool(path: Path) -> list[dict]:
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(f"{path} start[{index}] must be an object")
-        item = dict(entry)
+        item = _flatten_reset_state(entry)
         item["weight"] = max(0.0, float(item.get("weight", 1.0)))
         prefix = item.get("prefix_actions")
         if prefix is not None:
@@ -179,6 +227,14 @@ def load_start_pool(path: Path) -> list[dict]:
                 raise ValueError(f"{path} start[{index}] needs cell or prefix_actions")
             item["cell"] = [int(cell[0]), int(cell[1])]
             item["facing"] = 1 if int(item.get("facing", 1)) >= 0 else -1
+            if "position" in item:
+                position = item["position"]
+                if not isinstance(position, (list, tuple)) or len(position) != 2:
+                    raise ValueError(f"{path} start[{index}].position must be [x, y]")
+            if "velocity" in item:
+                velocity = item["velocity"]
+                if not isinstance(velocity, (list, tuple)) or len(velocity) != 2:
+                    raise ValueError(f"{path} start[{index}].velocity must be [x, y]")
         if item["weight"] <= 0.0:
             continue
         pool.append(item)
@@ -310,6 +366,22 @@ class SingleAgentGodotEnv(gym.Env):
         )
         return dict(self.start_pool[index])
 
+    @staticmethod
+    def _state_start(spec: dict) -> bool:
+        return any(key in spec for key in RESET_STATE_KEYS)
+
+    @staticmethod
+    def _spawn_from_start(spec: dict) -> dict:
+        spawn = {
+            "agent": 0,
+            "cell": list(spec["cell"]),
+            "facing": int(spec.get("facing", 1)),
+        }
+        for key in RESET_STATE_KEYS:
+            if key in spec:
+                spawn[key] = spec[key]
+        return spawn
+
     def _clear_trajectory(self) -> None:
         self._trajectory_obs = []
         self._trajectory_actions = []
@@ -361,6 +433,7 @@ class SingleAgentGodotEnv(gym.Env):
         spec = self._sample_start()
         for _attempt in range(4):
             prefix = spec.get("prefix_actions") or []
+            state_start = not prefix and self._state_start(spec)
             if prefix:
                 obs, infos = self.game.reset()
                 done = False
@@ -374,6 +447,10 @@ class SingleAgentGodotEnv(gym.Env):
                 if done:
                     spec = self._sample_start()
                     continue
+            elif state_start:
+                obs, infos = self.game.reset(
+                    spawns=[self._spawn_from_start(spec)]
+                )
             elif spec.get("cell") is not None:
                 obs, infos = self.game.reset(
                     spawns=[
@@ -387,7 +464,9 @@ class SingleAgentGodotEnv(gym.Env):
             else:
                 obs, infos = self.game.reset()
 
-            start_jump = bool(self.force_start_jump and not prefix)
+            start_jump = bool(
+                self.force_start_jump and not prefix and not state_start
+            )
             if start_jump:
                 # The training controller starts the run on the first jump.
                 # Press it as part of reset, then hand control to the policy;
@@ -406,6 +485,8 @@ class SingleAgentGodotEnv(gym.Env):
                 "start_source": (
                     "prefix"
                     if prefix
+                    else "state"
+                    if state_start
                     else "canonical"
                     if spec.get("canonical")
                     else "cell"
@@ -413,6 +494,8 @@ class SingleAgentGodotEnv(gym.Env):
                 "start_kind": (
                     "prefix"
                     if prefix
+                    else "state"
+                    if state_start
                     else str(
                         spec.get(
                             "kind",
@@ -425,6 +508,7 @@ class SingleAgentGodotEnv(gym.Env):
                 "start_facing": spec.get("facing"),
                 "start_distance": spec.get("distance"),
                 "start_jump": start_jump,
+                "state_start": state_start,
             }
             info.update(self._start_info)
             observation = self._augment_obs(self._obs(obs))
@@ -451,6 +535,10 @@ class SingleAgentGodotEnv(gym.Env):
         observation = self._augment_obs(self._obs(obs))
         self._last_obs = observation
         return observation, info
+
+    def request_info(self, keys, agents=None):
+        """Forward an on-demand info request to the single Godot world."""
+        return self.game.request_info(keys, agents=agents)
 
     def step(self, action):
         if (
@@ -483,7 +571,9 @@ class SingleAgentGodotEnv(gym.Env):
         except (TypeError, ValueError):
             run_time = float("nan")
 
-        info["finished"] = bool(done and not truncated and reward > 0.0)
+        info["finished"] = bool(
+            done and not truncated and info.get("finished", False)
+        )
         info["timed_out"] = bool(truncated)
         if info["finished"] and (
             not np.isfinite(run_time) or run_time <= 0.0
@@ -1544,12 +1634,13 @@ def parse_args() -> argparse.Namespace:
         "--reward-profile",
         default="default",
         choices=("default", "time", "time_speed"),
-        help="Training-only game reward profile.",
+        help="Deprecated/ignored: the game always uses the simplified reward "
+        "contract (fixed 500 finish, clamped gold_ratio time term).",
     )
     parser.add_argument(
         "--obs-encoding",
         default="legacy",
-        choices=("legacy", "multi_hot", "multi_hot_sensor"),
+        choices=("legacy", "multi_hot", "multi_hot_sensor", "raw"),
         help="Game observation contract; multi_hot and multi_hot_sensor require "
         "a matching new model. multi_hot_sensor appends head-mounted ray features.",
     )
@@ -1576,16 +1667,17 @@ def parse_args() -> argparse.Namespace:
         "--force-start-jump",
         dest="force_start_jump",
         action="store_true",
-        help="Press jump once during reset, then hand control to the policy "
-        "(default: on).",
+        help="Compatibility: press jump once during reset for old checkpoints "
+        "trained before training reset force-started the run.",
     )
     parser.add_argument(
         "--no-force-start-jump",
         dest="force_start_jump",
         action="store_false",
-        help="Leave the first start action policy-owned (legacy behavior).",
+        help="Leave the first action policy-owned (default; training reset "
+        "force-starts the run in Godot).",
     )
-    parser.set_defaults(force_start_jump=True)
+    parser.set_defaults(force_start_jump=False)
     parser.add_argument("--skip-eval", action="store_true")
     parser.add_argument(
         "--training-no-cosmetics",
