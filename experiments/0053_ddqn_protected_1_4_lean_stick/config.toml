@@ -1,0 +1,95 @@
+[experiment]
+id = "0053"
+name = "ddqn_protected_1_4_lean_stick"
+status = "stopped_100k_probe"
+started = "2026-10-29"
+stopped = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+# 4 current 1-4 + 2 previous 1-3 + 1 rotating 1-2/1-1.
+levels = ["1-4", "1-4", "1-4", "1-4", "1-3", "1-3", "1-2", "1-1"]
+n_envs = 8
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reassert_held_jump = true
+reward_profile = "default"
+base_port = 18700
+eval_port = 18800
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean_stick"
+preprocessing = "lean_stick"
+expected_raw_size = 191
+model_input_size = 957
+note = "lean 188 + on_ceiling + jump_held + stick_active. First 188 values remain byte-for-byte lean."
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 600000
+buffer_size = 400000
+online_buffer_size = 400000
+anchor_fraction = 0.25
+learning_starts = 10000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.5
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.02
+
+[data]
+archive = "runs/neat_seeded_1_4_stick_full_population/archive/routes.json"
+finishers = "runs/neat_seeded_1_4_stick_full_population/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-4.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_seeded_1_4_stick_full_population/pool/multilevel_train_start_pool.json"
+holdout_pool = "runs/neat_seeded_1_4_stick_full_population/pool/holdout_start_pool.json"
+
+[checkpointing]
+save_freq = 25000
+
+[result]
+status = "stopped_100k_probe"
+note = "100k probe: 1-4 canonical 0/1 (death), train 2/11 at 6.7833 s, holdout 0/2; spawns accepted. Old-level eval: 1-1 1/12/8 full at 1.6167/3.3667/3.9083; 1-2 1/31/20 full at 4.3333/5.0833/4.8500; 1-3 1/45/23 coverage 41/45 and 19/23 at 6.5000/6.6333/6.3167. Not promotable; 1-3 regressed. Stopped for decision."
+
+[evaluation]
+canonical = false
+train_pool = false
+holdout_pool = false
+
+[run]
+resume_from = "runs/ddqn_protected_1_1_1_2_1_3/dqn/checkpoints/ddqn_2225000_steps.zip"
+reset_timesteps = true
+anchor_buffer_from = "runs/ddqn_anchor_1_1_1_2/replay_buffer_200k.pkl"
+preprocessing_from = "runs/ppo_clean_start_1_1_fresh/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_protected_1_1_1_2_1_3_1_4_lean_stick"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

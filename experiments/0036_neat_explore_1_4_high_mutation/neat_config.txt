@@ -1,0 +1,72 @@
+[NEAT]
+fitness_criterion      = max
+fitness_threshold      = 1000000
+pop_size               = 384
+reset_on_extinction   = True
+no_fitness_termination = True
+
+[DefaultGenome]
+num_inputs              = 58
+num_outputs             = 1
+num_hidden              = 0
+feed_forward            = True
+initial_connection      = full
+
+activation_default      = sigmoid
+activation_mutate_rate  = 0.0
+activation_options      = sigmoid
+
+aggregation_default     = sum
+aggregation_mutate_rate = 0.0
+aggregation_options     = sum
+
+bias_init_mean          = 0.0
+bias_init_stdev         = 1.0
+bias_max_value          = 30.0
+bias_min_value          = -30.0
+bias_mutate_power       = 0.75
+bias_mutate_rate        = 0.8
+bias_replace_rate       = 0.15
+
+response_init_mean      = 1.0
+response_init_stdev     = 0.0
+response_max_value      = 30.0
+response_min_value      = -30.0
+response_mutate_power   = 0.0
+response_mutate_rate    = 0.0
+response_replace_rate   = 0.0
+
+weight_init_mean        = 0.0
+weight_init_stdev       = 1.0
+weight_max_value        = 30.0
+weight_min_value        = -30.0
+weight_mutate_power     = 0.75
+weight_mutate_rate      = 0.9
+weight_replace_rate     = 0.15
+
+enabled_default         = True
+enabled_mutate_rate     = 0.02
+
+compatibility_disjoint_coefficient = 1.0
+compatibility_weight_coefficient   = 0.5
+
+conn_add_prob           = 0.15
+conn_delete_prob        = 0.05
+node_add_prob           = 0.08
+node_delete_prob        = 0.03
+
+single_structural_mutation = false
+structural_mutation_surer  = default
+
+[DefaultSpeciesSet]
+compatibility_threshold = 4.0
+
+[DefaultStagnation]
+species_fitness_func = max
+max_stagnation       = 30
+species_elitism      = 5
+
+[DefaultReproduction]
+elitism            = 3
+survival_threshold = 0.3
+min_species_size   = 2

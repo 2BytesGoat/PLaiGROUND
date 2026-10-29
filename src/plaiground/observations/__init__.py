@@ -13,13 +13,14 @@ Example:
 
 from . import spec
 from .base import StateTransformer
-from .defaults import build_lean_pipeline
+from .defaults import build_lean_pipeline, build_lean_stick_pipeline
 from .lean import (
     DecodeLeanState,
     LeanFeatures,
     LeanState,
     LeanStateBatch,
 )
+from .lean_stick import LeanStickPreprocessor
 from .pipeline import StatePipeline
 
 __all__ = [
@@ -27,8 +28,10 @@ __all__ = [
     "LeanFeatures",
     "LeanState",
     "LeanStateBatch",
+    "LeanStickPreprocessor",
     "StatePipeline",
     "StateTransformer",
     "build_lean_pipeline",
+    "build_lean_stick_pipeline",
     "spec",
 ]

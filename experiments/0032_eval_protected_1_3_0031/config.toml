@@ -1,0 +1,71 @@
+[experiment]
+id = "0032"
+name = "eval_protected_1_3_0031"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+levels = ["1-3"]
+n_envs = 1
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reward_profile = "default"
+base_port = 15600
+eval_port = 15700
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean"
+preprocessing = "lean"
+expected_raw_size = 188
+model_input_size = 954
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 1
+
+[data]
+archive = "runs/neat_frequent_rebalance_1_3/archive/routes.json"
+finishers = "runs/neat_frequent_rebalance_1_3/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-3.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_frequent_rebalance_1_3/pool/train_start_pool.json"
+holdout_pool = "runs/neat_frequent_rebalance_1_3/pool/holdout_start_pool.json"
+
+[evaluation]
+canonical = true
+sets = [
+  "runs/neat_frequent_rebalance_1_3/pool/train_start_pool.json",
+  "runs/neat_frequent_rebalance_1_3/pool/holdout_start_pool.json",
+]
+
+[run]
+preprocessing_from = "runs/ppo_clean_start_1_1_fresh/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_protected_1_1_1_2_1_3"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

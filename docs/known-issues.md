@@ -429,3 +429,17 @@ See
 - **The 754/794 models are not installed.** The shipped game runtime is the
   58-value JSON MLP. A 754/794 model needs a runtime/export path and the all-16
   in-game gate.
+
+## Held-stick action semantics in exported models — high
+
+`legacy_stick` 61 and `lean_stick` 191 policies require
+`reassert_held_jump=true`. Python now defaults that from the observation
+encoding, keeps training/evaluation/preview on one `Run.reassert_held_jump`
+property, and fails fast when Godot reports a different value.
+
+**Godot export TODO:** when the bundled/inference policy is a held-stick model,
+`PlayerAIModelController` must set `reassert_held_jump` from the exported model
+metadata (or the held-stick encoding), not only `obs_encoding`. Otherwise an
+exported 1-4 policy can be evaluated or shipped with legacy edge-triggered jump
+semantics. Add an export gate for a held-stick model that checks the flag and a
+short ceiling-stick replay.

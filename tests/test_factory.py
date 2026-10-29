@@ -85,6 +85,47 @@ class FactoryTest(unittest.TestCase):
                     None,
                 )
 
+    def test_eval_env_forwards_reassert_held_jump(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._run(Path(tmp))
+            run.config["observation"] = {"encoding": "lean_stick"}
+            with mock.patch.object(factory, "GodotEnv") as godot_env:
+                godot_env.return_value.static_info = {
+                    "reassert_held_jump": True
+                }
+                factory.make_eval_env(
+                    run,
+                    "/nonexistent",
+                    level="1-1",
+                    num_agents=1,
+                    port=12345,
+                    log_name="eval.log",
+                    home_name="eval_home",
+                )
+            self.assertEqual(
+                godot_env.call_args.kwargs.get("reassert_held_jump"),
+                "true",
+            )
+
+    def test_eval_env_rejects_action_semantics_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._run(Path(tmp))
+            run.config["observation"] = {"encoding": "lean_stick"}
+            with mock.patch.object(factory, "GodotEnv") as godot_env:
+                godot_env.return_value.static_info = {
+                    "reassert_held_jump": False
+                }
+                with self.assertRaises(RuntimeError):
+                    factory.make_eval_env(
+                        run,
+                        "/nonexistent",
+                        level="1-1",
+                        num_agents=1,
+                        port=12345,
+                        log_name="eval.log",
+                        home_name="eval_home",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

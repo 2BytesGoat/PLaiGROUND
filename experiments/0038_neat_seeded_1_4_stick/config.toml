@@ -1,0 +1,68 @@
+[experiment]
+id = "0038"
+name = "neat_seeded_1_4_stick"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-4"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "Frozen legacy 58 + on_ceiling + jump_held + stick_active. Existing 58-input agents remain on the old encoding."
+
+[action]
+reassert_held_jump = true
+note = "New hold-sensitive runs re-apply the held jump after state-machine exits. Existing agents keep edge semantics."
+
+[source]
+seed_checkpoint = "runs/neat_seeded_1_4_stick/seed-checkpoint-0"
+source_run = "runs/neat_seeded_1_4_from_0035/archive"
+source_level = "1-4"
+source_routes = 4
+note = "Best four archived 1-4 routes from 0037 (5.9167, 6.5167, 7.6500, 10.5333 s). Genomes are 58-input; the 61-input seed keeps the first 58 inputs and leaves the three new flags initially unconnected for mutation."
+
+[collection]
+record_paths = true
+generations = 30
+min_clean_routes = 5
+checkpoint_interval = 5
+rebalance_every = 2
+rebalance_final = true
+
+[result]
+generations = 1
+wall_seconds = 49.7
+finishes = 173
+population = 384
+deaths = 93
+best_fitness = 601.7922
+best_time = 5.7667
+archive_routes = 46
+clean_routes = 10
+clean_clusters = 4
+train_routes = 5
+holdout_routes = 5
+train_states = 8
+holdout_states = 3
+note = "Stopped on the clean-route target after generation 1. The hold/ceiling contract change raised finishes from 40/384 (0037) to 173/384 and found a 5.7667 s clean route. The 1-4 pool was built and validated; 0039 uses it for protected DDQN."
+
+[output]
+dir = "runs/neat_seeded_1_4_stick"
+archive_dir = "runs/neat_seeded_1_4_stick/archive"

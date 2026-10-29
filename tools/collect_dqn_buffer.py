@@ -31,7 +31,9 @@ from plaiground.experiments.runner import (
     resolve_path,
     train_start_pool,
 )
+from plaiground.algorithms.reinforcement.replay import RareReplayBuffer
 from plaiground.observations.lean_io import load_lean_preprocessor
+from plaiground.observations.lean_stick import LeanStickPreprocessor
 
 
 def _episode_rows(infos: list[dict]) -> list[dict]:
@@ -87,6 +89,17 @@ def main() -> int:
     parser.add_argument("--epsilon", type=float, default=0.02)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--rare-buffer",
+        action="store_true",
+        help="Store current-state buckets, returns, Q values, and gap priorities.",
+    )
+    parser.add_argument(
+        "--gap-quantile",
+        type=float,
+        default=0.9,
+        help="Keep positive return/Q gaps above this quantile.",
+    )
     args = parser.parse_args()
 
     run = load_run(args.config)
@@ -99,8 +112,12 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     preprocessor = None
-    if run.preprocessing == "lean":
+    if run.preprocessing in {"lean", "lean_stick"}:
         preprocessor = load_lean_preprocessor(run.preprocessing_path)
+        if run.preprocessing == "lean_stick" and not isinstance(
+            preprocessor, LeanStickPreprocessor
+        ):
+            preprocessor = LeanStickPreprocessor(preprocessor)
     env = build_vec_env(
         run,
         resolve_env_path(),
@@ -109,6 +126,19 @@ def main() -> int:
     )
     model = DQN.load(str(model_path), env=env, device=args.device)
     model.exploration_rate = float(args.epsilon)
+    if args.rare_buffer:
+        model.replay_buffer = RareReplayBuffer(
+            buffer_size=int(run.algorithm.get("buffer_size", 200_000)),
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            device=model.device,
+            n_envs=env.num_envs,
+        )
+        print(
+            f"using rare replay buffer: "
+            f"{model.replay_buffer.buffer_size * model.replay_buffer.n_envs} transitions",
+            flush=True,
+        )
 
     buffer = model.replay_buffer
     assert buffer is not None
@@ -117,11 +147,15 @@ def main() -> int:
     collected = 0
     vector_steps = 0
     rows: list[dict] = []
+    episode_transitions: list[list[tuple[int, float]]] = [
+        [] for _ in range(env.num_envs)
+    ]
     obs = env.reset()
     try:
         while collected < target:
             actions, _ = model.predict(obs, deterministic=False)
             actions = np.asarray(actions, dtype=np.int64).reshape(-1)
+            slot = int(buffer.pos)
             new_obs, rewards, dones, infos = env.step(actions)
             buffer.add(
                 obs,
@@ -131,6 +165,21 @@ def main() -> int:
                 dones,
                 infos,
             )
+            for env_index in range(env.num_envs):
+                episode_transitions[env_index].append(
+                    (slot, float(rewards[env_index]))
+                )
+                if bool(dones[env_index]):
+                    running = 0.0
+                    for stored_slot, reward in reversed(
+                        episode_transitions[env_index]
+                    ):
+                        running = reward + float(model.gamma) * running
+                        if hasattr(buffer, "set_return"):
+                            buffer.set_return(
+                                stored_slot, env_index, running
+                            )
+                    episode_transitions[env_index].clear()
             collected += int(env.num_envs)
             vector_steps += 1
             rows.extend(_episode_rows(infos))
@@ -143,6 +192,17 @@ def main() -> int:
                 )
     finally:
         env.close()
+
+    gap_stats = {}
+    if args.rare_buffer and hasattr(buffer, "compute_q_values"):
+        q_count = buffer.compute_q_values(model.q_net)
+        gap_stats = buffer.compute_gap_priorities(args.gap_quantile)
+        print(
+            f"[collect gaps] q={q_count} threshold={gap_stats['threshold']} "
+            f"positive={gap_stats['positive']} "
+            f"max_gap={gap_stats['max_gap']:.3f}",
+            flush=True,
+        )
 
     stats = _fmt_stats("final", rows)
     buffer_path = out_dir / f"replay_buffer_{target // 1000}k.pkl"
@@ -165,6 +225,12 @@ def main() -> int:
         "vector_steps": vector_steps,
         "epsilon": float(args.epsilon),
         "n_envs": int(env.num_envs),
+        "state_buckets": len(getattr(buffer, "bucket_names", {})),
+        "priority_max": float(buffer.priorities[: buffer.size()].max())
+        if hasattr(buffer, "priorities")
+        else None,
+        "gap_quantile": float(args.gap_quantile),
+        "gap_stats": gap_stats,
         "stats": stats,
     }
     metadata_path = out_dir / f"replay_buffer_{target // 1000}k.json"

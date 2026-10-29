@@ -142,6 +142,21 @@ class Run:
         return str(self.config.get("observation", {}).get("encoding", "legacy"))
 
     @property
+    def reassert_held_jump(self) -> bool:
+        """Whether repeated jump inputs must re-press the held button.
+
+        Held-stick encodings need this by default so training, evaluation, and
+        previews cannot silently use legacy edge-triggered semantics. Old
+        encodings keep the legacy behavior unless the config explicitly opts in.
+        """
+        value = self.env.get("reassert_held_jump")
+        if value is None:
+            return self.obs_encoding in {"legacy_stick", "lean_stick"}
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    @property
     def preprocessing(self) -> str:
         return str(self.config.get("observation", {}).get("preprocessing", "none"))
 

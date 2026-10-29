@@ -69,6 +69,7 @@ def make_env(
         force_start_jump=bool(env_config.get("force_start_jump", False)),
         reward_profile=str(env_config.get("reward_profile", "default")),
         obs_encoding=run.obs_encoding,
+        reassert_held_jump=run.reassert_held_jump,
         preprocessor=preprocessor,
         start_pool=level_pool,
         start_seed=int(env_config.get("start_seed", 0)) + rank,
@@ -125,6 +126,7 @@ def build_vec_env(
             output_dir=run.output_dir,
             obs_encoding=run.obs_encoding,
             reward_profile=str(run.env.get("reward_profile", "default")),
+            reassert_held_jump=run.reassert_held_jump,
             show_window=run.show,
             spawn_pool=pool,
             spawn_seed=int(run.env.get("start_seed", 0)),
@@ -175,7 +177,10 @@ def make_eval_env(
 ) -> GodotEnv:
     run.eval_dir.mkdir(parents=True, exist_ok=True)
     GodotEnv.DEFAULT_TIMEOUT = run.timeout
-    return GodotEnv(
+    extra_env_kwargs: dict[str, str] = {}
+    if run.reassert_held_jump:
+        extra_env_kwargs["reassert_held_jump"] = "true"
+    env = GodotEnv(
         env_path=env_path,
         port=port,
         show_window=run.show if show_window is None else show_window,
@@ -189,4 +194,16 @@ def make_eval_env(
         env=isolated_home(run.output_dir, home_name),
         reward_profile=str(run.env.get("reward_profile", "default")),
         obs_encoding=run.obs_encoding,
+        **extra_env_kwargs,
     )
+    actual = env.static_info.get("reassert_held_jump")
+    if (run.reassert_held_jump and actual is None) or (
+        actual is not None and bool(actual) != run.reassert_held_jump
+    ):
+        env.close()
+        raise RuntimeError(
+            "action semantics mismatch: expected "
+            f"reassert_held_jump={run.reassert_held_jump}, game reported "
+            f"reassert_held_jump={actual!r}"
+        )
+    return env

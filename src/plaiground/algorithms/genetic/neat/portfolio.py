@@ -42,6 +42,7 @@ class PortfolioEntry:
     cluster_id: str | None
     bin: str
     route_signature: str | None
+    is_finisher: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +52,7 @@ class PortfolioEntry:
             "cluster_id": self.cluster_id,
             "bin": self.bin,
             "route_signature": self.route_signature,
+            "is_finisher": self.is_finisher,
         }
 
 
@@ -99,8 +101,16 @@ def build_entries(
     routes: list[dict[str, Any]],
     *,
     jaccard: float = 0.5,
+    live_finish_times: dict[int, float] | None = None,
 ) -> tuple[list[PortfolioEntry], dict[str, Any]]:
-    """Attach the best route for each genome to its portfolio metadata."""
+    """Attach route or live-generation finish metadata to each genome.
+
+    Route archives keep only the best genome per route signature, so they can
+    contain far fewer genomes than the generation that just finished.  When
+    rebalancing a live population, pass ``live_finish_times`` as well: every
+    finisher from the evaluated generation is then treated as deployment
+    material instead of being discarded as exploration.
+    """
     cluster_map, _unique = _route_clusters(routes, jaccard)
     best_by_genome: dict[int, dict[str, Any]] = {}
     for route in routes:
@@ -120,16 +130,36 @@ def build_entries(
     for genome_id in sorted(population):
         route = best_by_genome.get(genome_id)
         if route is None:
-            entries.append(
-                PortfolioEntry(
-                    genome_id=genome_id,
-                    run_time=None,
-                    clean=False,
-                    cluster_id=None,
-                    bin="exploration",
-                    route_signature=None,
-                )
+            live_time = (
+                live_finish_times.get(genome_id)
+                if live_finish_times is not None
+                else None
             )
+            if live_time is not None and math.isfinite(float(live_time)):
+                run_time = float(live_time)
+                entries.append(
+                    PortfolioEntry(
+                        genome_id=genome_id,
+                        run_time=run_time,
+                        clean=False,
+                        cluster_id=None,
+                        bin=time_bin(run_time),
+                        route_signature=None,
+                        is_finisher=True,
+                    )
+                )
+            else:
+                entries.append(
+                    PortfolioEntry(
+                        genome_id=genome_id,
+                        run_time=None,
+                        clean=False,
+                        cluster_id=None,
+                        bin="exploration",
+                        route_signature=None,
+                        is_finisher=False,
+                    )
+                )
             continue
         signature = str(route.get("route_signature", "")).strip() or None
         cluster = cluster_map.get(signature or "")
@@ -147,6 +177,7 @@ def build_entries(
                     else None
                 ),
                 route_signature=signature,
+                is_finisher=True,
             )
         )
     counts = {name: 0 for name in TIME_BINS}
@@ -154,7 +185,8 @@ def build_entries(
         counts[entry.bin] += 1
     return entries, {
         "population": len(entries),
-        "finishers": sum(entry.bin != "exploration" for entry in entries),
+        "finishers": sum(entry.is_finisher for entry in entries),
+        "live_finishers": len(live_finish_times or {}),
         "bins": counts,
         "clusters": len({entry.cluster_id for entry in entries if entry.cluster_id}),
     }
@@ -166,8 +198,15 @@ def select_portfolio(
     total: int,
     quotas: dict[str, float] | None = None,
     max_per_cluster: int = 32,
+    preserve_finishers: bool = False,
 ) -> list[PortfolioEntry]:
-    """Select a quota-based portfolio, preserving cluster diversity."""
+    """Select a quota-based portfolio, preserving cluster diversity.
+
+    ``preserve_finishers`` is for live-population rebalancing rather than
+    deployment.  It keeps every evaluated finisher, including slow finishers
+    whose time bin would otherwise be ``exploration``, before filling the
+    remaining slots with discovery genomes.
+    """
     quotas = dict(DEFAULT_QUOTAS if quotas is None else quotas)
     quota_total = sum(max(0.0, float(value)) for value in quotas.values())
     if quota_total <= 0:
@@ -192,6 +231,24 @@ def select_portfolio(
     selected: list[PortfolioEntry] = []
     selected_ids: set[int] = set()
     cluster_counts: dict[str, int] = {}
+    if preserve_finishers:
+        finishers = sorted(
+            (entry for entry in entries if entry.is_finisher),
+            key=lambda entry: (
+                entry.run_time is None,
+                entry.run_time if entry.run_time is not None else float("inf"),
+                entry.genome_id,
+            ),
+        )
+        for entry in finishers:
+            if len(selected) >= total:
+                break
+            selected.append(entry)
+            selected_ids.add(entry.genome_id)
+            if entry.cluster_id is not None:
+                cluster_counts[entry.cluster_id] = (
+                    cluster_counts.get(entry.cluster_id, 0) + 1
+                )
     for name in TIME_BINS:
         quota = int(round(total * quotas.get(name, 0.0)))
         candidates = by_bin[name]
@@ -239,6 +296,35 @@ def select_portfolio(
         selected.append(entry)
         selected_ids.add(entry.genome_id)
     return selected
+
+
+def _merge_extra_genomes(
+    candidates: dict[int, Any],
+    extra_genomes: dict[int, Any],
+) -> tuple[dict[int, int], int]:
+    """Add evaluated finishers that reproduction already removed.
+
+    ``Population.run`` evaluates the parents and then reproduces, so many
+    parents from the just-finished generation are no longer in
+    ``population.population`` when rebalancing runs.  Copy those finishers back
+    as candidates.  Existing keys are never overwritten; collisions get a fresh
+    key and the caller remaps their finish times.
+    """
+    remap: dict[int, int] = {}
+    next_key = max(candidates, default=0) + 1
+    added = 0
+    for original_key, genome in sorted(extra_genomes.items()):
+        if original_key in candidates:
+            candidate_key = next_key
+            next_key += 1
+        else:
+            candidate_key = original_key
+        clone = copy.deepcopy(genome)
+        clone.key = candidate_key
+        candidates[candidate_key] = clone
+        remap[original_key] = candidate_key
+        added += 1
+    return remap, added
 
 
 def _max_innovation(genomes: dict[int, Any]) -> int:
@@ -400,7 +486,7 @@ def rebalance_population(
     deployment = [
         entry
         for entry in selected
-        if entry.bin in {"speed", "median", "slow"}
+        if entry.is_finisher
     ]
     portfolio = {
         "source_checkpoint": str(checkpoint),
@@ -411,6 +497,7 @@ def rebalance_population(
         "deployment": [entry.as_dict() for entry in deployment],
         "portfolio_stats": {
             "selected": len(selected),
+            "selected_finishers": sum(1 for entry in selected if entry.is_finisher),
             "selected_by_bin": {
                 name: sum(1 for entry in selected if entry.bin == name)
                 for name in TIME_BINS
@@ -440,6 +527,8 @@ def rebalance_live_population(
     jaccard: float = 0.5,
     max_per_cluster: int = 32,
     seed: int = 42,
+    live_finish_times: dict[int, float] | None = None,
+    finisher_genomes: dict[int, Any] | None = None,
 ) -> dict[str, Any]:
     """Rebalance an in-memory NEAT population without a checkpoint round-trip.
 
@@ -455,7 +544,19 @@ def rebalance_live_population(
     candidates, routes, candidate_stats = _archive_candidates(
         population.population, routes, Path(archive_dir)
     )
-    entries, stats = build_entries(candidates, routes, jaccard=jaccard)
+    if finisher_genomes:
+        remap, added = _merge_extra_genomes(candidates, finisher_genomes)
+        candidate_stats["evaluated_finishers"] = added
+        live_finish_times = {
+            remap.get(genome_id, genome_id): run_time
+            for genome_id, run_time in (live_finish_times or {}).items()
+        }
+    entries, stats = build_entries(
+        candidates,
+        routes,
+        jaccard=jaccard,
+        live_finish_times=live_finish_times,
+    )
     stats["archive_candidates"] = candidate_stats
     max_innovation = _max_innovation(candidates)
     stats["max_innovation"] = max_innovation
@@ -477,6 +578,7 @@ def rebalance_live_population(
         total=target_size,
         quotas=quotas,
         max_per_cluster=max_per_cluster,
+        preserve_finishers=True,
     )
     selected_ids = {entry.genome_id for entry in selected}
 
@@ -513,7 +615,7 @@ def rebalance_live_population(
     deployment = [
         entry
         for entry in selected
-        if entry.bin in {"speed", "median", "slow"}
+        if entry.is_finisher
     ]
     return {
         "source_checkpoint": "live",
@@ -523,6 +625,7 @@ def rebalance_live_population(
         "deployment": [entry.as_dict() for entry in deployment],
         "portfolio_stats": {
             "selected": len(selected),
+            "selected_finishers": sum(1 for entry in selected if entry.is_finisher),
             "selected_by_bin": {
                 name: sum(1 for entry in selected if entry.bin == name)
                 for name in TIME_BINS

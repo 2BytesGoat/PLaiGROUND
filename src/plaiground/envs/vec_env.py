@@ -41,6 +41,7 @@ class MultiAgentGodotVecEnv(VecEnv):
         output_dir: Path | str = "runs/topology_bench",
         obs_encoding: str = "multi_hot",
         reward_profile: str = "time",
+        reassert_held_jump: bool | None = None,
         show_window: bool = False,
         profile_training: bool = False,
         training_no_cosmetics: bool = False,
@@ -58,6 +59,11 @@ class MultiAgentGodotVecEnv(VecEnv):
         self.max_decisions = int(max_decisions)
         self.obs_encoding = obs_encoding
         self.reward_profile = reward_profile
+        if reassert_held_jump is None:
+            reassert_held_jump = obs_encoding in {
+                "legacy_stick",
+                "lean_stick",
+            }
         self._steps = [0] * (self.n_agents_per_process * self.n_processes)
         self._actions: Optional[np.ndarray] = None
         self._spawns: dict[int, dict] = {}
@@ -74,6 +80,8 @@ class MultiAgentGodotVecEnv(VecEnv):
             extra_env_kwargs["profile_training"] = "true"
         if training_no_cosmetics:
             extra_env_kwargs["training_no_cosmetics"] = "true"
+        if reassert_held_jump:
+            extra_env_kwargs["reassert_held_jump"] = "true"
         self._envs: list[GodotEnv] = []
         for process in range(self.n_processes):
             child_env = _isolated_env(root, f"topology_train_{process}")
@@ -93,6 +101,22 @@ class MultiAgentGodotVecEnv(VecEnv):
                 obs_encoding=obs_encoding,
                 **extra_env_kwargs,
             )
+            actual_reassert = env.static_info.get("reassert_held_jump")
+            if (
+                (bool(reassert_held_jump) and actual_reassert is None)
+                or (
+                    actual_reassert is not None
+                    and bool(actual_reassert) != bool(reassert_held_jump)
+                )
+            ):
+                env.close()
+                for existing in self._envs:
+                    existing.close()
+                raise RuntimeError(
+                    "action semantics mismatch: expected "
+                    f"reassert_held_jump={bool(reassert_held_jump)}, game "
+                    f"reported reassert_held_jump={actual_reassert!r}"
+                )
             self._envs.append(env)
 
         self.num_envs = self.n_agents_per_process * self.n_processes

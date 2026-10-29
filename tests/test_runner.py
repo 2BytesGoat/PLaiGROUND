@@ -32,6 +32,7 @@ class RunResolverTest(unittest.TestCase):
             self.assertEqual(run.hidden, [512, 512])
             self.assertEqual(run.model_path.name, "ppo_pilot.zip")
             self.assertEqual(run.output_dir, (Path(tmp) / "run").resolve())
+            self.assertFalse(run.reassert_held_jump)
 
     def test_loads_dqn_experiment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -48,6 +49,15 @@ class RunResolverTest(unittest.TestCase):
             self.assertEqual(run.checkpoint_dir.name, "checkpoints")
             self.assertTrue(run.evaluation["train_pool"])
             self.assertTrue(run.evaluation["holdout_pool"])
+
+    def test_held_stick_encoding_defaults_to_reassert(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = load_run(
+                ROOT / "experiments/0058_ddqn_fresh_1_1_lean_stick",
+                output_dir=Path(tmp) / "run",
+            )
+            self.assertEqual(run.obs_encoding, "lean_stick")
+            self.assertTrue(run.reassert_held_jump)
 
     def test_timesteps_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

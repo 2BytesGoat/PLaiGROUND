@@ -1,0 +1,66 @@
+[experiment]
+id = "0044"
+name = "neat_full_finisher_1_4"
+status = "stopped_diagnostic"
+started = "2026-10-29"
+stopped = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-4"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "Keep the validated 61-value contract. on_ceiling remains redundant with the 7x7 window and stick_active."
+
+[action]
+reassert_held_jump = true
+
+[source]
+seed_checkpoint = "runs/neat_seeded_1_4_stick/seed-checkpoint-0"
+source_run = "runs/neat_seeded_1_4_stick/archive"
+source_level = "1-4"
+source_routes = 4
+note = "Replay the 0038 seed with finisher-preserving rebalancing. 0038 stopped at generation 1 after 173/384 finishes and 10 clean routes; its post-rebalance checkpoint retained only 23 archived finishers."
+
+[collection]
+record_paths = true
+generations = 60
+min_clean_routes = 0
+checkpoint_interval = 5
+rebalance_every = 2
+rebalance_final = true
+
+[evaluation]
+canonical = false
+note = "Evaluate all 384 genomes on canonical 1-4 after training. This is the seed gate for 1-5, not just a route pool gate."
+
+[seed_gate]
+finish_rate_target = 0.90
+clean_clusters_required = 4
+note = "Do not use the checkpoint as the 1-5 seed until the evaluated population is finisher-rich and diverse."
+
+[output]
+dir = "runs/neat_seeded_1_4_stick_full"
+archive_dir = "runs/neat_seeded_1_4_stick_full/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --level 1-4 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_seeded_1_4_stick/seed-checkpoint-0 --output-dir runs/neat_seeded_1_4_stick_full --archive-dir runs/neat_seeded_1_4_stick_full/archive --generations 60 --population 384 --parallel 8 --action-repeat 4 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 5 --rebalance-every 2 --rebalance-final --port 17300"
+
+[result]
+status = "stopped_diagnostic"
+note = "Stopped after generation 3. Live-finish metadata reached rebalance (live_finishers=173), but population.run had already reproduced, so only 26 evaluated finishers remained in the live population. Generation 2 did reach 246/384, but this is not the intended finisher-preserving run. Superseded by 0045 with evaluated finisher genomes merged back."

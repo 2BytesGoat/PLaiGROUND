@@ -26,6 +26,8 @@ development/research repo, not part of the shipped game.
 | Review PPO/DQN duplication, dead branches, and the composition plan | [`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md) |
 | Understand the PPO timeout and start-pool root cause | [`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md) |
 | Understand the lean 188-value state decision | [`audit/2026-10-28-lean-state-encoding.md`](audit/2026-10-28-lean-state-encoding.md) |
+| Follow the repeatable new-level NEAT transfer procedure | [`audit/2026-10-29-level-transfer-playbook.md`](audit/2026-10-29-level-transfer-playbook.md) |
+| Understand the NEAT fitness / reward bias finding | [`audit/2026-10-29-reward-fitness-audit.md`](audit/2026-10-29-reward-fitness-audit.md) |
 | Set up the environment | [`../README.md`](../README.md) § Setup |
 | Read a term you don't recognize | [`reference/glossary.md`](reference/glossary.md) |
 | Check the deployed game model | [`reference/deployed-model-58.md`](reference/deployed-model-58.md) |
@@ -43,6 +45,17 @@ development/research repo, not part of the shipped game.
 | [`../experiments/0002_ppo_clean_start_1_1_horizon_1m/`](../experiments/0002_ppo_clean_start_1_1_horizon_1m/) | **stopped; 400k selected** | 1M-horizon continuation; found 2.15 s at 400k, then deterministic timeout windows. Stopped at 972.6k for investigation; no retrain. |
 | [`../experiments/0003_dqn_clean_start_1_1/`](../experiments/0003_dqn_clean_start_1_1/) | **planned manifest** | Config-driven raw-state DQN defaults for the 1-1 clean-start path. |
 | [`../experiments/0004_ppo_clean_start_1_1_fresh/`](../experiments/0004_ppo_clean_start_1_1_fresh/) | **complete; 500k selected** | Fresh 500k PPO from scratch on the corrected pool; canonical 2.15 s, train 12/12, holdout 8/8. |
+| [`../experiments/0038_neat_seeded_1_4_stick/`](../experiments/0038_neat_seeded_1_4_stick/) | **complete; clean 1-4 pool** | Hold-aware 1-4 discovery: legacy_stick 61-value observation, held-jump reassertion, seeded from 0037. Generation 1 reached 173/384 finishes and 10 clean routes; 5 train / 5 holdout routes. |
+| [`../experiments/0039_ddqn_protected_1_1_1_2_1_3_1_4/`](../experiments/0039_ddqn_protected_1_1_1_2_1_3_1_4/) | **complete; 1-4 negative** | First 1-4 DDQN stage: 300k protected replay from selected 2.225M. Final 1-4 **0/1 canonical, 1/9 train, 1/3 holdout**; old levels mostly retained. No 1-4 checkpoint selected. |
+| [`../experiments/0044_neat_full_finisher_1_4/`](../experiments/0044_neat_full_finisher_1_4/) | **stopped; diagnostic** | First finisher-preserving replay attempt. Live finish metadata reached rebalancing, but reproduction had already removed most evaluated finishers; only 26 of 173 remained. Superseded by 0045. |
+| [`../experiments/0045_neat_full_finisher_1_4_retry/`](../experiments/0045_neat_full_finisher_1_4_retry/) | **stopped; diagnostic** | Retry with evaluated finishers merged back; reached 380/384 at generations 6/8 but still dropped the 50 finishers slower than 10 s (123 of 173 preserved). |
+| [`../experiments/0046_neat_full_population_1_4/`](../experiments/0046_neat_full_population_1_4/) | **complete; 1-4 seed** | Final preservation pass: 380/384 at gen 30, peak 383/384, best 4.9833 s, 75 clean routes; independent eval 382/384. |
+| [`../experiments/0047_neat_transfer_1_5_from_1_4/`](../experiments/0047_neat_transfer_1_5_from_1_4/) | **complete; diagnostic** | 1-4 → 1-5 transfer: zero-shot 6/384; seeded evolution finished 384/384, best 4.6833 s, 9 clean routes. Not pursued further. |
+| [`../experiments/0048_ddqn_protected_1_4_full_pool/`](../experiments/0048_ddqn_protected_1_4_full_pool/) | **stopped diagnostic** | New 1-4 DDQN on the 0046 pool but lean 188 (no hold signals): at 2.525M, **0/1 canonical, 1/11 train, 0/2 holdout**. |
+| [`../experiments/0053_ddqn_protected_1_4_lean_stick/`](../experiments/0053_ddqn_protected_1_4_lean_stick/) | **stopped; 100k probe** | lean_stick 191 (188 + on_ceiling/jump_held/stick_active), 188 weights expanded to 957 inputs. At 100k: 1-4 **2/11 train**, 0/1 canonical; 1-3 regressed. |
+| [`../experiments/0058_ddqn_fresh_1_1_lean_stick/`](../experiments/0058_ddqn_fresh_1_1_lean_stick/) | **complete; 1M selected** | Fresh 191 backbone, 1-1 only, 1M steps. Corrected eval: **1.5667 s canonical, 12/12 train, 8/8 holdout**. The first eval omitted held-jump semantics. |
+| [`../experiments/0059_ddqn_fresh_1_1_lean_stick_continue/`](../experiments/0059_ddqn_fresh_1_1_lean_stick_continue/) | **not needed** | The 1.85M continuation was unnecessary once 0058 passed the gate at 1M. |
+| [`../experiments/0060_ddqn_fresh_1_1_1_2_lean_stick/`](../experiments/0060_ddqn_fresh_1_1_1_2_lean_stick/) | **complete; 1.3M selected** | 1-2 transfer from 0058: 4×1-2 + 4×1-1, 191 inputs, 200k 1-1 buffer. Selected 1.3M: **1-2 3.0333 canonical, 31/31 train, 20/20 holdout; 1-1 1.5667, 12/12, 8/8**. Remaining weakness: 1-2 state-start speed. |
 | [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md) | **proposed** | Compact flat/embedding student options and the distillation plan for shipping a JSON policy. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |
@@ -52,7 +65,7 @@ development/research repo, not part of the shipped game.
 
 | Doc | What it covers |
 |---|---|
-| [`reference/observation-contracts.md`](reference/observation-contracts.md) | 58 / 754 / 794 / raw observation layouts, action cadence, reset forms. |
+| [`reference/observation-contracts.md`](reference/observation-contracts.md) | 58 / 61 (legacy_stick) / 754 / 794 / 188 / raw observation layouts, action cadence, reset forms. |
 | [`reference/reward-contract.md`](reference/reward-contract.md) | Shipped five-term training reward, `gold_ratio`, raw telemetry, force-start, terminal death. |
 | [`reference/glossary.md`](reference/glossary.md) | Teacher, student, specialist, lineage, prefix replay, start-jump, canonical, clean route, etc. |
 | [`reference/run-artifacts.md`](reference/run-artifacts.md) | What each `runs/` directory contains and how to read its summaries. |

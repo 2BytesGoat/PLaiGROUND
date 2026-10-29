@@ -21,6 +21,7 @@ from plaiground.envs.runtime import resolve_env_path
 from plaiground.envs.single_agent import RESET_STATE_KEYS
 from plaiground.experiments.runner import Run, resolve_path
 from plaiground.observations.lean_io import load_lean_preprocessor
+from plaiground.observations.lean_stick import LeanStickPreprocessor
 
 
 def finite_float(value: Any) -> float | None:
@@ -319,14 +320,19 @@ def load_model(algorithm: str, path: Path, device: str):
 
 
 def load_preprocessor(run: Run) -> Any | None:
-    if run.obs_encoding != "lean" and run.preprocessing != "lean":
+    if run.obs_encoding not in {"lean", "lean_stick"}:
         return None
     if not run.preprocessing_path.exists():
         raise FileNotFoundError(
             f"lean evaluation needs the saved pipeline at "
             f"{run.preprocessing_path}"
         )
-    return load_lean_preprocessor(run.preprocessing_path)
+    preprocessor = load_lean_preprocessor(run.preprocessing_path)
+    if run.obs_encoding == "lean_stick" and not isinstance(
+        preprocessor, LeanStickPreprocessor
+    ):
+        preprocessor = LeanStickPreprocessor(preprocessor)
+    return preprocessor
 
 
 def _safe_tag(tag: str) -> str:

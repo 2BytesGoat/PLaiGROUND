@@ -50,6 +50,7 @@ class SingleAgentGodotEnv(gym.Env):
         force_start_jump: bool,
         reward_profile: str,
         obs_encoding: str,
+        reassert_held_jump: bool | None = None,
         preprocessor: Any | None = None,
         training_no_cosmetics: bool = False,
         start_pool: list[dict] | None = None,
@@ -100,11 +101,18 @@ class SingleAgentGodotEnv(gym.Env):
         self._trajectory_actions: list[int] = []
         self._trajectory_id = 0
         self._last_obs: np.ndarray | None = None
+        if reassert_held_jump is None:
+            reassert_held_jump = obs_encoding in {
+                "legacy_stick",
+                "lean_stick",
+            }
         extra_env_kwargs = (
             {"training_no_cosmetics": "true"}
             if training_no_cosmetics
             else {}
         )
+        if reassert_held_jump:
+            extra_env_kwargs["reassert_held_jump"] = "true"
         self.game = GodotEnv(
             env_path=env_path,
             port=port,
@@ -121,6 +129,20 @@ class SingleAgentGodotEnv(gym.Env):
             obs_encoding=obs_encoding,
             **extra_env_kwargs,
         )
+        actual_reassert = self.game.static_info.get("reassert_held_jump")
+        if (
+            (bool(reassert_held_jump) and actual_reassert is None)
+            or (
+                actual_reassert is not None
+                and bool(actual_reassert) != bool(reassert_held_jump)
+            )
+        ):
+            self.game.close()
+            raise RuntimeError(
+                "action semantics mismatch: expected "
+                f"reassert_held_jump={bool(reassert_held_jump)}, game reported "
+                f"reassert_held_jump={actual_reassert!r}"
+            )
         raw_space = self.game.observation_space.spaces["obs"]
         if self.preprocessor is None:
             self.observation_space = raw_space

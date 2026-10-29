@@ -15,6 +15,8 @@ def setup_environment(
     show_window=None,
     port=None,
     n_parallel=1,
+    obs_encoding=None,
+    reassert_held_jump=False,
 ):
     repo_directory = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     config_path = os.path.join(repo_directory, "src", ".config")
@@ -72,6 +74,10 @@ def setup_environment(
     )
     if port is not None:
         env_kwargs["port"] = port
+    if obs_encoding is not None:
+        env_kwargs["obs_encoding"] = obs_encoding
+    if reassert_held_jump:
+        env_kwargs["reassert_held_jump"] = "true"
 
     env = StableBaselinesGodotEnv(**env_kwargs)
 

@@ -37,6 +37,22 @@ Limits: no velocity magnitude, no flow gradient, no dissolve timer/collision
 state, no powerup type/count, no bounce facing. Decisions are 15 Hz at
 `action_repeat=4`.
 
+### `legacy_stick` — 61 values (versioned, opt-in)
+
+The first 58 values are byte-for-byte the `legacy` vector above. Three values
+are appended for hold-sensitive mechanics such as 1-4's ceiling stick:
+
+| Index | Feature | Source |
+|---:|---|---|
+| 58 | On ceiling (0/1) | `Player.is_on_ceiling()` |
+| 59 | Jump held (0/1) | `Player.wants_to_jump` |
+| 60 | Stick active (0/1) | `spiderman` modifier attached |
+
+Spec version 6. The encoding is opt-in via `--obs_encoding=legacy_stick` and
+does not change existing 58-input models. New NEAT runs that need the hold
+contract should also pass `--reassert-held-jump`; the legacy edge-triggered
+adapter remains the default for existing agents.
+
 ### `multi_hot` — 754 values
 
 - 735 = 7×7 cells × 15 values, row-major.
@@ -107,9 +123,39 @@ Implemented in `AIObservationSpec` / `_get_obs_lean()` and
 `src/plaiground/observations/lean.py`. Card respawn and moving-platform phase, plus
 PPO/DQN driver wiring, are still pending.
 
+### `lean_stick` — 191 values (versioned, opt-in)
+
+The first **188** values are byte-for-byte the `lean` encoding above. Three
+values are appended for held-jump / ceiling-stick policies:
+
+| Index | Feature | Source |
+|---:|---|---|
+| 188 | On ceiling (0/1) | `Player.is_on_ceiling()` |
+| 189 | Jump held (0/1) | `Player.wants_to_jump` |
+| 190 | Stick active (0/1) | `spiderman` modifier attached |
+
+Spec version 7. The model-facing Python preprocessing one-hots the lean 188
+values to 954 columns and appends the three flags, producing **957** model
+inputs. This is the 191-input DDQN branch; `lean` 188 and `legacy_stick` 61
+remain frozen.
+
 ## Actions and cadence
 
 - Discrete binary action: `0 = idle`, `1 = jump`.
+- Legacy action semantics are edge-triggered: a repeated `1` keeps the current
+  press held; it does not re-press after a state-machine exit. Existing
+  models keep this behavior.
+- `--reassert-held-jump` opts a new run into held-state semantics: every
+  decision re-applies the input so a held jump survives transient state exits.
+  Use it with `legacy_stick` for ceiling/wall-stick discovery.
+- In Python, the flag now defaults to **true for `legacy_stick` and
+  `lean_stick`** and **false for legacy/lean 58/188**. Training, evaluation,
+  preview, and collection all read the same `Run.reassert_held_jump` property,
+  and the wrapper fails fast if Godot reports a different setting.
+- Exported held-stick models must carry the same action semantics. The Godot
+  model loader must set `reassert_held_jump` from the exported model metadata
+  (or the held-stick encoding), not just the observation size. See
+  [`known-issues.md`](../known-issues.md#held-stick-action-semantics-in-exported-models).
 - `action_repeat=4` by default: one decision per four physics frames, 15
   decisions/s at 60 Hz.
 - `max_decisions=150` = 600 physics ticks = 10 s of game time.

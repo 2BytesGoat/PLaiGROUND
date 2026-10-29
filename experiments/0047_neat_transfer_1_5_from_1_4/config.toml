@@ -1,0 +1,59 @@
+[experiment]
+id = "0047"
+name = "neat_transfer_1_5_from_1_4"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-5"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "Keep the 1-4 contract so the transferred population is input-compatible; 1-5 does not need the ceiling flags, but the extra inputs are harmless."
+
+[action]
+reassert_held_jump = true
+
+[source]
+population_checkpoint = "runs/neat_seeded_1_4_stick_full_population/neat-checkpoint-30"
+source_level = "1-4"
+source_generation = 30
+note = "Transfer the final finisher-preserving 1-4 population. Route states and archives are level-specific and are not merged into the 1-5 archive."
+
+[probe]
+output_dir = "runs/neat_transfer_1_5_from_1_4/zero_shot"
+archive_dir = "runs/neat_transfer_1_5_from_1_4/archive"
+record_paths = true
+note = "Evaluate all 384 transferred genomes on 1-5 without evolution. If finishers are zero, fall back to high-mutation 1-4 route seeds."
+
+[collection]
+record_paths = true
+generations = 20
+min_clean_routes = 25
+checkpoint_interval = 2
+rebalance_every = 2
+rebalance_final = true
+
+[output]
+dir = "runs/neat_transfer_1_5_from_1_4"
+archive_dir = "runs/neat_transfer_1_5_from_1_4/archive"
+
+[result]
+status = "complete"
+note = "Zero-shot transfer: 6/384 finishes, best 6.05 s, 2 routes, 0 clean. Seeded high-mutation run: generation 20 384/384 finishes, 0 deaths, best 4.6833 s, 9 clean routes. This is a diagnostic only; 1-5 was not pursued further because 1-4 DDQN is the priority."

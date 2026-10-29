@@ -2,23 +2,181 @@
 
 **Updated:** 2026-10-29
 **Branch:** `neat`
-**HEAD:** `707b745` — `lean inputs`
+**HEAD:** `f7853ef` — `getting closer to the best workflow`
 **Working tree:** the repository restructure (`src/plaiground/`, `scripts/`,
 `tools/`, `experiments/`, `Makefile`, package metadata), the clean-start plan
 and audits, the lean encoder, route filtering/start pools, reward/start
 changes, and the active PPO run docs are uncommitted.
 **Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `adb9278`
 `more state changes`; the raw/lean observation, force-start, reward,
-terminal-death, and clean-start world-state code is in HEAD; game docs are
-dirty with the new lean decision/status updates. World-state/powerup restore
-and `info_request` are implemented, but the clean-start pool/eval gates are
-not yet run.)
+terminal-death, and clean-start world-state code is in HEAD. The game working
+tree is dirty with the 2026-10-29 hold-aware contract: `legacy_stick` (61-value
+observation), encoding-aware `reassert_held_jump`, and their tests/docs.
+World-state/
+powerup restore and `info_request` are implemented; the 1-4 start pool is
+validated and the finisher-rich 0046 seed exists. The 188-input 0048 stage and
+the expanded 191 fine-tune (0053) were both stopped. The fresh level-by-level
+`lean_stick` 191 chain has passed 1-1 and 1-2: 0058 selected 1M at **1.5667 s**
+with full 12/12 and 8/8 coverage; 0060 added 1-2 at 3.0333 canonical, 31/31
+train and 20/20 holdout, while retaining 1-1. 1-5 is a completed diagnostic, not
+the active path.)
 
 > This page is the current state. Historical sections in `README.md` and older
 > experiment docs are not authoritative. When they disagree, this page and
 > [`index.md`](index.md) win.
 
 ## Current focus
+
+**Fresh lean_stick 191 chain (2026-10-29; 1-1 and 1-2 complete, 1-3 running).** The expanded
+191 fine-tune (0053) reproduced the earlier signal-arm failure pattern: 1-3
+regressed sharply and 1-4 improved only from 1/11 to 2/11. The chain was
+restarted at 1-1 with a fresh 191 backbone, no 188 weights, the 12/8 discovered
+1-1 clean starts, and 1M steps.
+
+Stage 1 selected the 1M model:
+
+```text
+runs/ddqn_fresh_1_1_lean_stick/dqn/dqn_final.zip
+1-1 canonical: 1.5667 s
+train pool:    12/12, median 3.2583 s
+holdout pool:  8/8, median 3.8000 s
+```
+
+The 1.85M continuation (0059) is not needed.
+
+Stage 2 (0060) used a 200k 1-1 buffer from the 1.5667 policy, then trained 4×1-2
++ 4×1-1 for 300k steps. The selected **1.3M** checkpoint is:
+
+```text
+runs/ddqn_fresh_1_1_1_2_lean_stick/dqn/checkpoints/ddqn_1300000_steps.zip
+1-2 canonical: 3.0333 s
+1-2 train:     31/31, median 4.4333 s, best 3.0333 s
+1-2 holdout:   20/20, median 3.2333 s, best 3.1000 s
+1-1 canonical: 1.5667 s
+1-1 train:     12/12, median 3.2833 s
+1-1 holdout:   8/8, median 3.8000 s
+```
+
+The 1-2 coverage gate passes. The remaining weakness is **1-2 state-start
+speed**: the training monitor state median is 4.32 s, so this is a policy
+optimization issue, not eval semantics. The 1.1M checkpoint covered only 15/31
+train and 12/20 holdout; 1.2M was 30/31 and 19/20; 1.3M is full. The
+post-training `dqn_final.zip` is worse on 1-2 holdout (4.0000 s median) than the
+1.3M checkpoint, so the checkpoint is selected.
+
+Stage 3 (0063) is running on the fresh 191 chain: 4×1-3 + 2×1-2 + 2×1-1 for
+300k additional steps from the 1.3M checkpoint. It uses the validated
+`runs/neat_frequent_rebalance_1_3/` 1-3 pool and holdout, a fresh 200k 1-1/1-2
+anchor from the 1.3M model, and protected replay (400k online + 200k anchor,
+25% anchor). The gates are full 1-3 coverage (45/45 train, 23/23 holdout),
+1-3 canonical near the 0031 3.25 s reference, and no loss of the fresh
+1-1/1-2 coverage or 1.5667/3.0333 canonical times. See
+[`../experiments/0063_ddqn_fresh_1_1_1_2_1_3_lean_stick/README.md`](../experiments/0063_ddqn_fresh_1_1_1_2_1_3_lean_stick/README.md).
+
+**Evaluation/action-semantics fix (2026-10-29).** The eval factory did not pass
+`reassert_held_jump` to Godot, while training did. That made the first 0058 1M
+eval report `2.7000 s` instead of `1.5667 s`. The Python side now defaults the
+flag from the observation encoding (`legacy_stick`/`lean_stick` → true), uses
+one `Run.reassert_held_jump` property across training/eval/preview, and fails
+fast if Godot reports a different value. A Godot export TODO is recorded in
+`known-issues.md`: exported held-stick models must set the same action
+semantics. Previous DDQN evals that used `reassert_held_jump` — notably the 0053
+1-4 probe — still need re-running before their results are treated as final.
+
+**1-4 DDQN lean_stick 191 probe (2026-10-29; 0053 stopped at 100k).** Experiment 0035
+transferred the protected 1-3 population (checkpoint 76) to 1-4. The zero-shot
+pass produced 1/384 finishes at 10.5333 s; the 20-generation evolution reached
+only 6/384 finishes with a 10.5333 s best and **0 clean routes**. A fresh
+high-mutation run (0036) then produced **0/384** finishes and no routes. The
+seeded run (0037) found **40/384 finishes and 5.9167 s** at generation 1, but its
+live population collapsed to 2/384 because it had no rebalancing, and it was
+stopped at generation 25. The 1-4 **STICK** ceiling-stick mechanic exposed a
+training-contract mismatch: the legacy observation had no `on_ceiling` state and
+the training adapter could not reassert a held jump after `JumpState.exit()`.
+The contract is now versioned: `legacy_stick` appends `on_ceiling`,
+`jump_held`, and `stick_active`; new runs opt into `reassert_held_jump` while
+existing 58-input agents keep the frozen legacy contract. Experiment 0038
+reached the clean target in **generation 1**: **173/384 finishes, 5.7667 s,
+10 clean routes**. Filtering produced **5 train / 5 holdout routes** and a
+**8-state train / 3-state holdout** pool; all non-canonical starts were reset-
+smoked.
+
+Experiment 0039 (protected DDQN, 4×1-4 + 2×1-3 + 1×1-2 + 1×1-1) completed at
+2.525M. It did **not** learn 1-4: final deterministic 1-4 was **0/1 canonical,
+1/9 train, 1/3 holdout** at 6.7833 s, identical to the 2.35M intermediate. No
+1-4 checkpoint was selected. Old-level retention was mostly intact: 1-1
+1/1/12/12/8/8 at 1.6167 s, 1-2 1/1/30/31/19/20 at 3.0333 s, 1-3
+1/1/45/45/23/23 at 3.2333 s.
+
+The 0038 **post-rebalance** checkpoint retained only **23 archived finishers**,
+not the 173 live finishers; the archive stores one genome per route signature.
+The first fix, 0044, classified live finishers from the just-finished generation
+but still lost most of them because `Population.run` reproduces before
+rebalancing: generation 1 reported 173 live finishers, but only 26 survived into
+the rebalanced population. 0044 was stopped as a diagnostic.
+
+0045 then merged evaluated finisher genomes back after reproduction. It reached
+**380/384** at generations 6 and 8, but its first rebalance still selected only
+**123** finishers: the **50 finishers slower than 10 s** were classified as
+exploration and dropped. It was stopped as a second diagnostic.
+
+Experiment **0046** used `is_finisher` as a separate property, preserved every
+evaluated finisher including >10 s routes, and rebalanced every 2 generations.
+It completed 30 generations with **380/384** finishes at generation 30, peak
+**383/384**, best **4.9833 s**, and **75 clean routes**. An independent
+checkpoint-30 evaluation finished **382/384**, best **4.9833 s**. The final
+rebalance selected **384 finishers**.
+
+Filtering the 75 clean routes produced **27 train / 6 holdout routes** and an
+**11-state train / 2-state holdout** 1-4 pool. The combined multilevel train pool
+has **99 starts** (11 1-4 + 88 old-level starts).
+
+Experiment **0048** used the 0046 pool but `lean` 188, which has none of the
+hold signals. At 2.525M it was **0/1 canonical, 1/11 train, 0/2 holdout**. It
+was stopped at ~2.626M as the 188/new-pool baseline.
+
+Experiment **0053** is the versioned **`lean_stick` 191** branch: `lean 188 +
+on_ceiling + jump_held + stick_active`. The Python pipeline maps 191 values to
+**957 model inputs**; the selected 2.225M 188 model was expanded by copying the
+first 954 weights and zero-initializing the three new columns. The anchor buffer
+was zero-padded to 957.
+
+The 100k probe was stopped for the decision point:
+
+```text
+1-4 canonical: 0/1 (death)
+1-4 train:     2/11 at 6.7833 s
+1-4 holdout:   0/2
+1-1:           1/1 1.6167; 12/12 3.3667; 8/8 3.9083
+1-2:           1/1 4.3333; 31/31 5.0833; 20/20 4.8500
+1-3:           1/1 6.5000; 41/45 6.6333; 19/23 6.3167
+```
+
+1-4 improved only slightly (1/11 -> 2/11) and 1-3 regressed, so the checkpoint
+is not promotable. Do not retrain the whole backbone yet; the next decision is
+whether to continue 191 with more old-level protection or freeze part of the
+188 backbone. The 1-5 transfer (0047) is a completed diagnostic (384/384, 9
+clean at 4.6833 s) and is not being pursued further right now. See the
+[level-transfer playbook](audit/2026-10-29-level-transfer-playbook.md) and
+the [reward/fitness audit](audit/2026-10-29-reward-fitness-audit.md).
+
+**Protected DDQN selected 2.225M (2026-10-29).** Experiment 0031 ran the
+controlled 300k continuation from 2.15M with the state/Q-gap anchor. The selected
+checkpoint is
+`runs/ddqn_protected_1_1_1_2_1_3/dqn/checkpoints/ddqn_2225000_steps.zip`:
+
+```text
+1-1: 1.6167 canonical; 12/12 train 3.2667; 8/8 holdout 3.7917
+1-2: 2.9667 canonical; 31/31 train 4.3500; 20/20 holdout 3.1333
+1-3: 3.2500 canonical; 45/45 train 5.2667; 23/23 holdout 5.3333
+```
+
+The anchor fixed the 1-2 canonical regression (`3.8667 -> 2.9667 s`) without
+losing 1-1 or 1-3 coverage. 1-3 is 0.15 s slower canonically than the old 2.30M
+control, so this is a retention win rather than a 1-3 speed win. The next speed
+attempt should reduce the anchor fraction to 10–15% or use a 1-3 high-gap anchor.
+See
+[`../experiments/0031_ddqn_protected_1_1_1_2_1_3/README.md`](../experiments/0031_ddqn_protected_1_1_1_2_1_3/README.md).
 
 **Lean DQN 0013 selected (2026-10-29).** Experiment 0013 continued the 1M DQN
 with the saved 200k replay buffer and selected the **1.85M** checkpoint:
@@ -351,11 +509,50 @@ evaluation of that checkpoint finished **384/384**, with 3 speed / 78 median /
 runner now repairs NEAT's occasional `pop_size - 1` shortfall after
 reproduction.
 
-**Next step — 1-4 seed (ready).** Use
-`runs/neat_frequent_rebalance_1_3/neat-checkpoint-76` as the 1-3 population for
-the 1-4 seed. It has 311 deployable genomes and the largest clean/route archive
-so far. Continue the same frequent-rebalance setting when evolving on 1-4; do
-not return to one-shot rebalancing.
+**1-4 NEAT attempts (2026-10-29; 0038 clean pool complete; 0039 DDQN negative; 0044/0045 diagnostics; 0046 seed validated; 0053 100k DDQN probe stopped).**
+Experiment 0035 used `runs/neat_frequent_rebalance_1_3/neat-checkpoint-76` as
+the 1-4 seed. Zero-shot: **1/384** finishes, 10.5333 s. After 20 generations:
+**6/384** finishes, best 10.5333 s, 4 routes, **0 clean routes**. Experiment 0036
+then ran the fresh high-mutation 384-genome search (0021 settings) for 30
+generations: **0/384** finishes, 0 routes, 0 clean routes, best genome timed out.
+Experiment 0037 seeded from the four rough 0035 finishers; generation 1 reached
+**40/384** finishes and **5.9167 s**, but without rebalancing the live population
+collapsed to 2/384 by generation 24, and the run was stopped at generation 25.
+
+The contract fix is now implemented and scoped:
+`legacy_stick` is a versioned 61-value extension that keeps the first 58 values
+byte-for-byte and appends `on_ceiling`, `jump_held`, and `stick_active`.
+`reassert_held_jump` is an opt-in training action mode; existing 58-input
+policies keep edge-triggered semantics and are not re-encoded. Experiment 0038
+seeded the top four 0037 routes into the 61-input population, enabled held-input
+reassertion, and reached the clean target in **generation 1**:
+
+```text
+0038: 173/384 finishes, 5.7667 s, 10 clean routes, 4 clusters
+      filter: 5 train / 5 holdout routes
+      pool:   8 train / 3 holdout states; all 11 starts reset-smoked
+```
+
+The fastest 1-4 route (5.7667 s) is holdout, not train. Filtering used Jaccard
+0.5, max 8 per cluster, 25% holdout. Experiment 0039 resumed the selected
+2.225M DDQN for 300k steps on 4×1-4 + 2×1-3 + 1×1-2 + 1×1-1 with protected
+replay and held-input action semantics. It completed at 2.525M with **no 1-4
+checkpoint selected**; 1-4 stayed at 0/1 canonical, 1/9 train, and 1/3 holdout.
+Experiment 0046 completed the 1-4 seed rebuild with finisher-preserving
+rebalancing: **382/384** evaluated, best **4.9833 s**, 75 clean routes.
+Experiments 0048 and 0053 are the DDQN follow-ups; 0048 (188) was negative and
+0053 (lean_stick 191) was stopped at the 100k decision point. See the
+[level-transfer playbook](audit/2026-10-29-level-transfer-playbook.md) and records:
+[0035](../experiments/0035_neat_transfer_1_4_from_1_3/README.md),
+[0036](../experiments/0036_neat_explore_1_4_high_mutation/README.md),
+[0037](../experiments/0037_neat_seeded_1_4_from_0035/README.md),
+[0038](../experiments/0038_neat_seeded_1_4_stick/README.md),
+[0039](../experiments/0039_ddqn_protected_1_1_1_2_1_3_1_4/README.md),
+[0044](../experiments/0044_neat_full_finisher_1_4/config.toml),
+[0045](../experiments/0045_neat_full_finisher_1_4_retry/config.toml),
+[0046](../experiments/0046_neat_full_population_1_4/config.toml),
+[0048](../experiments/0048_ddqn_protected_1_4_full_pool/config.toml),
+[0053](../experiments/0053_ddqn_protected_1_4_lean_stick/config.toml).
 
 **Two-tier discovery + deployment portfolio (design).** Do not force a Gaussian
 on the live population. Separate:
@@ -374,6 +571,24 @@ portfolio; that needs custom reproduction or a MAP-Elites-style archive. For the
 1-4 seed, prefer a portfolio (speedrunner, robust median, diverse route
 representative) over one average genome. See
 [`../experiments/0022_neat_explore_1_3_long/README.md`](../experiments/0022_neat_explore_1_3_long/README.md).
+
+**Protected replay for DDQN (2026-10-29, complete; selected 2.225M).** Added
+`src/plaiground/algorithms/reinforcement/replay.py` with a
+`RareReplayBuffer` and a two-part `ProtectedReplayBuffer`: a 400k-transition
+online FIFO plus a fixed, non-evicting 200k anchor from the 2.15M model, sampled
+25% anchor / 75% online. The anchor records **current-state buckets**
+(`level × current cell × facing × run-time bin × powerups`), return-to-go, and
+`Q_old(s,a)`. Positive relative gaps `max(0, return - Q_old)` above the 0.90
+quantile receive profit weight; all states retain rarity weight. The 200k
+anchor is complete: 3,675 state buckets, 141,249 positive-gap transitions,
+threshold 0.12649. The 300k continuation selected **2.225M** over the old 0025
+2.30M control: 1-2 canonical recovered from 3.8667 to 2.9667 s, 1-1 stayed
+1.6167/12/12/8/8, and 1-3 stayed fully covered at 3.2500/45/45/23/23. The final
+2.45M checkpoint was not selected; 2.30/2.325/2.35 failed the 1-1 holdout gate,
+and 2.375 lost one 1-2 train start. Evaluation configs 0032-0034 cover 1-3,
+1-1, and 1-2. The fixed anchor distribution is cached after the first minibatch;
+this restored throughput from about 160 fps to about 720 fps. Old start-bucketed
+and state-only buffers are superseded.
 
 **DDQN 1-3 training (2026-10-29, complete; selected 2.30M).** Experiment 0025
 resumed the selected 2.15M 1-1/1-2 Double-DQN checkpoint for 300k additional

@@ -1,0 +1,83 @@
+[experiment]
+id = "0030"
+name = "ddqn_anchor_1_1_1_2"
+status = "complete"
+completed = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+levels = ["1-1", "1-2"]
+n_envs = 8
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reward_profile = "default"
+base_port = 15200
+eval_port = 15300
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean"
+preprocessing = "lean"
+expected_raw_size = 188
+model_input_size = 954
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 1
+buffer_size = 200000
+learning_starts = 10000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.5
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.02
+
+[data]
+archive = "runs/neat_clean_450_1_2_transfer/archive/routes.json"
+finishers = "runs/neat_clean_450_1_2_transfer/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-2.json"
+min_time_to_exit = 0.5
+train_pool = "runs/dqn_multilevel_1_1_1_2/pool/train_start_pool.json"
+
+[result]
+transitions = 200000
+buffer = "runs/ddqn_anchor_1_1_1_2/replay_buffer_200k.pkl"
+state_buckets = 3675
+gap_quantile = 0.9
+gap_threshold = 0.12649
+positive_gaps = 141249
+priority_max = 0.48469
+note = "State-aware anchor with return-to-go and Q_old gap priorities."
+
+[run]
+preprocessing_from = "runs/ppo_clean_start_1_1_fresh/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_anchor_1_1_1_2"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

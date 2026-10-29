@@ -1,0 +1,107 @@
+# Experiment 0060: 1-2 stage on the fresh lean_stick 191 backbone.
+
+[experiment]
+id = "0060"
+name = "ddqn_fresh_1_1_1_2_lean_stick"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+# 4 current 1-2 + 4 1-1 rehearsal.
+levels = ["1-2", "1-2", "1-2", "1-2", "1-1", "1-1", "1-1", "1-1"]
+n_envs = 8
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reassert_held_jump = true
+reward_profile = "default"
+base_port = 19500
+eval_port = 19600
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean_stick"
+preprocessing = "lean_stick"
+expected_raw_size = 191
+model_input_size = 957
+note = "Continued fresh 191 backbone. The 1-1 replay buffer is filled from the selected 0058 1M model."
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+# Additional steps after the 1M 1-1 checkpoint.
+timesteps = 300000
+n_steps = 3
+learning_rate = 0.0001
+buffer_size = 200000
+online_buffer_size = 200000
+learning_starts = 10000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.5
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.02
+
+[data]
+archive = "runs/neat_clean_450_1_2_transfer/filtered_j07_cap1/train_clean_routes.json"
+finishers = "runs/neat_clean_450_1_2_transfer/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-2.json"
+min_time_to_exit = 0.5
+# 43 tagged starts: 12 1-1 + 31 1-2.
+train_pool = "runs/dqn_multilevel_1_1_1_2/pool/train_start_pool.json"
+holdout_pool = "runs/neat_clean_450_1_2_transfer/pool_j07_cap1/holdout_start_pool.json"
+
+[checkpointing]
+save_freq = 25000
+
+[result]
+status = "complete; 1.3M checkpoint selected"
+selected_checkpoint = "runs/ddqn_fresh_1_1_1_2_lean_stick/dqn/checkpoints/ddqn_1300000_steps.zip"
+canonical_1_2 = 3.0333
+train_1_2 = "31/31, median 4.4333, best 3.0333"
+holdout_1_2 = "20/20, median 3.2333, best 3.1000"
+canonical_1_1 = 1.5667
+train_1_1 = "12/12, median 3.2833"
+holdout_1_1 = "8/8, median 3.8000"
+note = "The 1.3M checkpoint is better than the post-training dqn_final.zip on 1-2 holdout (3.2333 vs 4.0000). Earlier checkpoints: 1.1M had 15/31 and 12/20; 1.2M had 30/31 and 19/20. 1-2 state starts are the remaining speed bottleneck; the 1-1 policy is retained."
+
+[evaluation]
+canonical = true
+train_pool = false
+holdout_pool = false
+
+[run]
+resume_from = "runs/ddqn_fresh_1_1_lean_stick/dqn/dqn_final.zip"
+replay_buffer_from = "runs/ddqn_fresh_1_1_lean_stick/dqn/replay_buffer_200k.pkl"
+reset_timesteps = false
+preprocessing_from = "runs/ddqn_fresh_1_1_lean_stick/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_fresh_1_1_1_2_lean_stick"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

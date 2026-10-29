@@ -30,6 +30,12 @@ from plaiground.observations.lean_io import (
     load_lean_preprocessor,
     prepare_lean_preprocessor,
 )
+from plaiground.observations.lean_stick import LeanStickPreprocessor
+from plaiground.algorithms.reinforcement.replay import (
+    ProtectedReplayBuffer,
+    RareReplayBuffer,
+    pad_anchor_observations,
+)
 
 
 def make_model(run: Run, vec_env, model_cls=DQN):
@@ -72,7 +78,52 @@ def make_model(run: Run, vec_env, model_cls=DQN):
     )
 
 
+def _copy_expanded_policy(old_model, new_model) -> None:
+    """Copy an old policy into a wider input layer, zero-filling new columns."""
+    old_state = old_model.policy.state_dict()
+    new_state = new_model.policy.state_dict()
+    for name, old_tensor in old_state.items():
+        target = new_state.get(name)
+        if target is None:
+            continue
+        if tuple(target.shape) == tuple(old_tensor.shape):
+            target.copy_(old_tensor)
+            continue
+        if (
+            target.ndim == 2
+            and old_tensor.ndim == 2
+            and target.shape[0] == old_tensor.shape[0]
+            and target.shape[1] > old_tensor.shape[1]
+        ):
+            target.zero_()
+            target[:, : old_tensor.shape[1]].copy_(old_tensor)
+            continue
+        raise ValueError(
+            f"cannot expand policy tensor {name!r}: "
+            f"{tuple(old_tensor.shape)} -> {tuple(target.shape)}"
+        )
+    new_model.policy.load_state_dict(new_state)
+
+
 def load_resumed_model(run: Run, vec_env, model_cls=DQN):
+    checkpoint = model_cls.load(str(run.resume), env=None, device=run.device)
+    old_shape = getattr(checkpoint.observation_space, "shape", None)
+    new_shape = getattr(vec_env.observation_space, "shape", None)
+    if old_shape != new_shape:
+        model = make_model(run, vec_env, model_cls)
+        _copy_expanded_policy(checkpoint, model)
+        reset_timesteps = bool(
+            run.config.get("run", {}).get("reset_timesteps", True)
+        )
+        model.num_timesteps = 0 if reset_timesteps else checkpoint.num_timesteps
+        print(
+            f"expanded {model_cls.__name__} input "
+            f"{old_shape} -> {new_shape}; copied old weights, "
+            f"zero-initialized {int(new_shape[0]) - int(old_shape[0])} new inputs "
+            f"(timesteps={model.num_timesteps})",
+            flush=True,
+        )
+        return model
     model = model_cls.load(str(run.resume), env=vec_env, device=run.device)
     print(
         f"resumed {model_cls.__name__} checkpoint: {run.resume} "
@@ -91,11 +142,15 @@ def run_training(
     run.ensure_dirs()
     env_path = resolve_env_path()
     start_pool = train_start_pool(run, required=True)
-    if run.preprocessing == "lean":
+    if run.preprocessing in {"lean", "lean_stick"}:
         if run.preprocessing_path.exists():
             preprocessor = load_lean_preprocessor(run.preprocessing_path)
+            if run.preprocessing == "lean_stick" and not isinstance(
+                preprocessor, LeanStickPreprocessor
+            ):
+                preprocessor = LeanStickPreprocessor(preprocessor)
             print(
-                f"preprocessing: loaded lean pipeline "
+                f"preprocessing: loaded {run.preprocessing} pipeline "
                 f"{run.preprocessing_path} ({preprocessor.output_size} inputs)",
                 flush=True,
             )
@@ -128,6 +183,11 @@ def run_training(
             model = make_model(run, vec_env, model_cls)
 
         buffer_value = run.config.get("run", {}).get("replay_buffer_from")
+        anchor_value = run.config.get("run", {}).get("anchor_buffer_from")
+        if buffer_value and anchor_value:
+            raise ValueError(
+                "use either replay_buffer_from or anchor_buffer_from, not both"
+            )
         if buffer_value:
             buffer_path = resolve_path(buffer_value)
             with buffer_path.open("rb") as handle:
@@ -135,6 +195,41 @@ def run_training(
             print(
                 f"loaded replay buffer: {buffer_path} "
                 f"({model.replay_buffer.size() * model.replay_buffer.n_envs} transitions)",
+                flush=True,
+            )
+        if anchor_value:
+            anchor_path = resolve_path(anchor_value)
+            with anchor_path.open("rb") as handle:
+                anchor = pickle.load(handle)
+            if not isinstance(anchor, RareReplayBuffer):
+                raise ValueError(
+                    f"anchor buffer must be a RareReplayBuffer: {anchor_path}"
+                )
+            anchor = pad_anchor_observations(
+                anchor, vec_env.observation_space
+            )
+            model.replay_buffer = ProtectedReplayBuffer(
+                online_size=int(
+                    run.algorithm.get(
+                        "online_buffer_size",
+                        run.algorithm.get("buffer_size", 400_000),
+                    )
+                ),
+                observation_space=vec_env.observation_space,
+                action_space=vec_env.action_space,
+                device=model.device,
+                n_envs=run.total_envs,
+                anchor_buffer=anchor,
+                anchor_fraction=float(
+                    run.algorithm.get("anchor_fraction", 0.25)
+                ),
+            )
+            stats = model.replay_buffer.stats()
+            print(
+                f"installed protected replay: anchor {anchor_path} "
+                f"({anchor.size() * anchor.n_envs} transitions), "
+                f"online_size={model.replay_buffer.online.buffer_size * model.replay_buffer.online.n_envs}, "
+                f"anchor_fraction={stats['anchor_fraction']}",
                 flush=True,
             )
 

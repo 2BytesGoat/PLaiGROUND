@@ -8,6 +8,10 @@ Encodings
 ---------
 legacy
     The shipped 58-value vector. Do not use for new multi-hot runs.
+legacy_stick
+    The legacy 58 values plus three hold/ceiling flags: on_ceiling,
+    jump_held, and stick_active. 61 values; version 6. Use for new
+    hold-sensitive searches without changing the frozen legacy contract.
 multi_hot
     A 7x7 semantic grid flattened row-major, followed by player/route
     features. Each cell has 15 values:
@@ -26,6 +30,9 @@ lean
     Godot-emitted compact state: 49 primary tile IDs, 49 rotations, 49 signed
     phases, 9 player values, 24 collisions, and 8 flow deltas. 188 values.
     Python one-hots the categoricals for the model.
+lean_stick
+    The 188 lean values plus on_ceiling, jump_held, and stick_active. 191
+    values; version 7. The first 188 values remain byte-for-byte lean.
 """
 
 from __future__ import annotations
@@ -33,25 +40,40 @@ from __future__ import annotations
 import numpy as np
 
 ENCODING_LEGACY = "legacy"
+# Versioned extension of the shipped 58-value vector. The first 58 values are
+# byte-for-byte legacy; the appended flags expose held-jump / ceiling-stick
+# state for levels such as 1-4. The 58-value contract stays frozen.
+ENCODING_LEGACY_STICK = "legacy_stick"
 ENCODING_MULTI_HOT = "multi_hot"
 ENCODING_MULTI_HOT_SENSOR = "multi_hot_sensor"
 ENCODING_RAW = "raw"
 ENCODING_LEAN = "lean"
+# Lean 188 plus on_ceiling, jump_held, and stick_active. The first 188 values
+# stay byte-for-byte identical to lean.
+ENCODING_LEAN_STICK = "lean_stick"
 SUPPORTED_ENCODINGS = (
     ENCODING_LEGACY,
+    ENCODING_LEGACY_STICK,
     ENCODING_MULTI_HOT,
     ENCODING_MULTI_HOT_SENSOR,
     ENCODING_RAW,
     ENCODING_LEAN,
+    ENCODING_LEAN_STICK,
 )
 
 SPEC_VERSION_LEGACY = 1
+SPEC_VERSION_LEGACY_STICK = 6
 SPEC_VERSION_MULTI_HOT = 2
 SPEC_VERSION_MULTI_HOT_SENSOR = 3
 SPEC_VERSION_RAW = 4
 SPEC_VERSION_LEAN = 5
+SPEC_VERSION_LEAN_STICK = 7
 
 LEGACY_OBSERVATION_SIZE = 58
+LEGACY_ON_CEILING_OFFSET = LEGACY_OBSERVATION_SIZE
+LEGACY_JUMP_HELD_OFFSET = LEGACY_ON_CEILING_OFFSET + 1
+LEGACY_STICK_ACTIVE_OFFSET = LEGACY_JUMP_HELD_OFFSET + 1
+LEGACY_STICK_OBSERVATION_SIZE = LEGACY_STICK_ACTIVE_OFFSET + 1
 
 GRID_RADIUS = 3
 GRID_SIZE = 7
@@ -164,6 +186,10 @@ LEAN_PLAYER_OFFSET = LEAN_PHASE_OFFSET + LEAN_PHASE_COUNT
 LEAN_COLLISION_OFFSET = LEAN_PLAYER_OFFSET + LEAN_PLAYER_FLOATS
 LEAN_FLOW_OFFSET = LEAN_COLLISION_OFFSET + RAW_COLLISION_COUNT
 LEAN_OBSERVATION_SIZE = LEAN_FLOW_OFFSET + RAW_FLOW_COUNT
+LEAN_STICK_ON_CEILING_OFFSET = LEAN_OBSERVATION_SIZE
+LEAN_STICK_JUMP_HELD_OFFSET = LEAN_STICK_ON_CEILING_OFFSET + 1
+LEAN_STICK_STICK_ACTIVE_OFFSET = LEAN_STICK_JUMP_HELD_OFFSET + 1
+LEAN_STICK_OBSERVATION_SIZE = LEAN_STICK_STICK_ACTIVE_OFFSET + 1
 LEAN_PLAYER_FIELDS = (
     "velocity_x",
     "velocity_y",
@@ -221,6 +247,8 @@ PLAYER_STATE_NAMES = (
 def expected_obs_size(encoding: str) -> int:
     if encoding == ENCODING_LEGACY:
         return LEGACY_OBSERVATION_SIZE
+    if encoding == ENCODING_LEGACY_STICK:
+        return LEGACY_STICK_OBSERVATION_SIZE
     if encoding == ENCODING_MULTI_HOT:
         return MULTI_HOT_OBSERVATION_SIZE
     if encoding == ENCODING_MULTI_HOT_SENSOR:
@@ -229,12 +257,16 @@ def expected_obs_size(encoding: str) -> int:
         return RAW_OBSERVATION_SIZE
     if encoding == ENCODING_LEAN:
         return LEAN_OBSERVATION_SIZE
+    if encoding == ENCODING_LEAN_STICK:
+        return LEAN_STICK_OBSERVATION_SIZE
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
 def spec_version(encoding: str) -> int:
     if encoding == ENCODING_LEGACY:
         return SPEC_VERSION_LEGACY
+    if encoding == ENCODING_LEGACY_STICK:
+        return SPEC_VERSION_LEGACY_STICK
     if encoding == ENCODING_MULTI_HOT:
         return SPEC_VERSION_MULTI_HOT
     if encoding == ENCODING_MULTI_HOT_SENSOR:
@@ -243,6 +275,8 @@ def spec_version(encoding: str) -> int:
         return SPEC_VERSION_RAW
     if encoding == ENCODING_LEAN:
         return SPEC_VERSION_LEAN
+    if encoding == ENCODING_LEAN_STICK:
+        return SPEC_VERSION_LEAN_STICK
     raise ValueError(f"Unknown observation encoding: {encoding!r}")
 
 
@@ -330,6 +364,17 @@ def decode_multi_hot(obs: np.ndarray) -> dict:
     }
 
 
+def decode_legacy_stick(obs: np.ndarray) -> dict:
+    """Decode the versioned 61-value legacy+hold observation."""
+    array = validate_obs(obs, ENCODING_LEGACY_STICK)
+    return {
+        "legacy": array[:LEGACY_OBSERVATION_SIZE],
+        "on_ceiling": float(array[LEGACY_ON_CEILING_OFFSET]),
+        "jump_held": float(array[LEGACY_JUMP_HELD_OFFSET]),
+        "stick_active": float(array[LEGACY_STICK_ACTIVE_OFFSET]),
+    }
+
+
 def decode_lean(obs: np.ndarray) -> dict:
     """Decode one lean 188-value observation for diagnostics/tests."""
     array = validate_obs(obs, ENCODING_LEAN)
@@ -353,6 +398,18 @@ def decode_lean(obs: np.ndarray) -> dict:
             RAW_DIRECTIONS, RAW_COLLISION_FLOATS
         ),
         "flow": array[LEAN_FLOW_OFFSET:LEAN_OBSERVATION_SIZE],
+    }
+
+
+def decode_lean_stick(obs: np.ndarray) -> dict:
+    """Decode the versioned 191-value lean+hold observation."""
+    array = validate_obs(obs, ENCODING_LEAN_STICK)
+    base = decode_lean(array[:LEAN_OBSERVATION_SIZE])
+    return {
+        **base,
+        "on_ceiling": float(array[LEAN_STICK_ON_CEILING_OFFSET]),
+        "jump_held": float(array[LEAN_STICK_JUMP_HELD_OFFSET]),
+        "stick_active": float(array[LEAN_STICK_STICK_ACTIVE_OFFSET]),
     }
 
 

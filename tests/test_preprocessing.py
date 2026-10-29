@@ -6,7 +6,11 @@ import pickle
 import unittest
 import numpy as np
 
-from plaiground.observations import build_lean_pipeline, spec as obs_spec
+from plaiground.observations import (
+    build_lean_pipeline,
+    build_lean_stick_pipeline,
+    spec as obs_spec,
+)
 
 
 def _lean() -> np.ndarray:
@@ -107,6 +111,23 @@ class LeanPreprocessingTest(unittest.TestCase):
         pre = build_lean_pipeline(tile_names=["E", "W"])
         with self.assertRaises(ValueError):
             pre.fit_transform(np.zeros((1, obs_spec.RAW_OBSERVATION_SIZE)))
+
+    def test_lean_stick_appends_exact_flags_after_lean_features(self) -> None:
+        lean = _lean()
+        stick = np.concatenate([lean, np.array([1.0, 0.0, 1.0], dtype=np.float32)])
+        pre = build_lean_stick_pipeline(tile_names=["E", "W", "Y", "B", "O", "J"])
+        out = pre.fit_transform(stick[None, :])
+        base = build_lean_pipeline(tile_names=["E", "W", "Y", "B", "O", "J"])
+        base_out = base.fit_transform(lean[None, :])
+        self.assertEqual(out.shape, (1, base_out.shape[1] + 3))
+        np.testing.assert_allclose(out[0, : base_out.shape[1]], base_out[0])
+        np.testing.assert_allclose(out[0, -3:], [1.0, 0.0, 1.0])
+        self.assertEqual(pre.output_size, base_out.shape[1] + 3)
+
+    def test_lean_stick_rejects_lean_width(self) -> None:
+        pre = build_lean_stick_pipeline(tile_names=["E", "W"])
+        with self.assertRaises(ValueError):
+            pre.fit_transform(_lean())
 
 
 if __name__ == "__main__":

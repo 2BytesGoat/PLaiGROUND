@@ -60,6 +60,8 @@ class RewardEvaluator:
         record_paths: bool = False,
         archive_dir: Path | None = None,
         initial_generation: int = 0,
+        obs_encoding: str = "legacy",
+        reassert_held_jump: bool = False,
     ) -> None:
         self.level = level
         self.max_steps = max_steps
@@ -70,6 +72,8 @@ class RewardEvaluator:
         self.show_window = show_window
         self.port = port
         self.parallel = max(1, int(parallel))
+        self.obs_encoding = obs_encoding
+        self.reassert_held_jump = bool(reassert_held_jump)
         self.record_paths = bool(record_paths)
         self.archive_dir = archive_dir or (output_dir / "archive")
         self.env = None
@@ -84,6 +88,11 @@ class RewardEvaluator:
         self.best_clean_genome = None
         self.route_archive: dict[str, dict] = {}
         self.clean_checkpoint_signatures: set[str] = set()
+        # Live-generation finishers, used by portfolio rebalancing.  The route
+        # archive deduplicates signatures and cannot represent every finisher
+        # in the population that just ran.
+        self.last_finish_times: dict[int, float] = {}
+        self.last_finisher_genomes: dict[int, object] = {}
         self.last_improvement_generation = 0
         self.history: list[dict] = []
         self.genome_history: list[dict] = []
@@ -224,6 +233,8 @@ class RewardEvaluator:
             speedup=self.speedup,
             show_window=self.show_window,
             port=self.port,
+            obs_encoding=self.obs_encoding,
+            reassert_held_jump=self.reassert_held_jump,
         )
         self.population = population
         self.startup_s = time.perf_counter() - started
@@ -386,6 +397,16 @@ class RewardEvaluator:
         )
         finish_count = int(finished.sum())
         death_count = int((done_once & ~finished).sum())
+        self.last_finish_times = {
+            int(genome_id): float(finish_times[i])
+            for i, (genome_id, _genome) in enumerate(genomes)
+            if finished[i] and np.isfinite(finish_times[i])
+        }
+        self.last_finisher_genomes = {
+            int(genome_id): copy.deepcopy(genome)
+            for i, (genome_id, genome) in enumerate(genomes)
+            if finished[i]
+        }
 
         print(
             f"generation {self.generation}: "
@@ -699,7 +720,7 @@ class RewardEvaluator:
                     "time": self.best_time,
                     "generation": self.generation,
                     "level": self.level,
-                    "observation": "legacy_58",
+                    "observation": self.obs_encoding,
                     "action_repeat": self.action_repeat,
                 },
                 indent=2,
@@ -721,7 +742,7 @@ class RewardEvaluator:
                     "time": self.best_clean_time,
                     "generation": self.generation,
                     "level": self.level,
-                    "observation": "legacy_58",
+                    "observation": self.obs_encoding,
                     "action_repeat": self.action_repeat,
                 },
                 indent=2,
@@ -977,6 +998,8 @@ def train(args: argparse.Namespace) -> None:
         record_paths=args.record_paths,
         archive_dir=args.archive_dir,
         initial_generation=initial_generation,
+        obs_encoding=args.obs_encoding,
+        reassert_held_jump=args.reassert_held_jump,
     )
 
     last_rebalance_generation: int | None = None
@@ -989,6 +1012,8 @@ def train(args: argparse.Namespace) -> None:
             list(evaluator.route_archive.values()),
             evaluator.archive_dir,
             seed=args.seed,
+            live_finish_times=evaluator.last_finish_times,
+            finisher_genomes=evaluator.last_finisher_genomes,
         )
         result["output_checkpoint"] = str(
             output_dir / f"neat-checkpoint-{generation}"
@@ -1004,6 +1029,7 @@ def train(args: argparse.Namespace) -> None:
         last_rebalance_generation = generation
         print(
             f"rebalanced population after generation {generation}: "
+            f"live_finishers={result['source_stats'].get('live_finishers', 0)} | "
             f"{result['portfolio_stats']['selected_by_bin']} | "
             f"deployment={result['portfolio_stats']['deployment']}",
             flush=True,
@@ -1095,6 +1121,8 @@ def evaluate(args: argparse.Namespace) -> None:
         record_paths=args.record_paths,
         archive_dir=args.archive_dir,
         initial_generation=int(getattr(population, "generation", 0)),
+        obs_encoding=args.obs_encoding,
+        reassert_held_jump=args.reassert_held_jump,
     )
     start = time.time()
     try:
@@ -1124,6 +1152,8 @@ def play(args: argparse.Namespace) -> None:
         speedup=args.speedup,
         show_window=args.show,
         port=args.port,
+        obs_encoding=args.obs_encoding,
+        reassert_held_jump=args.reassert_held_jump,
     )
     try:
         obs = env.reset()
@@ -1153,6 +1183,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--level", default=DEFAULT_LEVEL)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument(
+        "--obs-encoding",
+        default="legacy",
+        help="Game observation encoding. Use legacy_stick (61 values) for "
+        "hold-sensitive levels such as 1-4.",
+    )
+    parser.add_argument(
+        "--reassert-held-jump",
+        action="store_true",
+        help="Re-apply a held jump every decision instead of edge-triggering it. "
+        "Enable for new hold-sensitive runs; existing 58-input policies keep "
+        "the legacy edge semantics.",
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--generations", type=int, default=30)
     parser.add_argument("--population", type=int, default=32)
