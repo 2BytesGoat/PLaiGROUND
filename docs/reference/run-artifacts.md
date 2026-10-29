@@ -4,6 +4,9 @@
 each active run directory is for and where to look first. Add a row when a run
 becomes important; do not commit the run itself.
 
+> For a live summary of one run, use `make run RUN=<name>`; this page is the
+> curated narrative inventory, not the live status.
+
 Sizes are approximate from 2026-10-30.
 
 ## Active / reference runs

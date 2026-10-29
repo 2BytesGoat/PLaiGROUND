@@ -6,8 +6,8 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 ## Stats
 
-- 86 source modules, 26 test modules, 66 classes, 309 top-level functions, 350 methods
-- 123 experiment manifests, 43 docs
+- 88 source modules, 28 test modules, 68 classes, 347 top-level functions, 361 methods
+- 123 experiment manifests, 44 docs
 - Local run artifacts are indexed in `.cache/repo-index.json`; use `make context q="..."` or [`reference/run-artifacts.md`](reference/run-artifacts.md).
 
 ## Source by area
@@ -16,8 +16,8 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 |---|---:|
 | `scripts/` | 8 |
 | `src/` | 57 |
-| `tests/` | 26 |
-| `tools/` | 21 |
+| `tests/` | 28 |
+| `tools/` | 23 |
 
 ### scripts/
 
@@ -98,6 +98,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 | Module | Classes | Top-level functions | Lines | Summary |
 |---|---|---|---:|---|
+| `tests/test_brief.py` | `BriefTest` | `load_tool` | 140 | Tests for the compact repo/run brief. |
 | `tests/test_build_expert_buffer.py` | `ExpertBufferMaskTest` | — | 72 | Tests for route-level filtering in the expert replay builder. |
 | `tests/test_build_start_expert_buffer.py` | `StartExpertBufferTest` | — | 72 | Tests for extracting start-aligned expert transitions. |
 | `tests/test_collect_dqn_buffer.py` | `CollectDqnBufferStatsTest` | — | 68 | Tests for the DQN anchor collector summary. |
@@ -121,6 +122,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tests/test_route_filtering.py` | `CleanRouteFilterTest` | `make_route` | 171 | Tests for post-processing clean NEAT route filters. |
 | `tests/test_route_starts.py` | `RouteStartTest` | `_analysis`, `_checkpoint` | 107 | Tests for the DQN route-start extraction gates. |
 | `tests/test_runner.py` | `RunResolverTest` | — | 152 | Tests for the config-driven run resolver. |
+| `tests/test_search.py` | `BoundedSearchTest` | `load_tool` | 100 | Tests for the bounded search tool. |
 | `tests/test_spawn_validation.py` | `SpawnValidationTest` | — | 33 | Tests for the runtime start-pool spawn guard. |
 | `tests/test_start_pool.py` | `StartPoolTest` | `route` | 123 | Tests for clean-start pool construction from filtered routes. |
 | `tests/test_trainers.py` | `TinyEnv`, `TrainerConstructionTest` | — | 137 | Small model-construction tests for the PPO/DQN adapters. |
@@ -130,6 +132,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | Module | Classes | Top-level functions | Lines | Summary |
 |---|---|---|---:|---|
 | `tools/benchmark_neat.py` | — | `_hardware`, `_tree_rss`, `_history_stats` +4 | 350 | Benchmark NEAT throughput across parallelism and speedup settings. |
+| `tools/brief.py` | — | `_run`, `git_state`, `running_jobs` +23 | 659 | Print a compact, read-only brief of the repo or one run. |
 | `tools/build_expert_buffer.py` | — | `_success_mask`, `main` | 235 | Build a fixed 1-4 expert replay buffer from successful NEAT routes. |
 | `tools/build_start_expert_buffer.py` | — | `_match_starts`, `main` | 224 | Build a small expert buffer for the starts in a clean-start pool. |
 | `tools/build_start_pool.py` | — | `parse_args`, `main` | 75 | Build train/holdout clean-start pools and their eval union. |
@@ -146,6 +149,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tools/rebalance_neat.py` | — | `parse_args`, `main` | 59 | Rebalance a NEAT checkpoint around a portfolio of route/time representatives. |
 | `tools/record_provenance.py` | — | `parse_args`, `main` | 40 | Write code/game provenance metadata for an experiment run. |
 | `tools/repo_index.py` | — | `rel`, `read_text`, `first_sentence` +22 | 822 | Build a deterministic search index for the PLaiGROUND repository. |
+| `tools/search.py` | — | `_matches_glob`, `iter_files`, `_compile` +7 | 387 | Bounded text search for agents and humans. |
 | `tools/seed_neat_checkpoint.py` | — | `parse_args`, `max_innovation`, `main` | 126 | Seed a NEAT population from one or more archived finisher genomes. |
 | `tools/start_strata.py` | — | `standable_cells`, `percentile`, `main` | 231 | Stratify standable starts by shortest-path distance to the exit. |
 | `tools/summarize_episodes.py` | — | `percentile`, `as_bool`, `start_kind` +4 | 155 | Report training episodes by start source, with a canonical-only mode. |
@@ -283,7 +287,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 | Doc | Title | Headings | Status | Summary |
 |---|---|---:|---|---|
-| `AGENTS.md` | `AGENTS.md — PLaiGROUND` | 7 | — | Guidance for coding agents and future maintainers working in this repository. |
+| `AGENTS.md` | `AGENTS.md — PLaiGROUND` | 8 | — | Guidance for coding agents and future maintainers working in this repository. |
 | `README.md` | `PLaiGROUND` | 17 | — | PLaiGROUND (name may change) is the external Python/RL lab for Dragon Jump. It connects to the game… |
 | `docs/architecture.md` | `Architecture` | 10 | — | How PLaiGROUND connects to Dragon Jump, and how the training/evaluation stack is layered. For game-… |
 | `docs/audit/2026-10-28-clean-route-filter-and-lean-ppo.md` | `Clean-route filter, start pools, and le…` | 7 | `active; PPO training in progr…` | Date: 2026-10-28 Level: 1-1 Game repo: ../dragon-jump-remaster, branch prepare-for-expo, HEAD adb92… |
@@ -315,7 +319,8 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/experiments/ppo-distillation.md` | `PPO policy distillation` | 14 | `deployed/reference — the sele…` | game baseline; the older 128-hidden/experiment results are historical. Last updated: 2026-10-27 |
 | `docs/experiments/ppo-pilot.md` | `PPO pilot` | 12 | `active/reference — the 794 se…` | Historical note (2026-10-28). The legacy PPO flags in this document (--init-student, --eval-stochas… |
 | `docs/index.md` | `PLaiGROUND — docs index` | 8 | — | PLaiGROUND is the external Python/RL lab for Dragon Jump. It connects to the game's training mode o… |
-| `docs/known-issues.md` | `Known issues` | 49 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
+| `docs/known-issues.md` | `Known issues` | 50 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
+| `docs/now.md` | `Now` | 7 | — | Updated: 2026-10-30 Repo: branch neat @ 2e68348; run make brief for live status. Game: ../dragon-ju… |
 | `docs/reference/ddqn-1-5-chain.md` | `1-5 DDQN chain — selected two-model can…` | 7 | `selected for evaluation, not…` | Built: 2026-10-29 |
 | `docs/reference/deployed-model-58.md` | `Deployed AI model: 58-value student` | 15 | `deployed and frozen for the d…` | Built: 2026-10-26 Runtime artifact: godot/src/resources/ai/studentobs58256.json |
 | `docs/reference/glossary.md` | `Glossary` | 5 | — | Terms used across PLaiGROUND docs and run artifacts. When a term also exists in the game vault, the… |
@@ -324,7 +329,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/reference/reward-contract.md` | `Reward contract` | 12 | `shipped 2026-10-28` | Owner: godot/src/player/controllers/playeraitrainingcontroller.gd Raw telemetry: getdynamicinfo() a… |
 | `docs/reference/run-artifacts.md` | `Run artifacts` | 6 | — | runs/ is generated and gitignored. This page is the committed index of what each active run directo… |
 | `docs/runbooks/new-level.md` | `New-level pipeline` | 12 | `active` | Last updated: 2026-10-30 |
-| `docs/status.md` | `Status` | 6 | — | Updated: 2026-10-30 Branch: neat HEAD: f7853ef — getting closer to the best workflow Working tree:… |
+| `docs/status.md` | `Status` | 6 | — | Current state: now.md. This file is the chronological log; sections below the header may be histori… |
 | `src/README.md` | `Source layout` | 4 | — | src/ is the installable Python package root. Entry points live outside it. |
 
 ## Query this map

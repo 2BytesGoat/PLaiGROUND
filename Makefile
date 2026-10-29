@@ -20,7 +20,12 @@ LEVEL_OUTPUT_ROOT ?=
 LEVEL_MIN_ROUTES ?= 25
 LEVEL_OPTIONAL_ARGS = $(if $(LEVEL_OUTPUT_ROOT),--output-root $(LEVEL_OUTPUT_ROOT)) $(if $(LEVEL_TAG),--tag $(LEVEL_TAG))
 
-.PHONY: install test compile smoke-ppo index index-check context level-data level-status watch help
+SEARCH_DIR ?= .
+SEARCH_GLOB ?=
+SEARCH_ALL ?=
+RUN ?=
+
+.PHONY: install test compile smoke-ppo index index-check context brief run search level-data level-status watch help
 
 install:
 	$(UV) pip install --python $(PYTHON) -e . --no-deps
@@ -43,6 +48,17 @@ index-check:
 context:
 	@if [ -z "$(q)" ]; then echo 'usage: make context q="<task>"'; exit 2; fi
 	$(PYTHON) tools/context.py "$(q)"
+
+brief:
+	$(PYTHON) tools/brief.py
+
+run:
+	@if [ -z "$(RUN)" ]; then echo 'usage: make run RUN=<name>'; exit 2; fi
+	$(PYTHON) tools/brief.py --run "$(RUN)"
+
+search:
+	@if [ -z "$(q)" ]; then echo 'usage: make search q="<text>" [SEARCH_DIR=.] [SEARCH_GLOB=*.py]'; exit 2; fi
+	$(PYTHON) tools/search.py "$(q)" --dir "$(SEARCH_DIR)" $(if $(SEARCH_GLOB),--glob "$(SEARCH_GLOB)",) $(if $(SEARCH_ALL),--all,)
 
 level-status:
 	$(PYTHON) tools/level.py status $(LEVEL)
@@ -70,6 +86,9 @@ help:
 	@echo "make index        regenerate docs/code-map.md and .cache/repo-index.json"
 	@echo "make index-check  fail if docs/code-map.md is stale"
 	@echo 'make context q="..."  search code, experiments, docs, and runs'
+	@echo "make brief        repo state: branch, game, running jobs, ledger, recent runs"
+	@echo "make run RUN=...  one run's checkpoints, evals, and log tail"
+	@echo 'make search q="..." [SEARCH_DIR=.] [SEARCH_GLOB=*.py]  bounded search'
 	@echo "make level-status LEVEL=1-9  show level experiments and data summaries"
 	@echo "make level-data LEVEL=1-9 LEVEL_RUN=runs/... LEVEL_GEN=46  build tiers/pools"
 	@echo "make watch        play the 1.555M 1-1..1-4 chain in the game window"

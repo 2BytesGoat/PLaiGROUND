@@ -4,19 +4,26 @@ Guidance for coding agents and future maintainers working in this repository.
 
 ## Start here
 
-Read these in order before changing anything:
+Read [`docs/now.md`](docs/now.md) first. It is the one-page current state:
+active level, selected experts, next actions, and active traps. `make brief`
+prints the live version (branch, game commit, running jobs, recent runs).
 
-1. [`docs/status.md`](docs/status.md) — current branch, active experiment, verified results, next work.
-2. [`docs/runbooks/new-level.md`](docs/runbooks/new-level.md) — the full
+Then use `make context q="<task>"` to find the code, experiment, doc, or run the
+task touches. Read [`docs/status.md`](docs/status.md) only when you need
+history; it is a chronological log and older sections may be stale. The other
+reference docs are on demand:
+
+1. [`docs/runbooks/new-level.md`](docs/runbooks/new-level.md) — the full
    NEAT → expert → evaluate → repair procedure for a new level.
-3. [`docs/reference/level-ledger.md`](docs/reference/level-ledger.md) — the
+2. [`docs/reference/level-ledger.md`](docs/reference/level-ledger.md) — the
    selected expert and gate for each level.
-4. [`docs/index.md`](docs/index.md) — task-based front door and repo map.
-5. [`docs/architecture.md`](docs/architecture.md) — how the game ↔ Python stack fits together.
-6. [`docs/known-issues.md`](docs/known-issues.md) — current traps, cross-repo drift, unfinished work.
+3. [`docs/index.md`](docs/index.md) — the full task catalogue and repo map.
+4. [`docs/architecture.md`](docs/architecture.md) — how the game ↔ Python stack fits together.
+5. [`docs/known-issues.md`](docs/known-issues.md) — current traps, cross-repo drift, unfinished work.
 
 The `README.md` and older experiment docs contain historical sections. When they
-disagree with `docs/status.md` or `docs/index.md`, the docs win.
+disagree with `docs/now.md`, `docs/reference/level-ledger.md`, or
+`docs/index.md`, the docs win.
 
 ## Search and context
 
@@ -26,13 +33,29 @@ disagree with `docs/status.md` or `docs/index.md`, the docs win.
 - `make index` regenerates `docs/code-map.md` (committed) and
   `.cache/repo-index.json` (local, gitignored). `make index-check` fails if the
   map is stale; run it after adding or renaming modules, experiments, or docs.
-- Use `docs/code-map.md` for **where**, `docs/status.md` for **now**,
-  `docs/index.md` for task routing, and `docs/known-issues.md` for traps. Grep
-  only to confirm or fill a gap; prefer `grep -n` with a path/glob and `read`
-  with `offset`/`limit` over `cat` or a repo-wide grep.
+- Use `docs/now.md` for **now**, `docs/code-map.md` for **where**,
+  `docs/index.md` for task routing, and `docs/known-issues.md` for traps.
 - `runs/` is local and gitignored. The index records top-level run metadata and
   eval summaries; use `docs/reference/run-artifacts.md` for the curated
   inventory.
+
+## Token discipline
+
+- `make brief` and `make run RUN=<name>` answer status/stats questions without
+  ad-hoc Python over `runs/`. Expand only if the brief is not enough.
+- `make search q="<text>"` is the default text search. It skips `runs/`,
+  `data/`, `.cache/`, binaries, and caps output. Do not use `grep -R` or `find`
+  over the repo root; never grep `runs/` or the game's `godot/data/`.
+- Read with `offset`/`limit` for files over ~300 lines. Read headings first,
+  then the section you need. Do not `cat` or `sed` a whole large file.
+- Do not print raw arrays, weights, pickles, or full JSON. Summarize in the
+  command (`| head -40`, `jq`, or a short Python projection). A result truncated
+  at ~50 KB has already cost tokens and may have lost the useful head.
+- Do not re-read a file that has not changed. Trust the diff.
+- For exploration spanning more than ~5 files, use the `explore` subagent and
+  ask for a short summary with file:line references.
+- End a working session with a 5-line handoff (objective, state, next, files,
+  traps) instead of keeping one session alive across unrelated tasks.
 
 ## What this repo is
 
@@ -67,6 +90,8 @@ The game source lives in a sibling repository:
 | `tools/level.py` | `data` (route tiers/pools) and `status` (per-level view). |
 | `tools/evaluate.py` | Shared PPO/DQN evaluation entry point. |
 | `tools/extract_route_starts.py` | NEAT checkpoint -> clean-start DQN pool. |
+| `tools/brief.py` | Compact repo/run status behind `make brief` and `make run`. |
+| `tools/search.py` | Bounded text search behind `make search`; skips generated dirs and binaries. |
 | `tests/` | Unit tests for the socket/info protocol, preprocessing, models, runner, evaluation, and route/pool handling. |
 | `runs/` | Generated run artifacts. **Gitignored; do not delete or rewrite without asking.** |
 | `archive/2026-10-27-cleanup/` | Historical scripts, runs, and docs moved out of the active tree. |
@@ -74,6 +99,8 @@ The game source lives in a sibling repository:
 | `docs/runbooks/` | Living procedures such as the new-level pipeline. |
 | `docs/reference/` | Contracts, glossary, deployed model, level ledger, run-artifact inventory. |
 | `docs/audit/` | Dated investigations and reviews. |
+| `docs/now.md` | One-page current state; the first read for agents. |
+| `opencode.jsonc` | Project OpenCode caps: tool-output size and explore-subagent steps. |
 | `environments/` | Game binaries / macOS source shim. Gitignored contents except `.gitkeep`. |
 | `notebooks/` | Tutorial notebooks, not the active training path. |
 | `data/` | Small cheatsheet data used by tutorials. |
@@ -89,13 +116,14 @@ The game source lives in a sibling repository:
   `experiments/<id>_<name>/config.toml`; the CLI only overrides run-level
   values (`--timesteps`, `--resume`, `--output-dir`, `--show`, `--device`,
   `--verbose`). Train and evaluate are separate: `tools/evaluate.py`.
-- `runs/` is generated and gitignored. Record conclusions in `docs/status.md`,
-  `docs/known-issues.md`, or a dated `docs/audit/` note instead of committing
-  run artifacts.
+- `runs/` is generated and gitignored. Record conclusions in `docs/now.md`
+  (current state), `docs/status.md` (history), `docs/known-issues.md`, or a
+  dated `docs/audit/` note instead of committing run artifacts.
 - `archive/` is history. Do not edit archived scripts or runs; restore by
   copying a file back to its original path if needed.
-- Keep `docs/status.md` current when an experiment starts, stops, or produces a
-  result. Add a dated audit for a deep investigation instead of bloating status.
+- Keep `docs/now.md` current when an experiment starts, stops, or produces a
+  result. Append the detailed narrative to `docs/status.md`. Add a dated audit
+  for a deep investigation instead of bloating either page.
 - **NEAT transfer rule:** when adding a new level N, seed route collection from
   the evolved population of the previous level (N-1), not from the original
   1-1 population. Evaluate/evolve on N with `--record-paths` until the clean

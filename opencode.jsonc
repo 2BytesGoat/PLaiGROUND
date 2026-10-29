@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Tool results are re-sent on every later turn. The default 50 KB cap is
+  // large enough for one grep or JSON dump to dominate a session; 24 KB is
+  // still about 6k tokens and is plenty for a section read.
+  "tool_output": {
+    "max_lines": 800,
+    "max_bytes": 24576,
+  },
+  "agents": {
+    // Exploration should return a short summary, not run for hundreds of steps.
+    "explore": {
+      "steps": 12,
+    },
+  },
+}

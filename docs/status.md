@@ -1,12 +1,15 @@
 # Status
 
+> **Current state:** [`now.md`](now.md). This file is the chronological log;
+> sections below the header may be historical and can contradict the current
+> ledger. Use `now.md` and
+> [`reference/level-ledger.md`](reference/level-ledger.md) for decisions.
+
 **Updated:** 2026-10-30
 **Branch:** `neat`
-**HEAD:** `f7853ef` — `getting closer to the best workflow`
-**Working tree:** the repository restructure (`src/plaiground/`, `scripts/`,
-`tools/`, `experiments/`, `Makefile`, package metadata), the clean-start plan
-and audits, the lean encoder, route filtering/start pools, reward/start
-changes, and the active PPO run docs are uncommitted.
+**HEAD:** `2e68348` — `enough for the day`
+**Working tree:** clean at `2e68348` before the 2026-10-30 docs/tooling pass;
+that pass adds `docs/now.md`, the `brief`/`search` tools, and doc pointers.
 **Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `50dcc66`
 `add tool to generate steam auth`, clean tree; the training/observation code is
 unchanged since the `fe7821d` commit recorded by the active manifests. The raw/

@@ -7,12 +7,16 @@ development/research repo, not part of the shipped game.
 
 > **AI agents:** read [`../AGENTS.md`](../AGENTS.md) first; it contains the
 > working rules and environment footguns.
+>
+> **Current state:** [`now.md`](now.md) (one page). `make brief` prints the live
+> branch, running jobs, and recent runs. This page is the full catalogue.
 
 ## Start here
 
 | If you want to… | Read |
 |---|---|
-| See the current branch, active experiment, and verified results | [`status.md`](status.md) |
+| See the current branch, active experiment, and verified results | [`now.md`](now.md) → `make brief` |
+| Read the chronological history | [`status.md`](status.md) |
 | Watch the selected 1-1 → 1-4 policy in the game | `make watch` (see [`../README.md`](../README.md) § Watch the selected policy) |
 | Find code, symbols, experiments, or runs | `make context q="<task>"` → [`code-map.md`](code-map.md) |
 | Find a file, script, or run artifact | this page → [`../src/README.md`](../src/README.md) → [`reference/run-artifacts.md`](reference/run-artifacts.md) |
@@ -44,9 +48,12 @@ development/research repo, not part of the shipped game.
 
 `make context q="<task>"` is the first read-only call for a task. It ranks
 matching Python symbols, experiments, docs, and local runs, then suggests the
-next files to read. `make index` regenerates [`code-map.md`](code-map.md) and
-the local `.cache/repo-index.json`; `make index-check` fails if the committed
-map is stale.
+next files to read. `make search q="<text>"` is the bounded text search; it
+skips `runs/`, `data/`, `.cache/`, binaries, and caps output. `make brief` and
+`make run RUN=<name>` summarize the repo and one run without ad-hoc Python.
+`make index` regenerates [`code-map.md`](code-map.md) and the local
+`.cache/repo-index.json`; `make index-check` fails if the committed map is
+stale.
 
 ## Experiments
 

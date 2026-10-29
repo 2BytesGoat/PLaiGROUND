@@ -9,6 +9,29 @@ A/B plan see
 For the clean-start state/world-state decisions see
 [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
 
+## Active traps
+
+Start here. These are the current traps; resolved items below are kept for
+history. Read the matching section below before touching the area.
+
+- **Mid-route cell resets zero the run clock** (critical, DQN route-spawns) —
+  start time and reward must come from the source checkpoint, not a fresh reset.
+- **One-shot NEAT rebalancing does not preserve the live distribution** (high)
+  — rebalance every few generations and verify the live population.
+- **DQN extraction is all-or-nothing** (high) — a failed extraction writes no
+  pool; check the output before launching training.
+- **Spawn validation is incomplete** (high) — check `spawn_ok` and the start
+  pool before training.
+- **Clean-start validation and promotion gates are incomplete** (high).
+- **The holdout is checkpoint-level, not route-level** (high) — cluster routes
+  first, then split train/holdout.
+- **Changing `action_repeat` breaks the old-level anchor** (high).
+- **Single-model 1-5 training damages 1-4 and late 1-2** (high).
+- **Checkpoint selection is manual and finals regress** (high).
+- **Canonical eval is one deterministic trace** (medium) — it is not a
+  robustness measure.
+- **NEAT fitness does not rank fast finishers first** (medium).
+
 ## NEAT checkpoint and portfolio traps
 
 ### 1. Interval checkpointing can miss the final generation — resolved
