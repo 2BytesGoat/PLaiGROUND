@@ -68,6 +68,30 @@ class RunResolverTest(unittest.TestCase):
             )
             self.assertEqual(run.timesteps, 1234)
 
+    def test_level_and_speedup_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = load_run(
+                ROOT / "experiments/0079_show_chain_1_1_to_1_4_0073",
+                output_dir=Path(tmp) / "run",
+                level="1-4",
+                speedup=2.0,
+            )
+            self.assertEqual(run.level, "1-4")
+            self.assertEqual(run.levels, ["1-4"])
+            self.assertEqual(run.speedup, 2.0)
+
+    def test_watch_manifest_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = load_run(
+                ROOT / "experiments/0079_show_chain_1_1_to_1_4_0073",
+                output_dir=Path(tmp) / "run",
+            )
+            self.assertEqual(
+                run.levels, ["1-1", "1-2", "1-3", "1-4"]
+            )
+            self.assertEqual(run.speedup, 1.0)
+            self.assertTrue(run.reassert_held_jump)
+
     def test_resolve_path_is_repository_relative(self) -> None:
         resolved = resolve_path("experiments/0001_ppo_clean_start_1_1")
         self.assertTrue(resolved.is_absolute())

@@ -14,6 +14,22 @@ Read these in order before changing anything:
 The `README.md` and older experiment docs contain historical sections. When they
 disagree with `docs/status.md` or `docs/index.md`, the docs win.
 
+## Search and context
+
+- Start a task with `make context q="<task>"` (or
+  `.venv/bin/python tools/context.py "<task>"`). It ranks code symbols,
+  experiments, docs, and local run artifacts before a repo-wide grep.
+- `make index` regenerates `docs/code-map.md` (committed) and
+  `.cache/repo-index.json` (local, gitignored). `make index-check` fails if the
+  map is stale; run it after adding or renaming modules, experiments, or docs.
+- Use `docs/code-map.md` for **where**, `docs/status.md` for **now**,
+  `docs/index.md` for task routing, and `docs/known-issues.md` for traps. Grep
+  only to confirm or fill a gap; prefer `grep -n` with a path/glob and `read`
+  with `offset`/`limit` over `cat` or a repo-wide grep.
+- `runs/` is local and gitignored. The index records top-level run metadata and
+  eval summaries; use `docs/reference/run-artifacts.md` for the curated
+  inventory.
+
 ## What this repo is
 
 PLaiGROUND is the external Python/RL lab for **Dragon Jump**. It talks to the
@@ -33,7 +49,7 @@ The game source lives in a sibling repository:
 |---|---|
 | `src/plaiground/` | Importable package (see [`src/README.md`](src/README.md)). |
 | `scripts/` | Thin training and evaluation entry points. |
-| `tools/` | Data, provenance, and reporting utilities. |
+| `tools/` | Data, provenance, reporting, and repo search utilities. |
 | `experiments/` | Committed experiment manifests and result notes. |
 | `src/plaiground/envs/` | Game socket client, Gymnasium wrappers, shared env factory, SB3 VecEnv. |
 | `src/plaiground/models/extractors/` | Frozen legacy feature extractors. |

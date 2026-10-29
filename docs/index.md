@@ -13,6 +13,8 @@ development/research repo, not part of the shipped game.
 | If you want to… | Read |
 |---|---|
 | See the current branch, active experiment, and verified results | [`status.md`](status.md) |
+| Watch the selected 1-1 → 1-4 policy in the game | `make watch` (see [`../README.md`](../README.md) § Watch the selected policy) |
+| Find code, symbols, experiments, or runs | `make context q="<task>"` → [`code-map.md`](code-map.md) |
 | Find a file, script, or run artifact | this page → [`../src/README.md`](../src/README.md) → [`reference/run-artifacts.md`](reference/run-artifacts.md) |
 | Understand the game ↔ Python architecture | [`architecture.md`](architecture.md) |
 | Know what is broken, stale, or confusing | [`known-issues.md`](known-issues.md) |
@@ -31,6 +33,14 @@ development/research repo, not part of the shipped game.
 | Set up the environment | [`../README.md`](../README.md) § Setup |
 | Read a term you don't recognize | [`reference/glossary.md`](reference/glossary.md) |
 | Check the deployed game model | [`reference/deployed-model-58.md`](reference/deployed-model-58.md) |
+
+## Search and context
+
+`make context q="<task>"` is the first read-only call for a task. It ranks
+matching Python symbols, experiments, docs, and local runs, then suggests the
+next files to read. `make index` regenerates [`code-map.md`](code-map.md) and
+the local `.cache/repo-index.json`; `make index-check` fails if the committed
+map is stale.
 
 ## Experiments
 
@@ -56,6 +66,7 @@ development/research repo, not part of the shipped game.
 | [`../experiments/0058_ddqn_fresh_1_1_lean_stick/`](../experiments/0058_ddqn_fresh_1_1_lean_stick/) | **complete; 1M selected** | Fresh 191 backbone, 1-1 only, 1M steps. Corrected eval: **1.5667 s canonical, 12/12 train, 8/8 holdout**. The first eval omitted held-jump semantics. |
 | [`../experiments/0059_ddqn_fresh_1_1_lean_stick_continue/`](../experiments/0059_ddqn_fresh_1_1_lean_stick_continue/) | **not needed** | The 1.85M continuation was unnecessary once 0058 passed the gate at 1M. |
 | [`../experiments/0060_ddqn_fresh_1_1_1_2_lean_stick/`](../experiments/0060_ddqn_fresh_1_1_1_2_lean_stick/) | **complete; 1.3M selected** | 1-2 transfer from 0058: 4×1-2 + 4×1-1, 191 inputs, 200k 1-1 buffer. Selected 1.3M: **1-2 3.0333 canonical, 31/31 train, 20/20 holdout; 1-1 1.5667, 12/12, 8/8**. Remaining weakness: 1-2 state-start speed. |
+| [`../experiments/0073_ddqn_expert_replay_1_4_lean_stick/`](../experiments/0073_ddqn_expert_replay_1_4_lean_stick/) | **complete; 1.555M selected** | One-step DDQN with 21 successful 1-4 NEAT routes (2,231 transitions) in an expert buffer plus an action-margin loss. 1.555M: **1-4 1/1 canonical @ 4.4667 s, 11/11 train, 2/2 holdout**; old levels full coverage (1-2 3.1500, 1-3 3.2667). 1-4 fixed; 1-2/1-3 canonical slightly slower than 1.53M. |
 | [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md) | **proposed** | Compact flat/embedding student options and the distillation plan for shipping a JSON policy. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |
@@ -77,7 +88,7 @@ development/research repo, not part of the shipped game.
 |---|---|
 | `src/plaiground/` | Importable training/data/evaluation package. See [`../src/README.md`](../src/README.md). |
 | `scripts/` | Thin baseline, genetic, supervised, reinforcement, and evaluation entry points. |
-| `tools/` | Route filtering, start-pool building, observation checks, and reporting utilities. |
+| `tools/` | Route filtering, start-pool building, observation checks, reporting, and repo search utilities. |
 | `experiments/` | Committed experiment manifests and result notes. |
 | `experiments/0000_neat_clean_450/` | NEAT clean-route collection manifest. |
 | `experiments/0001_ppo_clean_start_1_1/` | Lean PPO clean-start manifest. |
@@ -91,6 +102,7 @@ development/research repo, not part of the shipped game.
 | `tests/` | Protocol, preprocessing, model, runner, evaluation, route, pool, and experiment tests. |
 | `runs/` | Generated artifacts (gitignored): checkpoints, eval summaries, logs, per-run userdata. |
 | `archive/2026-10-27-cleanup/` | Historical scripts/runs/docs. Start at its `README.md`. |
+| `docs/code-map.md` | Generated Python/experiment/doc map; do not hand-edit. |
 | `docs/` | Architecture, contracts, audits, and historical experiment deep-dives. |
 | `notebooks/` | Tutorial notebooks; not the active training path. |
 | `data/cheatsheet/` | Small tutorial dataset. |
@@ -113,6 +125,8 @@ development/research repo, not part of the shipped game.
 - **Dates** are ISO (`2026-10-28`) and refer to local dev time.
 - **Run artifacts are not committed.** Link them by path and record the result in
   docs; `runs/` is gitignored.
+- **The code map is generated.** `docs/code-map.md` comes from `make index`;
+  update the source docs/experiments instead of hand-editing the map.
 - **Cross-repo claims** should name the game branch/commit when they depend on
   game code. The game vault is the source of truth for game behavior.
 - **Investigation notes** go in `docs/audit/`; living issues go in

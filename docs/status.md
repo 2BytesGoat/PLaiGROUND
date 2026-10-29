@@ -7,19 +7,19 @@
 `tools/`, `experiments/`, `Makefile`, package metadata), the clean-start plan
 and audits, the lean encoder, route filtering/start pools, reward/start
 changes, and the active PPO run docs are uncommitted.
-**Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `adb9278`
-`more state changes`; the raw/lean observation, force-start, reward,
-terminal-death, and clean-start world-state code is in HEAD. The game working
-tree is dirty with the 2026-10-29 hold-aware contract: `legacy_stick` (61-value
-observation), encoding-aware `reassert_held_jump`, and their tests/docs.
-World-state/
-powerup restore and `info_request` are implemented; the 1-4 start pool is
-validated and the finisher-rich 0046 seed exists. The 188-input 0048 stage and
+**Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `fe7821d`
+`more fixes on ai and controls`, clean tree; the raw/lean observation,
+force-start, reward, terminal-death, clean-start world-state, and the 2026-10-29
+hold-aware contract (`legacy_stick` 61-value observation plus encoding-aware
+`reassert_held_jump`) are committed. World-state/powerup restore and
+`info_request` are implemented; the 1-4 start pool is validated and the
+finisher-rich 0046 seed exists. The 188-input 0048 stage and
 the expanded 191 fine-tune (0053) were both stopped. The fresh level-by-level
-`lean_stick` 191 chain has passed 1-1 and 1-2: 0058 selected 1M at **1.5667 s**
-with full 12/12 and 8/8 coverage; 0060 added 1-2 at 3.0333 canonical, 31/31
-train and 20/20 holdout, while retaining 1-1. 1-5 is a completed diagnostic, not
-the active path.)
+`lean_stick` 191 chain has passed 1-1, 1-2, 1-3, and 1-4: 0058 selected 1M at
+**1.5667 s** with full 12/12 and 8/8 coverage; 0060 added 1-2 at 3.0333
+canonical; 0063 added 1-3 at 3.1667 canonical; 0067 retained 1-1 at 1.53M;
+0073 selected **1.555M** for 1-4 with 1/1 canonical, 11/11 train, and 2/2
+holdout. 1-5 is a completed diagnostic, not the active path.)
 
 > This page is the current state. Historical sections in `README.md` and older
 > experiment docs are not authoritative. When they disagree, this page and
@@ -27,7 +27,7 @@ the active path.)
 
 ## Current focus
 
-**Fresh lean_stick 191 chain (2026-10-29; 1-1 and 1-2 complete, 1-3 running).** The expanded
+**Fresh lean_stick 191 chain (2026-10-29; 1-1, 1-2, 1-3, and 1-4 complete).** The expanded
 191 fine-tune (0053) reproduced the earlier signal-arm failure pattern: 1-3
 regressed sharply and 1-4 improved only from 1/11 to 2/11. The chain was
 restarted at 1-1 with a fresh 191 backbone, no 188 weights, the 12/8 discovered
@@ -64,14 +64,104 @@ train and 12/20 holdout; 1.2M was 30/31 and 19/20; 1.3M is full. The
 post-training `dqn_final.zip` is worse on 1-2 holdout (4.0000 s median) than the
 1.3M checkpoint, so the checkpoint is selected.
 
-Stage 3 (0063) is running on the fresh 191 chain: 4×1-3 + 2×1-2 + 2×1-1 for
-300k additional steps from the 1.3M checkpoint. It uses the validated
+Stage 3 (0063) completed on the fresh 191 chain: 4×1-3 + 2×1-2 + 2×1-1 for
+300k additional steps from the 1.3M checkpoint, using the validated
 `runs/neat_frequent_rebalance_1_3/` 1-3 pool and holdout, a fresh 200k 1-1/1-2
 anchor from the 1.3M model, and protected replay (400k online + 200k anchor,
-25% anchor). The gates are full 1-3 coverage (45/45 train, 23/23 holdout),
-1-3 canonical near the 0031 3.25 s reference, and no loss of the fresh
-1-1/1-2 coverage or 1.5667/3.0333 canonical times. See
+25% anchor). The **1.5M checkpoint** is selected:
+
+```text
+runs/ddqn_fresh_1_1_1_2_1_3_lean_stick/dqn/checkpoints/ddqn_1500000_steps.zip
+1-3 canonical: 3.1667 s; train 45/45, median 5.4667; holdout 23/23, 5.5500
+1-2 canonical: 3.0167 s; train 31/31, median 4.4167; holdout 20/20, 3.3083
+1-1 canonical: 1.5667 s; train 12/12, median 3.4167; holdout 8/8, 4.2667
+```
+
+1.5M has the best old-level retention of the candidate set: 1-2 is essentially
+the 0060 baseline, 1-3 is fully covered and beats the 0031 canonical reference,
+and 1-1 canonical/train coverage are retained. The only remaining regression is
+the 1-1 holdout median, driven mainly by one `[25,10]` start (4.6500 s vs
+3.5000 s at 1.3M); the other seven starts are within 0.10 s. The 1.6M
+checkpoint has the best 1-3 canonical (3.0667 s) but regresses 1-2 canonical to
+3.8333 s and holdout to 4.0667 s; 1.575M keeps 1-1 holdout at 3.8000 s but
+regresses 1-2 holdout to 3.9500 s. A short 1-1 retention continuation (0067)
+is the follow-up for the single remaining holdout gap. See
 [`../experiments/0063_ddqn_fresh_1_1_1_2_1_3_lean_stick/README.md`](../experiments/0063_ddqn_fresh_1_1_1_2_1_3_lean_stick/README.md).
+
+**1-1 retention (0067, 2026-10-29; 1.53M selected).** A 50k 1-1-heavy
+continuation (4×1-1 + 2×1-2 + 2×1-3) from the 0063 1.5M checkpoint recovered
+the 1-1 holdout in 20k steps. The selected 1.53M checkpoint:
+
+```text
+1-1 canonical: 1.5667; train 12/12, 3.2583; holdout 8/8, 3.8000
+1-2 canonical: 3.0167; train 31/31, 4.3500; holdout 20/20, 3.8833
+1-3 canonical: 3.1667; train 45/45, 5.4667; holdout 23/23, 5.5333
+```
+
+The failing 1-1 holdout start `[25,10]` recovered from 4.6500 to 3.4333 s and
+the 1-1 train median improved from 3.4167 to 3.2583 s. The 1-3 pool is
+unchanged and 1-2 canonical/train are retained. One 1-2 holdout start
+`[24,17]` regressed from 3.1500 to 4.7333 s, moving the 1-2 holdout median to
+3.8833 s. The 1.55M checkpoint over-trained (1-2 canonical 3.8333, holdout
+4.1583) and is not selected. The 1-1 retention / old-level checkpoint is
+`runs/ddqn_fresh_1_1_retention_lean_stick/dqn/checkpoints/ddqn_1530000_steps.zip`;
+the 1-4 chain checkpoint is **1.555M** (0073). See
+[`../experiments/0067_ddqn_fresh_1_1_retention_lean_stick/README.md`](../experiments/0067_ddqn_fresh_1_1_retention_lean_stick/README.md).
+
+**Next-level retention schedule (agreed 2026-10-29).** For level N, use
+`4×N + 1×(N-1) + 3 retention envs` (for 1-4: `4×1-4 + 1×1-3 + 2×1-2 + 1×1-1`)
+with the old-level anchor and per-checkpoint gates on every retained level.
+
+**1-4 probe (0068, 2026-10-29; stopped at 100k, negative).** A 100k probe from
+the selected 1.53M checkpoint used `4×1-4 + 1×1-3 + 2×1-2 + 1×1-1`, the
+validated 0046 1-4 pool (11 train / 2 holdout), and a fresh 200k 1-1/1-2/1-3
+anchor from 1.53M. It is negative at every checkpoint: **1-4 canonical 0/1**
+(timeout; 1.63M also death), **1-4 train 1/11** at 6.7833 s, and **1-4 holdout
+0/2**. The monitor showed 0/310 canonical finishes and 13/136 state finishes.
+Old levels kept full coverage but drifted modestly at 1.63M: 1-1 1.5667
+(12/12, 8/8), 1-2 3.1833 (31/31, 20/20), 1-3 3.2333 (45/45, 23/23). This reproduces the
+0053 failure: the 1-3 policy does not transfer to 1-4. Do not continue the DDQN
+transfer without a different method (NEAT-route distillation, 1-4-specific
+curriculum/pool, or a separate 1-4 head). See
+[`../experiments/0068_ddqn_fresh_1_4_lean_stick/README.md`](../experiments/0068_ddqn_fresh_1_4_lean_stick/README.md).
+
+**1-4 expert replay (0073, 2026-10-29; complete, selected 1.555M).** The 27
+clustered clean NEAT train routes were replayed in the 191 `lean_stick`
+environment; 21 reproduce exactly, including the canonical route at 5.7667 s.
+The 6 non-reproducing routes are filtered, leaving 2,231 successful transitions
+(`stick_active=1` on 18.4%, `jump_held=1` on 69.8%). One DDQN run from the
+selected 1.53M checkpoint used `4×1-4 + 1×1-3 + 2×1-2 + 1×1-1`, a protected
+25k old-level anchor, and the 1-4 expert buffer sampled for an expert TD loss
+plus an action-margin loss; the old anchor also got a margin term. This was a
+single training run, not BC-then-DQN.
+
+**Selection: 1.555M** is the 1-4 chain checkpoint. At 1.555M:
+
+```text
+1-4 canonical: 1/1 at 4.4667 s
+1-4 train:     11/11 at 6.7333 s (best 4.4667)
+1-4 holdout:   2/2 at 6.0167 s (best 5.8500)
+1-1:           1.5667, 12/12, 8/8
+1-2:           3.1500, 31/31, 20/20; holdout 4.4750
+1-3:           3.2667, 45/45, 23/23; holdout 5.6500
+```
+
+Coverage is full on every old level. The 1-2/1-3 canonical speeds are slower
+than the 1.53M baseline (3.0167 / 3.1667). The 1.63M checkpoint keeps a better
+1-2 (3.0167, holdout 3.3583) but fails 1-4 (0/1 canonical, 7/11 train, 1/2
+holdout). Keep **1.53M** as the old-level-only reference/fallback and **1.555M**
+as the 1-4 chain checkpoint. See
+[`../experiments/0073_ddqn_expert_replay_1_4_lean_stick/README.md`](../experiments/0073_ddqn_expert_replay_1_4_lean_stick/README.md).
+
+**1-1 → 1-4 windowed chain check (0079, 2026-10-29; reproduces 0073).** Re-ran
+the four canonical levels with the 1.555M checkpoint at 1x, one windowed Godot
+process per level, on game HEAD `fe7821d`. All four finish with no deaths and
+no timeouts: **1-1 1.5667 s, 1-2 3.1500 s, 1-3 3.2667 s, 1-4 4.4667 s**,
+matching the 0073 record exactly. The game drift since `adb9278` does not
+change the canonical chain. Note that `speedup < 1` is clamped to 1x by the game,
+so the 0078 "half speed" show actually ran at normal speed. Watch it with
+`make watch` (`WATCH_LEVEL=1-4` for one level). See
+[`../experiments/0079_show_chain_1_1_to_1_4_0073/README.md`](../experiments/0079_show_chain_1_1_to_1_4_0073/README.md).
 
 **Evaluation/action-semantics fix (2026-10-29).** The eval factory did not pass
 `reassert_held_jump` to Godot, while training did. That made the first 0058 1M

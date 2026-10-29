@@ -1,0 +1,70 @@
+# 0072 — evaluate 0068 on 1-1 retention.
+
+[experiment]
+id = "0072"
+name = "eval_ddqn_1_1_0068"
+status = "running"
+started = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+levels = ["1-1"]
+n_envs = 1
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reassert_held_jump = true
+reward_profile = "default"
+base_port = 21700
+eval_port = 21701
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean_stick"
+preprocessing = "lean_stick"
+expected_raw_size = 191
+model_input_size = 957
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 1
+
+[data]
+archive = "runs/neat_clean_450/filtered/train_clean_routes.json"
+finishers = "runs/neat_clean_450/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-1.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_clean_450/pool/train_start_pool.json"
+holdout_pool = "runs/neat_clean_450/pool/holdout_start_pool.json"
+
+[evaluation]
+canonical = true
+sets = ["runs/neat_clean_450/pool/train_start_pool.json", "runs/neat_clean_450/pool/holdout_start_pool.json"]
+
+[run]
+preprocessing_from = "runs/ddqn_fresh_1_1_lean_stick/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_fresh_1_4_lean_stick"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

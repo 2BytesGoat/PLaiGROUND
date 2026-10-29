@@ -407,6 +407,16 @@ at `runs/neat_clean_450/pool_pre_standability/`.
 See
 [`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md).
 
+### 25. `--speedup` below 1.0 is silently 1x — low
+
+The game's `_apply_speedup()` clamps `--speedup` to `[1.0, 16.0]` and returns
+early when the result is `<= 1.0`
+(`../dragon-jump-remaster/godot/src/training/synchronizer.gd`). A show manifest
+with `speedup = 0.5` (0078) or `0.25` therefore runs at normal speed; there is
+no slow-motion path today. True slow motion needs a game-side branch that keeps
+`Engine.physics_ticks_per_second` at 60 and only lowers `Engine.time_scale`;
+lowering the tick rate instead changes the per-tick simulation.
+
 ## Historical experiment caveats
 
 - **Pre-fix PPO/NEAT numbers** were collected before the run-clock/start/reward

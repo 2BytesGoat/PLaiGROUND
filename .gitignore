@@ -11,6 +11,10 @@ __pycache__
 .ipynb_checkpoints
 .Trash*
 
+# Generated local search index (docs/code-map.md is committed)
+.cache/
+graphify-out/
+
 # ENV Files
 environments/*
 !.gitkeep

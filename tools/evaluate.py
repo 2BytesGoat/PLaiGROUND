@@ -25,6 +25,8 @@ def main() -> int:
         show=args.show,
         device=args.device,
         verbose=args.verbose,
+        level=args.level,
+        speedup=args.speedup,
     )
     model_path = (
         resolve_path(args.model) if args.model is not None else run.model_path

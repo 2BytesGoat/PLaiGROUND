@@ -15,6 +15,7 @@ import pickle
 
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.utils import LinearSchedule
 
 from plaiground.envs.factory import build_vec_env
 from plaiground.envs.runtime import resolve_env_path
@@ -133,6 +134,50 @@ def load_resumed_model(run: Run, vec_env, model_cls=DQN):
     return model
 
 
+def _apply_exploration_overrides(model, run: Run) -> None:
+    """Apply this run's epsilon schedule to a resumed checkpoint.
+
+    Loaded DQN checkpoints keep the epsilon schedule from their original run.
+    A new level needs the new config's final epsilon, otherwise a resumed 1-4
+    stage silently runs at the old 0.02 exploration rate.
+    """
+    if not hasattr(model, "exploration_schedule"):
+        return
+    initial = float(
+        run.algorithm.get(
+            "exploration_initial_eps",
+            getattr(model, "exploration_initial_eps", 1.0),
+        )
+    )
+    final = float(
+        run.algorithm.get(
+            "exploration_final_eps",
+            getattr(model, "exploration_final_eps", 0.05),
+        )
+    )
+    fraction = float(
+        run.algorithm.get(
+            "exploration_fraction",
+            getattr(model, "exploration_fraction", 0.1),
+        )
+    )
+    model.exploration_initial_eps = initial
+    model.exploration_final_eps = final
+    model.exploration_fraction = fraction
+    model.exploration_schedule = LinearSchedule(initial, final, fraction)
+    progress = float(
+        getattr(model, "_current_progress_remaining", 1.0)
+    )
+    model.exploration_rate = float(
+        model.exploration_schedule(progress)
+    )
+    print(
+        f"exploration override: initial={initial} final={final} "
+        f"fraction={fraction} current={model.exploration_rate:.3f}",
+        flush=True,
+    )
+
+
 def run_training(
     run: Run,
     *,
@@ -181,6 +226,7 @@ def run_training(
             model = load_resumed_model(run, vec_env, model_cls)
         else:
             model = make_model(run, vec_env, model_cls)
+        _apply_exploration_overrides(model, run)
 
         buffer_value = run.config.get("run", {}).get("replay_buffer_from")
         anchor_value = run.config.get("run", {}).get("anchor_buffer_from")
@@ -230,6 +276,49 @@ def run_training(
                 f"({anchor.size() * anchor.n_envs} transitions), "
                 f"online_size={model.replay_buffer.online.buffer_size * model.replay_buffer.online.n_envs}, "
                 f"anchor_fraction={stats['anchor_fraction']}",
+                flush=True,
+            )
+
+        expert_value = run.config.get("run", {}).get("expert_buffer_from")
+        if expert_value:
+            expert_path = resolve_path(expert_value)
+            with expert_path.open("rb") as handle:
+                expert = pickle.load(handle)
+            if not isinstance(expert, RareReplayBuffer):
+                raise ValueError(
+                    f"expert buffer must be a RareReplayBuffer: {expert_path}"
+                )
+            model.expert_buffer = expert
+            print(
+                f"installed expert replay: {expert_path} "
+                f"({expert.size() * expert.n_envs} transitions)",
+                flush=True,
+            )
+
+        model.behavior_margin_weight = float(
+            run.algorithm.get("behavior_margin_weight", 0.0)
+        )
+        model.behavior_margin = float(
+            run.algorithm.get("behavior_margin", 0.5)
+        )
+        model.expert_td_weight = float(
+            run.algorithm.get("expert_td_weight", 1.0)
+        )
+        model.expert_batch_size = int(
+            run.algorithm.get("expert_batch_size", 64)
+        )
+        model.old_margin_weight = float(
+            run.algorithm.get("old_margin_weight", 0.0)
+        )
+        model.old_margin_batch_size = int(
+            run.algorithm.get("old_margin_batch_size", 64)
+        )
+        if model.behavior_margin_weight > 0.0:
+            print(
+                f"expert margin: weight={model.behavior_margin_weight} "
+                f"margin={model.behavior_margin} "
+                f"td_weight={model.expert_td_weight} "
+                f"old_margin={model.old_margin_weight}",
                 flush=True,
             )
 

@@ -45,6 +45,8 @@ uv pip install --python .venv/bin/python -e . --no-deps
 | `scripts/reinforcement/02_dqn.py` | DQN train from an experiment manifest. |
 | `scripts/reinforcement/03_ddqn.py` | Double-DQN train from an experiment manifest. |
 | `tools/evaluate.py` | Shared PPO/DQN canonical + start-set evaluation. |
+| `tools/repo_index.py` | Generate `docs/code-map.md` and `.cache/repo-index.json`. |
+| `tools/context.py` | Rank code, experiments, docs, and runs for a task query. |
 | `tools/extract_route_starts.py` | NEAT checkpoint -> clean-start DQN pool. |
 | `tools/filter_routes.py` | Route dedupe/clustering/holdout split. |
 | `tools/build_start_pool.py` | Validated train/holdout start pools. |

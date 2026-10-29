@@ -61,3 +61,67 @@ The old 188/954 0031 protected run selected 2.225M:
 
 The 1-3 clean-route archive has a 4.7667 s best clean route and 105 clean
 routes; full coverage is the priority for this stage.
+
+## Checkpoint sweep (1-3 canonical)
+
+```text
+1.325M: 8.1500   (not learned yet)
+1.350M: 3.4833
+1.375M: 3.4167
+1.400M: 3.1667
+1.425M: 3.2333
+1.450M: 3.1667
+1.475M: 3.2500
+1.500M: 3.1667
+1.525M: 3.1667
+1.550M: 3.2667
+1.575M: 3.1333
+1.600M: 3.0667   <- best
+final:  3.0667
+```
+
+The 1.6M checkpoint beats the old 0031 1-3 canonical reference (3.2500 s),
+but the full gate showed a large 1-2 regression. The 1.5M checkpoint is the
+selected compromise.
+
+## Result
+
+The **1.5M checkpoint** is selected:
+
+```text
+runs/ddqn_fresh_1_1_1_2_1_3_lean_stick/dqn/checkpoints/ddqn_1500000_steps.zip
+```
+
+```text
+1-3 canonical: 3.1667 s
+1-3 train:     45/45, median 5.4667 s
+1-3 holdout:   23/23, median 5.5500 s
+
+1-2 canonical: 3.0167 s
+1-2 train:     31/31, median 4.4167 s
+1-2 holdout:   20/20, median 3.3083 s
+
+1-1 canonical: 1.5667 s
+1-1 train:     12/12, median 3.4167 s
+1-1 holdout:   8/8, median 4.2667 s
+```
+
+1.5M has the best old-level retention of the candidate set: 1-2 is essentially
+the 0060 baseline, 1-3 is fully covered and beats the 0031 canonical reference,
+and 1-1 canonical/train coverage are retained. The only remaining regression is
+the 1-1 holdout median. Most of that gap is one `[25,10]` start (4.6500 s vs
+3.5000 s at 1.3M); the other seven holdout starts are within 0.10 s of the 1.3M
+model.
+
+Candidate comparison:
+
+| Checkpoint | 1-3 canonical | 1-3 train | 1-3 holdout | 1-2 canonical | 1-2 train | 1-2 holdout | 1-1 canonical | 1-1 train | 1-1 holdout |
+|---|---:|---|---|---:|---|---|---:|---|---|
+| 1.450M | 3.1667 | 45/45, 5.4000 | 23/23, 5.5167 | 3.0167 | 31/31, 4.4167 | 20/20, 3.9083 | 1.5667 | 12/12, 3.4167 | 8/8, 4.2917 |
+| **1.500M** | 3.1667 | 45/45, 5.4667 | 23/23, 5.5500 | **3.0167** | 31/31, 4.4167 | **20/20, 3.3083** | 1.5667 | 12/12, 3.4167 | 8/8, 4.2667 |
+| 1.550M | 3.2667 | 45/45, 5.5667 | 23/23, 5.6000 | 3.0167 | 31/31, 4.5000 | 20/20, 3.9750 | 1.5667 | 12/12, 3.4833 | 8/8, 4.0500 |
+| 1.575M | 3.1333 | 45/45, 5.5833 | 23/23, 5.6500 | 3.1500 | 31/31, 4.5333 | 20/20, 3.9500 | 1.5667 | 12/12, 3.2917 | 8/8, 3.8000 |
+| 1.600M | 3.0667 | 45/45, 5.6000 | 23/23, 5.5333 | 3.8333 | 31/31, 4.5833 | 20/20, 4.0667 | 1.5667 | 12/12, 3.2750 | 8/8, 3.8000 |
+
+A short 1-1 retention continuation (0067) is the follow-up for the single
+remaining holdout gap.

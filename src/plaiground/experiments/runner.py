@@ -46,6 +46,8 @@ class Run:
     show: bool
     device: str
     verbose: int
+    level_override: str | None = None
+    speedup_override: float | None = None
 
     @property
     def env(self) -> dict[str, Any]:
@@ -80,6 +82,8 @@ class Run:
 
     @property
     def levels(self) -> list[str]:
+        if self.level_override:
+            return [self.level_override]
         value = self.env.get("levels", self.env.get("level", "1-1"))
         if isinstance(value, str):
             levels = [item.strip() for item in value.split(",") if item.strip()]
@@ -117,6 +121,8 @@ class Run:
 
     @property
     def speedup(self) -> float:
+        if self.speedup_override is not None:
+            return float(self.speedup_override)
         return float(self.env.get("speedup", 8.0))
 
     @property
@@ -244,6 +250,8 @@ def load_run(
     show: bool = False,
     device: str | None = None,
     verbose: int | None = None,
+    level: str | None = None,
+    speedup: float | None = None,
 ) -> Run:
     config = load_experiment(config_path)
     resolved_config_path = Path(config["_path"])
@@ -282,6 +290,8 @@ def load_run(
         show=bool(show),
         device=str(device or run_config.get("device", "auto")),
         verbose=int(verbose if verbose is not None else run_config.get("verbose", 0)),
+        level_override=str(level) if level else None,
+        speedup_override=float(speedup) if speedup is not None else None,
     )
 
 
@@ -349,6 +359,17 @@ def parse_eval_args(description: str) -> argparse.Namespace:
         help="Evaluation subdirectory name; defaults to the model stem.",
     )
     parser.add_argument("--show", action="store_true")
+    parser.add_argument(
+        "--level",
+        default=None,
+        help="Evaluate only this level, overriding [env] levels.",
+    )
+    parser.add_argument(
+        "--speedup",
+        type=float,
+        default=None,
+        help="Override [env] speedup; the game clamps it to 1..16.",
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--verbose", type=int, default=None)
     return parser.parse_args()

@@ -331,6 +331,14 @@ class ProtectedReplayBuffer:
         anchor_size = self.anchor.size() if self.anchor is not None else 0
         return self.online.size() + anchor_size
 
+    def sample_anchor(
+        self, batch_size: int, env=None
+    ) -> ReplayBufferSamples:
+        """Sample only the fixed anchor partition for an auxiliary loss."""
+        if self.anchor is None:
+            raise ValueError("protected replay has no anchor buffer")
+        return self.anchor.sample(batch_size=batch_size, env=env)
+
     def sample(
         self, batch_size: int, env=None
     ) -> ReplayBufferSamples:

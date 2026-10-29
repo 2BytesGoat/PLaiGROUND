@@ -134,6 +134,22 @@ DQN clean-start (1-1):
 Do not use the old 45-flag PPO command or `02_dqn.py extract/train/eval`; the
 active entry points are config-driven.
 
+### Watch the selected policy
+
+`make watch` plays the selected **1.555M** chain checkpoint in the game window,
+one canonical run per level from 1-1 through 1-4:
+
+```bash
+make watch                                  # 1-1, 1-2, 1-3, 1-4 at 1x
+make watch WATCH_LEVEL=1-4                  # only one level
+make watch WATCH_SPEEDUP=2                  # faster playback (game clamps 1..16)
+make watch WATCH_MODEL=runs/<run>/dqn/checkpoints/ddqn_1580000_steps.zip
+make watch WATCH_TAG=my_view                # separate eval/ output directory
+```
+
+The manifest is `experiments/0079_show_chain_1_1_to_1_4_0073`; results land in
+`runs/chain_check_1_1_to_1_4_1555k/eval/<tag>/`.
+
 ## Current results (selected)
 
 | Track | Level(s) | Result |
