@@ -89,6 +89,9 @@ class StartPoolTest(unittest.TestCase):
             self.assertEqual(summary["train_states"], 1)
             self.assertEqual(summary["holdout_states"], 1)
             self.assertEqual(summary["shared_state_keys"], 1)
+            self.assertEqual(summary["unique_eval_states"], 1)
+            self.assertEqual(len(result["eval_pool"]), 1)
+            self.assertEqual(result["eval_pool"][0]["splits"], ["train", "holdout"])
             self.assertEqual(
                 summary["train"]["rejected_non_standable"], 1
             )
@@ -100,6 +103,7 @@ class StartPoolTest(unittest.TestCase):
             )
             self.assertTrue((output / "train_start_pool.json").exists())
             self.assertTrue((output / "holdout_start_pool.json").exists())
+            self.assertTrue((output / "eval_start_pool.json").exists())
 
     def test_rejects_invalid_weight_split(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

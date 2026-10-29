@@ -16,7 +16,6 @@ import os
 import pathlib
 import socket
 import subprocess
-import time
 from collections import OrderedDict
 from sys import platform
 from typing import Optional
@@ -105,7 +104,7 @@ class GodotEnv:
     MAJOR_VERSION = "0"  # Versioning for the environment
     MINOR_VERSION = "7"
     DEFAULT_PORT = 11008  # Default port for communication with Godot Game
-    DEFAULT_TIMEOUT = 60  # Default socket timeout TODO
+    DEFAULT_TIMEOUT = 60  # Socket/startup timeout; callers override from config
 
     def __init__(
         self,
@@ -138,6 +137,9 @@ class GodotEnv:
 
         self.proc = None
         self.log_handle = None
+        self._closed = False
+        self._timeout = max(1.0, float(GodotEnv.DEFAULT_TIMEOUT))
+        self.connection = None
         if env_path is not None and env_path != "debug":
             env_path = self._set_platform_suffix(env_path)
 
@@ -157,6 +159,9 @@ class GodotEnv:
         else:
             print("No game binary has been provided, please press PLAY in the Godot editor")
 
+        # Register before the handshake so a failed startup still terminates
+        # the game process and releases the port.
+        atexit.register(self._close)
         self.port = port
         self.connection = self._start_server()
         self.num_envs = None
@@ -193,8 +198,6 @@ class GodotEnv:
         # For multi-policy envs: The name of each agent's policy set in the env itself (any training_mode
         # AIController instance is treated as an agent)
         self.agent_policy_names
-
-        atexit.register(self._close)
 
     def _set_platform_suffix(self, env_path: str) -> str:
         """
@@ -529,13 +532,46 @@ class GodotEnv:
         return response["returns"]
 
     def close(self):
-        message = {
-            "type": "close",
-        }
-        self._send_as_json(message)
-        print("close message sent")
-        time.sleep(1.0)
-        self.connection.close()
+        if self._closed:
+            return
+        self._closed = True
+        connection = getattr(self, "connection", None)
+        if connection is not None:
+            try:
+                connection.settimeout(
+                    min(5.0, max(0.1, self._timeout))
+                )
+                self._send_as_json({"type": "close"})
+                print("close message sent", flush=True)
+            except (OSError, RuntimeError, TimeoutError) as exc:
+                print(f"warning: close message failed: {exc}", flush=True)
+            finally:
+                try:
+                    connection.close()
+                except OSError:
+                    pass
+                self.connection = None
+
+        proc = getattr(self, "proc", None)
+        if proc is not None:
+            try:
+                proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    try:
+                        proc.wait(timeout=5.0)
+                    except subprocess.TimeoutExpired:
+                        print(
+                            "warning: Godot process did not exit after kill",
+                            flush=True,
+                        )
+            finally:
+                self.proc = None
+
         if self.log_handle is not None:
             self.log_handle.flush()
             self.log_handle.close()
@@ -572,21 +608,19 @@ class GodotEnv:
         # --fixed-fps {framerate}
         path = convert_macos_path(env_path) if platform == "darwin" else env_path
 
-        launch_cmd = f"{path} --port={port} --env_seed={seed}"
+        launch_cmd = [path, f"--port={port}", f"--env_seed={seed}"]
 
         if show_window is False:
-            launch_cmd += " --disable-render-loop --headless"
+            launch_cmd.extend(["--disable-render-loop", "--headless"])
         if framerate is not None:
-            launch_cmd += f" --fixed-fps {framerate}"
+            launch_cmd.extend(["--fixed-fps", str(framerate)])
         if action_repeat is not None:
-            launch_cmd += f" --action_repeat={action_repeat}"
+            launch_cmd.append(f"--action_repeat={action_repeat}")
         if speedup is not None:
-            launch_cmd += f" --speedup={speedup}"
-        if len(kwargs) > 0:
-            for key, value in kwargs.items():
-                launch_cmd += f" --{key}={value}"
+            launch_cmd.append(f"--speedup={speedup}")
+        for key, value in kwargs.items():
+            launch_cmd.append(f"--{key}={value}")
 
-        launch_cmd = launch_cmd.split(" ")
         popen_kwargs = {"start_new_session": True}
         if env is not None:
             popen_kwargs["env"] = env
@@ -606,14 +640,28 @@ class GodotEnv:
 
         # Bind the socket to the port, "localhost" was not working on windows VM, had to use the IP
         server_address = ("127.0.0.1", self.port)
-        sock.bind(server_address)
+        try:
+            sock.bind(server_address)
+            sock.listen(1)
+        except OSError as exc:
+            sock.close()
+            raise RuntimeError(
+                f"failed to bind Godot port {self.port}: {exc}. "
+                "Another run may still own this port."
+            ) from exc
 
-        # Listen for incoming connections
-        sock.listen(1)
-        sock.settimeout(GodotEnv.DEFAULT_TIMEOUT)
-        connection, client_address = sock.accept()
-        # connection.settimeout(GodotEnv.DEFAULT_TIMEOUT)
-        #        connection.setblocking(False) TODO
+        sock.settimeout(self._timeout)
+        try:
+            connection, _client_address = sock.accept()
+        except socket.timeout as exc:
+            raise TimeoutError(
+                f"Godot did not connect on port {self.port} within "
+                f"{self._timeout:.0f}s"
+            ) from exc
+        finally:
+            sock.close()
+
+        connection.settimeout(self._timeout)
         print("connection established")
         return connection
 
@@ -784,37 +832,32 @@ class GodotEnv:
                     break
         except BlockingIOError:
             pass
-        self.connection.setblocking(True)
+        self.connection.settimeout(self._timeout)
+
+    def _recv_exact(self, count: int) -> bytes:
+        chunks: list[bytes] = []
+        received = 0
+        while received < count:
+            try:
+                data = self.connection.recv(count - received)
+            except socket.timeout as exc:
+                raise TimeoutError(
+                    f"Godot socket timed out after {self._timeout:.0f}s "
+                    f"while reading {received}/{count} bytes"
+                ) from exc
+            if not data:
+                raise ConnectionError(
+                    "Godot connection closed while reading a response"
+                )
+            chunks.append(data)
+            received += len(data)
+        return b"".join(chunks)
 
     def _get_data(self):
-        try:
-            # Receive the size (in bytes) of the remaining data to receive
-            string_size_bytes: bytearray = bytearray()
-            received_length: int = 0
-
-            # The first 4 bytes contain the length of the remaining data
-            length: int = 4
-
-            while received_length < length:
-                data = self.connection.recv(length - received_length)
-                received_length += len(data)
-                string_size_bytes.extend(data)
-
-            length = int.from_bytes(string_size_bytes, "little")
-
-            # Receive the rest of the data
-            payload: bytearray = bytearray()
-            received_length = 0
-
-            while received_length < length:
-                data = self.connection.recv(length - received_length)
-                received_length += len(data)
-                payload.extend(data)
-
-            return bytes(payload)
-        except socket.timeout as e:
-            print("env timed out", e)
-        return None
+        length = int.from_bytes(self._recv_exact(4), "little")
+        if length < 0 or length > 256 * 1024 * 1024:
+            raise RuntimeError(f"invalid Godot response length: {length}")
+        return self._recv_exact(length)
 
     def _send_string(self, string):
         encoded = string.encode()

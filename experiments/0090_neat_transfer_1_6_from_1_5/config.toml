@@ -1,0 +1,68 @@
+# 0090 — 1-6 NEAT transfer from the 4-frame 1-5 population.
+
+[experiment]
+id = "0090"
+name = "neat_transfer_1_6_from_1_5"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "fe7821d"
+allow_dirty = false
+
+[env]
+level = "1-6"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "NEAT route search keeps the 61-value contract; the eventual DDQN replays the routes in the lean_stick 191 environment."
+
+[action]
+reassert_held_jump = true
+
+[fitness]
+time_weight = 20.0
+formula = "finisher fitness = game reward - 20 * run_time"
+note = "Use the 1-5 speed-selection penalty from the start so slow finishers do not dominate reproduction."
+
+[source]
+source_experiment = "0080"
+resume_checkpoint = "runs/neat_extend_1_5_from_0047/neat-checkpoint-50"
+source_level = "1-5"
+source_generation = 50
+note = "Use the 4-frame 1-5 checkpoint, not the 0081 2-frame checkpoint. The 1-6 DDQN is 4-frame."
+
+[targets]
+user_time = 3.98
+acceptable_time = 4.28
+note = "User time plus 0.3 s is the red-flag threshold."
+
+[collection]
+record_paths = true
+generations = 50
+min_clean_routes = 25
+checkpoint_interval = 1
+rebalance_every = 2
+rebalance_final = true
+port = 18500
+seed = 42
+note = "No target-time early stop: stop at 25 clean routes or 50 generations, then decide whether another extension is needed."
+
+[output]
+dir = "runs/neat_transfer_1_6_from_1_5"
+archive_dir = "runs/neat_transfer_1_6_from_1_5/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --level 1-6 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_extend_1_5_from_0047/neat-checkpoint-50 --output-dir runs/neat_transfer_1_6_from_1_5 --archive-dir runs/neat_transfer_1_6_from_1_5/archive --generations 50 --parallel 8 --action-repeat 4 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 1 --rebalance-every 2 --rebalance-final --min-clean-routes 25 --time-fitness-weight 20 --port 18500"

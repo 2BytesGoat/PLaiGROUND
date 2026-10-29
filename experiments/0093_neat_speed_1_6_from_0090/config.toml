@@ -1,0 +1,77 @@
+# 0093 — speed-select the 1-6 population from 0090.
+
+[experiment]
+id = "0093"
+name = "neat_speed_1_6_from_0090"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "fe7821d"
+allow_dirty = false
+
+[env]
+level = "1-6"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+
+[action]
+reassert_held_jump = true
+
+[fitness]
+time_weight = 20.0
+formula = "finisher fitness = game reward - 20 * run_time"
+
+[source]
+source_experiment = "0090"
+resume_checkpoint = "runs/neat_transfer_1_6_from_1_5/neat-checkpoint-51"
+archive_dir = "runs/neat_transfer_1_6_from_1_5/archive"
+source_level = "1-6"
+source_generation = 51
+
+[targets]
+user_time = 3.98
+acceptable_time = 4.28
+
+[collection]
+record_paths = true
+generations = 30
+min_clean_routes = 0
+target_time = 3.98
+checkpoint_interval = 1
+rebalance_every = 2
+rebalance_final = true
+port = 18700
+seed = 42
+note = "No clean-route early stop: the archive already has 25 clean routes. Stop at 3.98 s or 30 generations; the time penalty selects the fast lineage."
+
+[handoff]
+from_run = "runs/neat_transfer_1_6_from_1_5"
+to_run = "runs/neat_speed_1_6_from_0090"
+files = [
+  "best_time.json",
+  "best_time_genome.pkl",
+  "best_clean.json",
+  "best_clean_genome.pkl",
+]
+note = "Carry the 4.55 s bests into the speed run; the archive stays cumulative."
+
+[output]
+dir = "runs/neat_speed_1_6_from_0090"
+archive_dir = "runs/neat_transfer_1_6_from_1_5/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --level 1-6 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_transfer_1_6_from_1_5/neat-checkpoint-51 --output-dir runs/neat_speed_1_6_from_0090 --archive-dir runs/neat_transfer_1_6_from_1_5/archive --generations 30 --parallel 8 --action-repeat 4 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 1 --rebalance-every 2 --rebalance-final --min-clean-routes 0 --target-time 3.98 --time-fitness-weight 20 --port 18700"

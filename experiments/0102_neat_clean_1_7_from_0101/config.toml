@@ -1,0 +1,79 @@
+# 0102 — high-mutation 1-7 cleanup after the 1-6 transfer.
+
+[experiment]
+id = "0102"
+name = "neat_clean_1_7_from_0101"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "50dcc66"
+allow_dirty = false
+
+[env]
+level = "1-7"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "The high-mutation NEAT config uses the legacy 58-value input; the game additionally advertises the three hold flags for lean_stick-compatible replay."
+
+[action]
+reassert_held_jump = true
+
+[fitness]
+time_weight = 20.0
+formula = "finisher fitness = game reward - 20 * run_time"
+
+[source]
+source_experiment = "0101"
+source_checkpoint = "runs/neat_transfer_1_7_from_1_6/neat-checkpoint-92"
+source_level = "1-7"
+source_generation = 92
+archive = "runs/neat_transfer_1_7_from_1_6/archive"
+source_routes = 240
+source_clusters = 10
+seed_checkpoint = "runs/neat_clean_1_7_from_0101_attempt2/seed-checkpoint-0"
+seed_genomes = [
+  "runs/neat_transfer_1_7_from_1_6/archive/genomes/5922bbb975e1a6bbcad0284a623bbf8cc1575f01.pkl",
+  "runs/neat_transfer_1_7_from_1_6/archive/genomes/17a3e9e8373b144c79b16aae5380fca9bac1e89e.pkl",
+  "runs/neat_transfer_1_7_from_1_6/archive/genomes/7787da8720dc8c9ca2f5042f08a6635b967402c0.pkl",
+  "runs/neat_transfer_1_7_from_1_6/archive/genomes/85480cb72db5fb537100e44d4003115a7a6bb704.pkl",
+  "runs/neat_transfer_1_7_from_1_6/archive/genomes/b3c8356ad5d4f8b3a5adb3fa769673a2abe101dc.pkl",
+  "runs/neat_transfer_1_7_from_1_6/archive/genomes/8aaacf07ba93e3763cff5eec0e06a66dd804c7a1.pkl",
+]
+note = "The transfer produced 240 routes in generations 81-92 but zero strict clean routes; best 7.9667 s. Seed one representative per route cluster with the high-mutation config and keep the archive level-specific."
+
+[targets]
+user_time = 4.9728
+acceptable_time = 5.2728
+note = "Provisional: par + 0.30 s. Clean-route collection is the immediate gate."
+
+[collection]
+record_paths = true
+generations = 30
+min_clean_routes = 25
+checkpoint_interval = 1
+rebalance_every = 2
+rebalance_final = true
+port = 18900
+seed = 42
+note = "Stop at 25 clean routes or 30 generations. If clean remains zero, extend this seeded search rather than starting another random population."
+
+[output]
+dir = "runs/neat_clean_1_7_from_0101_attempt2"
+archive_dir = "runs/neat_clean_1_7_from_0101_attempt2/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --config experiments/0102_neat_clean_1_7_from_0101/neat_config.txt --level 1-7 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_clean_1_7_from_0101_attempt2/seed-checkpoint-0 --output-dir runs/neat_clean_1_7_from_0101_attempt2 --archive-dir runs/neat_clean_1_7_from_0101_attempt2/archive --generations 30 --parallel 8 --action-repeat 4 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 1 --rebalance-every 2 --rebalance-final --min-clean-routes 25 --time-fitness-weight 20 --port 18900"

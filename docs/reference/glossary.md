@@ -88,6 +88,22 @@ hand control to the policy. Preserves the run clock without a state snapshot.
 **Clean route** — a successful NEAT trajectory with no deaths/backtracks (as
 defined by the archive tooling), stored with `path_cells` and `actions`.
 
+**Strict-clean route** — the accepted route tier when available:
+`revisit_ratio <= 0.10`, `backtracks <= 2`, action flips `<= 0.75`, and path
+length `>= 5`. Re-computed by `tools/level.py data`; do not trust an old
+archive's `clean` flag without checking the metrics.
+
+**Near-clean route** — the fallback route tier used when strict-clean is
+unavailable: `revisit_ratio <= 0.20`, with the same backtrack/flip/path rules.
+Record the fallback explicitly; it is not equivalent to strict-clean.
+
+**All-success route** — every de-duplicated finisher in the archive. It is a
+diagnostic sensitivity set, not the accepted clean-start gate.
+
+**Eval union** — the deduplicated union of the train and holdout state pools:
+`train + holdout - shared`. Evaluated separately from canonical. Written as
+`eval_<tag>_start_pool.json`.
+
 **Finisher** — one successful trajectory record in the NEAT archive.
 
 **Route signature** — key for a route trajectory, normally the sequence of
@@ -112,6 +128,10 @@ reporting finish count, best/median/worst time, and spawn acceptance.
 canonical speed.
 
 ## Repo/run terms
+
+**Level ledger** — the committed per-level record of the selected expert,
+canonical time, accepted coverage, and gate. See
+[`level-ledger.md`](level-ledger.md).
 
 **Run directory** — `runs/<name>/`; generated and gitignored. Contains
 checkpoints, logs, monitor/episode CSVs, evaluation summaries, and isolated

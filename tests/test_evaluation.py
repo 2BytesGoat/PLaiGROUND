@@ -147,9 +147,86 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual(summary["agents"], 2)
         self.assertEqual(summary["finishes"], 1)
         self.assertEqual(summary["timeouts"], 1)
+        self.assertEqual(summary["deaths"], 0)
+        self.assertEqual(summary["spawn_failures"], 0)
         self.assertEqual(summary["best_time"], 2.0)
         self.assertEqual(summary["median_time"], 2.0)
         self.assertAlmostEqual(summary["efficiency_mean"], 0.5)
+
+    def test_summarize_separates_death_from_timeout(self) -> None:
+        rows = [
+            {
+                "finished": True,
+                "timed_out": False,
+                "run_time": 4.0,
+                "reward": 500.0,
+                "deaths": 0,
+                "spawn_ok": True,
+            },
+            {
+                "finished": False,
+                "timed_out": False,
+                "run_time": 2.4,
+                "reward": -50.0,
+                "deaths": 1,
+                "spawn_ok": True,
+            },
+            {
+                "finished": False,
+                "timed_out": True,
+                "run_time": 10.0,
+                "reward": -100.0,
+                "deaths": 0,
+                "spawn_ok": True,
+            },
+        ]
+        summary = rollout.summarize(rows)
+        self.assertEqual(summary["finishes"], 1)
+        self.assertEqual(summary["deaths"], 1)
+        self.assertEqual(summary["timeouts"], 1)
+
+    def test_evaluate_set_rejects_spawn_mismatch(self) -> None:
+        class WrongSpawnEnv(FakeEnv):
+            def reset(self, spawns=None):
+                observations, infos = super().reset(spawns=spawns)
+                for info in infos:
+                    if "spawn_cell" in info:
+                        info["spawn_cell"] = [99, 99]
+                return observations, infos
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = Run(
+                config={"env": {}, "algorithm": {"name": "ppo"}, "output": {}},
+                config_path=root / "config.toml",
+                output_dir=root / "run",
+                timesteps=10,
+                resume=None,
+                preprocessing_path=root / "pre.pkl",
+                show=False,
+                device="cpu",
+                verbose=0,
+            )
+            starts = [
+                {"canonical": True, "kind": "canonical"},
+                {"cell": [3, 4], "facing": 1, "kind": "state"},
+            ]
+            env = WrongSpawnEnv(2, {0: 3, 1: 2})
+            with mock.patch.object(
+                rollout, "load_start_pool", return_value=starts
+            ), mock.patch.object(
+                rollout, "make_eval_env", return_value=env
+            ):
+                with self.assertRaises(RuntimeError):
+                    rollout.evaluate_set(
+                        FakeModel(),
+                        run,
+                        "/nonexistent",
+                        None,
+                        "train",
+                        root / "train_start_pool.json",
+                        "smoke",
+                    )
 
     def test_evaluate_set_writes_rows_and_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

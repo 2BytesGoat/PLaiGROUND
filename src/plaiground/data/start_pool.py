@@ -7,7 +7,8 @@ validity gates, and keeps the split intact:
 * canonical is included only in the training pool;
 * train and holdout state keys are deduplicated separately;
 * the same state key may appear in both pools because route clusters can share
-  map segments; the summary records that overlap explicitly.
+  map segments; the summary records that overlap explicitly;
+* a deduplicated train+holdout union is written as the accepted eval pool.
 """
 
 from __future__ import annotations
@@ -274,6 +275,36 @@ def build_split_pool(
     return states, summary
 
 
+def build_eval_pool(
+    train_states: Iterable[dict[str, Any]],
+    holdout_states: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Deduplicate train/holdout states into one evaluation-only start list.
+
+    The accepted evaluation set is the union of the train and holdout states.
+    A state that appears in both splits is kept once and records both source
+    splits. The evaluator ignores the extra metadata; it only consumes the
+    physical reset fields.
+    """
+    merged: dict[tuple[int, int, int, tuple[int, ...]], dict[str, Any]] = {}
+    for state in list(train_states) + list(holdout_states):
+        key = _state_key(state)
+        split = str(state.get("split", "train"))
+        previous = merged.get(key)
+        if previous is None:
+            entry = dict(state)
+            entry["splits"] = [split]
+            merged[key] = entry
+            continue
+        splits = previous.setdefault("splits", [])
+        if split not in splits:
+            splits.append(split)
+    eval_pool = list(merged.values())
+    for entry in eval_pool:
+        entry["weight"] = 1.0 / len(eval_pool) if eval_pool else 0.0
+    return eval_pool
+
+
 def build_start_pools(
     *,
     filtered_dir: Path,
@@ -284,6 +315,7 @@ def build_start_pools(
     min_time_to_exit: float = 0.5,
     canonical_weight: float = 0.70,
     state_weight: float = 0.30,
+    eval_pool_name: str = "eval_start_pool.json",
 ) -> dict[str, Any]:
     if not 0.0 <= canonical_weight <= 1.0:
         raise ValueError("canonical_weight must be between 0 and 1")
@@ -362,6 +394,7 @@ def build_start_pools(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     overlap = train_keys & holdout_keys
+    eval_pool = build_eval_pool(train_states, holdout_states)
     summary = {
         "level": level,
         "filtered_dir": str(filtered_dir),
@@ -373,6 +406,7 @@ def build_start_pools(
         "train_states": len(train_states),
         "holdout_states": len(holdout_states),
         "shared_state_keys": len(overlap),
+        "unique_eval_states": len(eval_pool),
         "canonical_weight": float(canonical_weight),
         "state_weight_total": float(state_weight),
         "state_weight_each": float(state_weight_each),
@@ -397,6 +431,16 @@ def build_start_pools(
     (output_dir / "holdout_start_pool.json").write_text(
         json.dumps(holdout_payload, indent=2), encoding="utf-8"
     )
+    eval_payload = {
+        "level": level,
+        "source": str(archive_dir),
+        "summary": summary,
+        "starts": eval_pool,
+    }
+    eval_path = output_dir / eval_pool_name
+    eval_path.write_text(
+        json.dumps(eval_payload, indent=2), encoding="utf-8"
+    )
     (output_dir / "split.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )
@@ -404,4 +448,6 @@ def build_start_pools(
         "summary": summary,
         "train_pool": train_pool,
         "holdout_pool": holdout_pool,
+        "eval_pool": eval_pool,
+        "eval_pool_path": str(eval_path),
     }

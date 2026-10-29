@@ -134,6 +134,33 @@ def load_resumed_model(run: Run, vec_env, model_cls=DQN):
     return model
 
 
+def _apply_learning_rate_override(model, run: Run) -> None:
+    """Apply the manifest learning rate after loading a checkpoint.
+
+    SB3 serializes the optimizer and schedule with a checkpoint. Without this
+    override a resumed run silently keeps the source run's learning rate even
+    though the new manifest declares a different value.
+    """
+    value = run.algorithm.get("learning_rate")
+    if value is None:
+        return
+    learning_rate = float(value)
+    if float(getattr(model, "learning_rate", learning_rate)) == learning_rate:
+        return
+    model.learning_rate = learning_rate
+    setup = getattr(model, "_setup_lr_schedule", None)
+    if callable(setup):
+        setup()
+    optimizer = getattr(getattr(model, "policy", None), "optimizer", None)
+    if optimizer is not None:
+        for group in optimizer.param_groups:
+            group["lr"] = learning_rate
+    print(
+        f"learning-rate override: {learning_rate:g}",
+        flush=True,
+    )
+
+
 def _apply_exploration_overrides(model, run: Run) -> None:
     """Apply this run's epsilon schedule to a resumed checkpoint.
 
@@ -227,6 +254,7 @@ def run_training(
         else:
             model = make_model(run, vec_env, model_cls)
         _apply_exploration_overrides(model, run)
+        _apply_learning_rate_override(model, run)
 
         buffer_value = run.config.get("run", {}).get("replay_buffer_from")
         anchor_value = run.config.get("run", {}).get("anchor_buffer_from")

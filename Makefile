@@ -11,7 +11,16 @@ WATCH_LEVEL ?=
 WATCH_SPEEDUP ?=
 WATCH_TAG ?= watch
 
-.PHONY: install test compile smoke-ppo index index-check context watch help
+LEVEL ?= 1-9
+LEVEL_RUN ?=
+LEVEL_GEN ?=
+LEVEL_ANALYSIS ?= ../dragon-jump-remaster/runs/level_analysis/$(LEVEL).json
+LEVEL_TAG ?=
+LEVEL_OUTPUT_ROOT ?=
+LEVEL_MIN_ROUTES ?= 25
+LEVEL_OPTIONAL_ARGS = $(if $(LEVEL_OUTPUT_ROOT),--output-root $(LEVEL_OUTPUT_ROOT)) $(if $(LEVEL_TAG),--tag $(LEVEL_TAG))
+
+.PHONY: install test compile smoke-ppo index index-check context level-data level-status watch help
 
 install:
 	$(UV) pip install --python $(PYTHON) -e . --no-deps
@@ -35,6 +44,19 @@ context:
 	@if [ -z "$(q)" ]; then echo 'usage: make context q="<task>"'; exit 2; fi
 	$(PYTHON) tools/context.py "$(q)"
 
+level-status:
+	$(PYTHON) tools/level.py status $(LEVEL)
+
+level-data:
+	@if [ -z "$(LEVEL_RUN)" ]; then echo 'usage: make level-data LEVEL=1-9 LEVEL_RUN=runs/<neat-run> LEVEL_GEN=<generation>'; exit 2; fi
+	$(PYTHON) tools/level.py data \
+		--level $(LEVEL) \
+		--run-dir $(LEVEL_RUN) \
+		$(if $(LEVEL_GEN),--generation $(LEVEL_GEN),) \
+		--analysis $(LEVEL_ANALYSIS) \
+		--min-routes $(LEVEL_MIN_ROUTES) \
+		--seed 0 $(LEVEL_OPTIONAL_ARGS)
+
 watch:
 	@echo "watching $(WATCH_MODEL)"
 	@echo "  levels: $(if $(WATCH_LEVEL),$(WATCH_LEVEL) only,from $(WATCH_CONFIG))  speedup: $(if $(WATCH_SPEEDUP),$(WATCH_SPEEDUP),from config)"
@@ -48,5 +70,7 @@ help:
 	@echo "make index        regenerate docs/code-map.md and .cache/repo-index.json"
 	@echo "make index-check  fail if docs/code-map.md is stale"
 	@echo 'make context q="..."  search code, experiments, docs, and runs'
+	@echo "make level-status LEVEL=1-9  show level experiments and data summaries"
+	@echo "make level-data LEVEL=1-9 LEVEL_RUN=runs/... LEVEL_GEN=46  build tiers/pools"
 	@echo "make watch        play the 1.555M 1-1..1-4 chain in the game window"
 	@echo "                  WATCH_LEVEL=1-4 WATCH_SPEEDUP=2 WATCH_MODEL=<checkpoint>"

@@ -28,8 +28,14 @@ development/research repo, not part of the shipped game.
 | Review PPO/DQN duplication, dead branches, and the composition plan | [`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md) |
 | Understand the PPO timeout and start-pool root cause | [`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md) |
 | Understand the lean 188-value state decision | [`audit/2026-10-28-lean-state-encoding.md`](audit/2026-10-28-lean-state-encoding.md) |
-| Follow the repeatable new-level NEAT transfer procedure | [`audit/2026-10-29-level-transfer-playbook.md`](audit/2026-10-29-level-transfer-playbook.md) |
+| Follow the full new-level pipeline (NEAT → expert → evaluate → repair) | [`runbooks/new-level.md`](runbooks/new-level.md) |
+| See the selected expert and gate for each level | [`reference/level-ledger.md`](reference/level-ledger.md) |
+| Follow the NEAT-only discovery branches | [`audit/2026-10-29-level-transfer-playbook.md`](audit/2026-10-29-level-transfer-playbook.md) |
 | Understand the NEAT fitness / reward bias finding | [`audit/2026-10-29-reward-fitness-audit.md`](audit/2026-10-29-reward-fitness-audit.md) |
+| Understand the 1-6 any-start expert and the non-reproducible 4.07 replay | [`audit/2026-10-29-1-6-ddqn-investigation.md`](audit/2026-10-29-1-6-ddqn-investigation.md) |
+| Read the 1-8 (DOUBLE_JUMP) transfer and any-start expert sequence | [`audit/2026-10-30-1-8-expert.md`](audit/2026-10-30-1-8-expert.md) |
+| Understand the expert-teacher / one-student architecture | [`audit/2026-10-29-expert-portfolio-and-student-decision.md`](audit/2026-10-29-expert-portfolio-and-student-decision.md) |
+| Understand run reliability, checkpoint selection, and 1-6 fast modes | [`audit/2026-10-29-run-reliability.md`](audit/2026-10-29-run-reliability.md) |
 | Set up the environment | [`../README.md`](../README.md) § Setup |
 | Read a term you don't recognize | [`reference/glossary.md`](reference/glossary.md) |
 | Check the deployed game model | [`reference/deployed-model-58.md`](reference/deployed-model-58.md) |
@@ -67,6 +73,35 @@ map is stale.
 | [`../experiments/0059_ddqn_fresh_1_1_lean_stick_continue/`](../experiments/0059_ddqn_fresh_1_1_lean_stick_continue/) | **not needed** | The 1.85M continuation was unnecessary once 0058 passed the gate at 1M. |
 | [`../experiments/0060_ddqn_fresh_1_1_1_2_lean_stick/`](../experiments/0060_ddqn_fresh_1_1_1_2_lean_stick/) | **complete; 1.3M selected** | 1-2 transfer from 0058: 4×1-2 + 4×1-1, 191 inputs, 200k 1-1 buffer. Selected 1.3M: **1-2 3.0333 canonical, 31/31 train, 20/20 holdout; 1-1 1.5667, 12/12, 8/8**. Remaining weakness: 1-2 state-start speed. |
 | [`../experiments/0073_ddqn_expert_replay_1_4_lean_stick/`](../experiments/0073_ddqn_expert_replay_1_4_lean_stick/) | **complete; 1.555M selected** | One-step DDQN with 21 successful 1-4 NEAT routes (2,231 transitions) in an expert buffer plus an action-margin loss. 1.555M: **1-4 1/1 canonical @ 4.4667 s, 11/11 train, 2/2 holdout**; old levels full coverage (1-2 3.1500, 1-3 3.2667). 1-4 fixed; 1-2/1-3 canonical slightly slower than 1.53M. |
+| [`../experiments/0080_neat_extend_1_5_from_0047/`](../experiments/0080_neat_extend_1_5_from_0047/) | **complete; 1-5 archive** | Extended the 0047 1-5 population to generation 50: 284 routes, 16 clean, best 4.6833 s. Raw reward ranked a 7.1167 s finisher above the 4.6833 s route. |
+| [`../experiments/0081_neat_speed_1_5_from_0080/`](../experiments/0081_neat_speed_1_5_from_0080/) | **stopped; best 4.4000 s** | Time-penalized 2-frame search from generation 50 to 95: 569 routes / 130 clean; speed bin 0 → ~88–100%; plateaued above the 3.41 s gate. |
+| [`../experiments/0082_ddqn_expert_replay_1_5_lean_stick/`](../experiments/0082_ddqn_expert_replay_1_5_lean_stick/) | **stopped; 2-frame negative** | 2-frame 4.40 s expert (4,191 transitions) with a 2-frame anchor. Deterministic 1.58M: 1-5 0/1, 1-4 timeout, 1-1 2.9333 s. Control-rate change rejected. |
+| [`../experiments/0085_ddqn_expert_replay_1_5_4frame/`](../experiments/0085_ddqn_expert_replay_1_5_4frame/) | **complete; 1-5 3.1667 s** | 4-frame DDQN on all 16 clean 1-5 routes (1,510 expert transitions, 4.68 s cluster included). Final **1-5 3.1667 s** twice; 1-1/1-3 retained, 1-4/1-2 not. Selected 1-5 model. |
+| [`../experiments/0088_ddqn_retention_1_5_4frame/`](../experiments/0088_ddqn_retention_1_5_4frame/) | **complete; single-model negative** | 25k retention fine-tune from 1.655M with 2 x 1-4/1-2 and a 1.555M all-level anchor. Final: 1-5 3.5000 s, 1-4 timeout, 1-3 3.2000, 1-2 3.0167. Two-model chain selected. |
+| [`../experiments/0090_neat_transfer_1_6_from_1_5/`](../experiments/0090_neat_transfer_1_6_from_1_5/) | **complete; 1-6 clean seed** | Seeded from the 4-frame 1-5 checkpoint-50. Generation 51 produced 31 routes / 25 clean, best **4.5500 s**; stopped at the clean target. Filtered 24 clean / 9 clusters / 22 train / 2 holdout. |
+| [`../experiments/0091_ddqn_expert_replay_1_6_lean_stick/`](../experiments/0091_ddqn_expert_replay_1_6_lean_stick/) | **complete; 1-6 negative** | 20/22 expert routes replayed (1,696 transitions). Best checkpoint **1.705M: 1-6 4.5667 s canonical** (1.68M 4.6833); final 7.25 s. Full 32-state pool: **11/32**, 20 deaths. Lost 1-5/1-4; not a chain member. |
+| [`../experiments/0093_neat_speed_1_6_from_0090/`](../experiments/0093_neat_speed_1_6_from_0090/) | **complete; 1-6 4.5000 s** | 30-generation time-penalized search: best **4.5000 s** at gen 68; archive 376 routes / 263 clean; still +0.22 over the 4.28 gate. |
+| [`../experiments/0094_ddqn_anchor_1_6_1680/`](../experiments/0094_ddqn_anchor_1_6_1680/) | **complete; 1-6 anchor** | 200k rare transitions from 1.68M; 3,224 episodes, 1,697 finishes / 1,412 deaths / 115 timeouts; median 4.6833; real stochastic finishes at 3.0667/3.2/3.3333 (155 under 4.28); 2.4333 is a death. |
+| [`../experiments/0095_ddqn_1_6_retrain_1680/`](../experiments/0095_ddqn_1_6_retrain_1680/) | **complete; 1-6-only negative** | 8 x 1-6 from 1.68M, 1-6 anchor, 4.07 s replay. Final **6.3833 s**; intermediate 8.50/timeouts. The 4.07 s replay was later found not reproducible in isolation. Best canonical model is 1.705M 4.5667. |
+| [`../experiments/0096_eval_ddqn_1_6_retrain_1680/`](../experiments/0096_eval_ddqn_1_6_retrain_1680/) | **complete; 1-6 eval** | Deterministic 1-6 eval for 0095 checkpoints: final 6.3833; intermediate timeout/8.50/death. |
+| [`../experiments/0097_ddqn_1_6_feasible_starts/`](../experiments/0097_ddqn_1_6_feasible_starts/) | **complete; any-start base** | 8 x 1-6 from 1.705M, no old-level mixing, 32 NEAT state starts, 85 stable expert routes. First 32/32 at **1.7675M** (canonical 4.65); 1.805M canonical 4.55 but 31/32. |
+| [`../experiments/0098_eval_ddqn_1_6_feasible_starts/`](../experiments/0098_eval_ddqn_1_6_feasible_starts/) | **complete; 32-state eval** | Canonical + all 32 NEAT feasible starts; baseline 1.705M 11/32; 0097 checkpoint sweep. |
+| [`../experiments/0099_ddqn_1_6_start_repair/`](../experiments/0099_ddqn_1_6_start_repair/) | **complete; selected 1-6 expert** | Targeted suffix repair of `[21,16]/-1`. Selected **1.815M: canonical 4.6000 s; 32/32 states, 0 deaths/timeouts, median 6.0417 s**; spawn 32/32; repeat-stable. Speed gate 4.28 still open. |
+| [`../experiments/0100_eval_ddqn_1_6_start_repair/`](../experiments/0100_eval_ddqn_1_6_start_repair/) | **complete; selected eval** | Deterministic repeat of 0099 1.815M: 4.6000 s canonical, 32/32 states, 0 deaths/timeouts. |
+| [`../experiments/0101_neat_transfer_1_7_from_1_6/`](../experiments/0101_neat_transfer_1_7_from_1_6/) | **stopped; 1-7 transfer** | Final 4-frame 1-6 population transferred to 1-7; 240 routes / 10 clusters / **0 strict clean** at gen 92, best 7.9667 s. Level analysis exported. |
+| [`../experiments/0102_neat_clean_1_7_from_0101/`](../experiments/0102_neat_clean_1_7_from_0101/) | **complete; 1-7 cleanup** | High-mutation population seeded from six 1-7 route-cluster representatives; 902 routes / 37 clusters / **0 strict clean**, best 7.0333 s; 20 grounded feasible starts; stable expert 2,495 transitions. |
+| [`../experiments/0103_ddqn_1_7_feasible_starts/`](../experiments/0103_ddqn_1_7_feasible_starts/) | **complete; selected 1-7 expert** | 8 x 1-7 from 1.815M. Selected **1.877432M: canonical 5.2333 s; near-clean 10/10, 0 deaths/timeouts, median 7.9583; all-success 18/20 (2 diagnostic timeouts)**. Provisional 5.2728 gate passes by 0.0395 s. |
+| [`../experiments/0104_eval_ddqn_1_7_feasible_starts/`](../experiments/0104_eval_ddqn_1_7_feasible_starts/) | **complete; selected 1-7 eval** | Deterministic repeat of 1.877432M: canonical 5.2333, near-clean 10/10, all-success 18/20, spawn 20/20. |
+| [`../experiments/0105_neat_transfer_1_8_from_1_7/`](../experiments/0105_neat_transfer_1_8_from_1_7/) | **complete; 1-8 clean seed** | Final 1-7 population transferred to 1-8 (DOUBLE_JUMP); 26 strict-clean routes / 11 clusters, best **4.4167 s**, 161 finishers, stopped at the clean target in 16 generations. |
+| [`../experiments/0106_ddqn_1_8_feasible_starts/`](../experiments/0106_ddqn_1_8_feasible_starts/) | **complete; 1-8 first expert** | 16/16 clean train routes replayed (1,800 stable transitions). First full-coverage candidate **1.939912M**: canonical 4.5167, clean 39/40, all-success 106/107. |
+| [`../experiments/0107_eval_ddqn_1_8_feasible_starts/`](../experiments/0107_eval_ddqn_1_8_feasible_starts/) | **complete; 1-8 sweep** | All eight 0106 checkpoints on 40 strict-clean states. 1.939912M selected: 39/40, 0 deaths, 1 timeout; 1.927416M has 40/40 but canonical 10.0667. |
+| [`../experiments/0108_eval_ddqn_1_8_all_success/`](../experiments/0108_eval_ddqn_1_8_all_success/) | **complete; all-success diagnostic** | 1.939912M and 1.927416M cover 106/107 all-success starts; 1.952408M covers 102/107 with 5 timeouts. |
+| [`../experiments/0109_ddqn_1_8_canonical_repair/`](../experiments/0109_ddqn_1_8_canonical_repair/) | **complete; 1-8 coverage repair** | Canonical-heavy 25k repair. 1.949912M reaches **40/40** clean states, canonical 4.5167; no deaths/timeouts. |
+| [`../experiments/0112_ddqn_1_8_canonical_route/`](../experiments/0112_ddqn_1_8_canonical_route/) | **complete; 1-8 canonical fix** | Canonical-only suffix fine-tune against the 4.4667 s route. 1.952408M reaches canonical **4.4667 s** but drops to 39/40 clean states. |
+| [`../experiments/0114_ddqn_1_8_start_repair/`](../experiments/0114_ddqn_1_8_start_repair/) | **complete; 1-8 start repair** | Targeted `[4,21]/-1` suffix buffer. 1.959896M becomes the first **40/40** clean model; 1.962392M keeps canonical 4.4667 but is 39/40. |
+| [`../experiments/0116_ddqn_1_8_last_start_repair/`](../experiments/0116_ddqn_1_8_last_start_repair/) | **complete; negative** | Targeted `[3,21]/-1` suffix over-corrected: 1.964888M canonical 4.4667 but only 33/40 clean. Not selected. |
+| [`../experiments/0118_ddqn_1_8_canonical_nudge/`](../experiments/0118_ddqn_1_8_canonical_nudge/) | **complete; selected 1-8 expert** | 500-step low-LR canonical nudge from 1.959896M. Selected **1.960392M: canonical 4.4667 s; clean 40/40, 0 deaths/timeouts, median 9.8833; all-success 106/107**. |
+| [`../experiments/0120_eval_ddqn_1_8_final_all_success/`](../experiments/0120_eval_ddqn_1_8_final_all_success/) | **complete; final 1-8 diagnostic** | Selected 1.960392M: canonical 4.4667, clean 40/40, all-success 106/107 (one high-revisit timeout), spawn 107/107. |
 | [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md) | **proposed** | Compact flat/embedding student options and the distillation plan for shipping a JSON policy. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |
@@ -81,6 +116,10 @@ map is stale.
 | [`reference/glossary.md`](reference/glossary.md) | Teacher, student, specialist, lineage, prefix replay, start-jump, canonical, clean route, etc. |
 | [`reference/run-artifacts.md`](reference/run-artifacts.md) | What each `runs/` directory contains and how to read its summaries. |
 | [`reference/deployed-model-58.md`](reference/deployed-model-58.md) | The frozen 58→256→256→2 JSON student shipped in the game. |
+| [`reference/ddqn-1-5-chain.md`](reference/ddqn-1-5-chain.md) | Selected two-model 1-5 DDQN chain: 1-5 3.1667 s, old levels 1.5667 / 3.1500 / 3.2667 / 4.4667; rejected single-model attempt. |
+| [`audit/2026-10-29-1-6-ddqn-investigation.md`](audit/2026-10-29-1-6-ddqn-investigation.md) | 1-6 investigation: 0099 1.815M any-start 32/32 at 4.60 s; 1.705M 4.5667 canonical-only; non-reproducible 4.07 replay; 3.07/3.2 stochastic modes; false 2.43/2.7 death times. |
+| [`audit/2026-10-29-run-reliability.md`](audit/2026-10-29-run-reliability.md) | Run reliability audit: 1.705M checkpoint discovery, death/timeout metric fix, socket/process cleanup, strict spawns, 1-6 state pool, checkpoint-selection checklist. |
+| [`audit/2026-10-29-expert-portfolio-and-student-decision.md`](audit/2026-10-29-expert-portfolio-and-student-decision.md) | **Decision:** NEAT-discovered feasible starts; one expert per level; experts are teachers; one shared student A with no level ID or per-level heads; single-level expert runs separate from the multi-level student phase. |
 
 ## Repo map
 
@@ -98,11 +137,14 @@ map is stale.
 | `src/plaiground/observations/lean_io.py` | Lean preprocessing load/create. |
 | `src/plaiground/evaluation/rollout.py` | Shared canonical/start-set evaluator. |
 | `src/plaiground/experiments/runner.py` | Config -> run paths and common CLI. |
+| `tools/level.py` | Route-tier classification, filtered pools, eval union, and per-level status. |
 | `tools/evaluate.py` | Shared PPO/DQN evaluation entry point. |
 | `tests/` | Protocol, preprocessing, model, runner, evaluation, route, pool, and experiment tests. |
 | `runs/` | Generated artifacts (gitignored): checkpoints, eval summaries, logs, per-run userdata. |
 | `archive/2026-10-27-cleanup/` | Historical scripts/runs/docs. Start at its `README.md`. |
 | `docs/code-map.md` | Generated Python/experiment/doc map; do not hand-edit. |
+| `docs/runbooks/` | Living procedures, including the new-level pipeline. |
+| `docs/reference/level-ledger.md` | Selected expert, canonical time, and gate per level. |
 | `docs/` | Architecture, contracts, audits, and historical experiment deep-dives. |
 | `notebooks/` | Tutorial notebooks; not the active training path. |
 | `data/cheatsheet/` | Small tutorial dataset. |

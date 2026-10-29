@@ -65,12 +65,15 @@ Godot training scene
 | NEAT | `scripts/genetic/01_neat.py`, `scripts/genetic/02_neat_all_levels.py`, `scripts/genetic/03_neat_lineage.py` | Population of small networks; fitness = game reward | Genome per agent |
 | PPO | `scripts/reinforcement/01_ppo.py` | One shared policy; on-policy | Policy |
 | Distillation / DAgger | archived `12_ppo_distill.py`; deployed student | Supervised student from teacher probabilities/actions | Teacher labels |
-| DQN | `scripts/reinforcement/02_dqn.py` | One shared Q-network; off-policy replay | Epsilon-greedy policy |
+| DQN / DDQN | `scripts/reinforcement/02_dqn.py`, `scripts/reinforcement/03_ddqn.py` | One shared Q-network; off-policy replay; optional expert replay + behavior margin | Epsilon-greedy policy |
 
 NEAT evaluates a whole population in one process and uses the game reward
 directly. PPO uses one process per world (or N agents/process) and SB3's
 vector-env contract. Distillation is supervised and does not use the game
-reward. DQN is the newest branch and has no result yet.
+reward. DDQN now backs the selected expert chain: 1-1..1-4 use the 0073 chain,
+1-5..1-8 have selected experts, and `tools/level.py data` builds each new
+level's route tiers and pools from the NEAT archive. Experts are teachers for
+one shared student; they are not the final level-agnostic model.
 
 ## Observation contracts
 
@@ -123,8 +126,9 @@ nested. There is no separate `state`/`info` reset split; the observation encoder
 ignores the restore metadata. Powerups are restored into the player stack while
 their pickup nodes remain held/despawned. NEAT extraction/pooling rejects a
 candidate that cannot be reproduced; Godot applies the reset or returns an
-error. This extension is implemented and smoke-tested; the 1-8+ route and
-promotion gates remain pending. See
+error. This extension is implemented and smoke-tested; the 1-8 clean-route
+archive is now validated, while the raw-observation promotion gates remain
+pending. See
 [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
 
 The low-level wrapper also supports **prefix replay**: reset to canonical, then
@@ -190,14 +194,17 @@ inventory and what to open first.
   “Linux/Windows only” note is about the upstream project; the local shim works.
 - **Linux/Windows:** place an exported `DragonJump` binary in
   `environments/` (see the README). Docker is the portable path.
-- Each Godot process needs a unique port. Port collisions look like hangs; the
-  game's own log may stop at `TRAINING_SPEEDUP` with no error.
+- Each Godot process needs a unique port. Port collisions now fail at bind with
+  a clear error; a stale process is reaped on `close()`. The game's own log may
+  stop at `TRAINING_SPEEDUP` with no error, so inspect it when startup fails.
 
 ## Where to change what
 
 | Change | Location |
 |---|---|
-| New training algorithm / driver | add `src/NN_name.py`, document in `docs/experiments/`, update `src/README.md` + `docs/status.md` |
+| New training algorithm / driver | add a package module under `src/plaiground/algorithms/`, a thin entry point under `scripts/`, document it in `docs/experiments/` or `experiments/`, and update `src/README.md` + `docs/status.md` |
+| New level route tiers / pools | `src/plaiground/data/level_data.py` + `tools/level.py data` |
+| Full level workflow | `docs/runbooks/new-level.md` + `docs/reference/level-ledger.md` |
 | Socket protocol / info decoding | `src/plaiground/envs/godot.py` + `tests/test_info_protocol.py` |
 | Observation schema mirror | `src/plaiground/observations/spec.py` (and the game's `AIObservationSpec` on the game side) |
 | Reward/observation behavior | game repo, not here; update the game vault and this repo's reference docs |

@@ -1,25 +1,100 @@
 # Status
 
-**Updated:** 2026-10-29
+**Updated:** 2026-10-30
 **Branch:** `neat`
 **HEAD:** `f7853ef` — `getting closer to the best workflow`
 **Working tree:** the repository restructure (`src/plaiground/`, `scripts/`,
 `tools/`, `experiments/`, `Makefile`, package metadata), the clean-start plan
 and audits, the lean encoder, route filtering/start pools, reward/start
 changes, and the active PPO run docs are uncommitted.
-**Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `fe7821d`
-`more fixes on ai and controls`, clean tree; the raw/lean observation,
-force-start, reward, terminal-death, clean-start world-state, and the 2026-10-29
-hold-aware contract (`legacy_stick` 61-value observation plus encoding-aware
-`reassert_held_jump`) are committed. World-state/powerup restore and
-`info_request` are implemented; the 1-4 start pool is validated and the
+**Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `50dcc66`
+`add tool to generate steam auth`, clean tree; the training/observation code is
+unchanged since the `fe7821d` commit recorded by the active manifests. The raw/
+lean observation, force-start, reward, terminal-death, clean-start world-state,
+and the 2026-10-29 hold-aware contract (`legacy_stick` 61-value observation plus
+encoding-aware `reassert_held_jump`) are committed. World-state/powerup restore
+and `info_request` are implemented; the 1-4 start pool is validated and the
 finisher-rich 0046 seed exists. The 188-input 0048 stage and
 the expanded 191 fine-tune (0053) were both stopped. The fresh level-by-level
 `lean_stick` 191 chain has passed 1-1, 1-2, 1-3, and 1-4: 0058 selected 1M at
 **1.5667 s** with full 12/12 and 8/8 coverage; 0060 added 1-2 at 3.0333
 canonical; 0063 added 1-3 at 3.1667 canonical; 0067 retained 1-1 at 1.53M;
 0073 selected **1.555M** for 1-4 with 1/1 canonical, 11/11 train, and 2/2
-holdout. 1-5 is a completed diagnostic, not the active path.)
+holdout. 1-5 now has a selected **3.1667 s** checkpoint (0085); the two-model
+chain and the rejected single-model retention attempt are described below.
+1-6 now has an **any-start expert** (0099 1.815M): **32/32** NEAT feasible
+starts finish with 0 deaths/timeouts at a 6.0417 s median, while canonical is
+**4.6000 s** (repeat-stable). The 0091 1.705M **4.5667 s** model remains the
+canonical reference but covers only **11/32** starts. The 4.28 s speed gate is
+still open; the 4.0667 s replay was not reproducible in isolation and is not
+used as teacher data.
+
+**1-7 NEAT search and expert (0101 stopped, 0102 complete, 0103/0104 complete
+2026-10-29).** The final 4-frame 1-6 population transferred to 1-7 found
+finishers but no strict clean route; 0101 was stopped after 12 generations at
+**240 routes / 0 clean**. A high-mutation cleanup seeded from six 1-7 route
+clusters (0102) completed 30 generations in **808.3 s** with **902 routes /
+37 clusters / 0 strict clean**; best **7.0333 s** (revisit 0.107, backtracks 1).
+The 902-route archive expands to **20 grounded feasible starts** (plus
+canonical); the 50 near-clean train routes replayed **23/50**, and the
+stable-replay filter kept **2,495 transitions / 18 routes** (`source_time -
+replay_time <= 0.25`).
+The 1.815M 1-6 teacher baseline was canonical timeout but **20/20** feasible
+starts (median 11.4917 s, best 7.7500 s).
+
+The 1-7-only DDQN (0103) completed 100k from 1.815M. The selected checkpoint is
+**1.877432M**:
+
+```text
+canonical:          1/1, 5.2333 s, 0 deaths/timeouts (repeat exact)
+near-clean pool:   10/10, 0 deaths/timeouts, median 7.9583, best 5.7667
+all-success pool:  18/20, 0 deaths, 2 timeouts (diagnostic)
+spawn_ok:          10/10 near-clean, 20/20 all-success
+```
+
+The two all-success timeouts are late facing-right states from a high-revisit
+route (`8f687...`, revisit 0.43) and are not part of the near-clean gate. The
+**provisional** par + 0.30 s gate is **5.2728 s**; 1.877432M passes by 0.0395 s.
+The 1.889928M/1.914920M checkpoints have a faster canonical **5.2167 s** but
+only 15/16 of 20 all-success starts, so 1.877432M is the any-start selection.
+Strict clean routes remain unavailable for 1-7; the accepted 1-7 gate uses
+near-clean routes (`revisit_ratio <= 0.20`, `backtracks <= 2`). The final 1-7
+target is still open.
+
+**1-8 NEAT and expert (0105-0120 complete 2026-10-30).** The final 1-7
+population transferred to 1-8 (DOUBLE_JUMP) and found clean routes immediately:
+**26 strict-clean routes / 11 clusters**, best **4.4167 s**, in 16 generations
+(0105). After filtering (Jaccard 0.5, 8 per cluster, 25% cluster holdout), the
+pool has 16 train / 10 holdout routes, **37 train / 14 holdout** grounded
+states, and **40 unique clean states** for evaluation. The 16 train routes
+replayed **16/16** exactly; the stable expert buffer kept **1,800 transitions**.
+
+The 1-8-only DDQN (0106) selected **1.939912M** provisionally: canonical
+**4.5167 s**, clean **39/40**, all-success **106/107**. A canonical-heavy repair
+(0109) reached **40/40** clean states at 1.949912M but canonical stayed 4.5167.
+The canonical fast-route fine-tune (0112) reached **4.4667 s** but dropped one
+state; two targeted repairs (0114, 0116) narrowed the gap, and a 500-step
+low-LR nudge (0118) produced the selected **1.960392M**:
+
+```text
+canonical:          1/1, 4.4667 s, 0 deaths/timeouts (repeat exact)
+clean pool:        40/40, 0 deaths/timeouts, median 9.8833, best 4.5500
+all-success pool: 106/107, 0 deaths, 1 timeout (high-revisit route)
+spawn_ok:          40/40 clean, 107/107 all-success
+```
+
+The selected model passes the provisional par + 0.30 s gate **4.5144 s** by
+**0.0477 s**. The fastest overall NEAT route is **4.4167 s**, but it belongs to
+holdout cluster `c000`; the expert reproduces the fastest **train** route at
+4.4667 s. That is a coverage/speed split decision, not a checkpoint failure.
+The one all-success timeout is `[16,21]` facing `1` from the high-revisit route
+`36a6b1e1...` (revisit 0.226), which is not strict clean. The final 1-8 target
+is still open. See
+[`../experiments/0105_neat_transfer_1_8_from_1_7/README.md`](../experiments/0105_neat_transfer_1_8_from_1_7/README.md)
+and
+[`../experiments/0118_ddqn_1_8_canonical_nudge/README.md`](../experiments/0118_ddqn_1_8_canonical_nudge/README.md).
+The full sequence is in
+[`audit/2026-10-30-1-8-expert.md`](audit/2026-10-30-1-8-expert.md).
 
 > This page is the current state. Historical sections in `README.md` and older
 > experiment docs are not authoritative. When they disagree, this page and
@@ -27,7 +102,48 @@ holdout. 1-5 is a completed diagnostic, not the active path.)
 
 ## Current focus
 
-**Fresh lean_stick 191 chain (2026-10-29; 1-1, 1-2, 1-3, and 1-4 complete).** The expanded
+> **Architecture decision (2026-10-29):** NEAT discovers feasible starts; every
+> campaign level gets its own expert trained/evaluated on that level's NEAT
+> starts; the final product is one shared student A with no level ID or
+> per-level heads. Active implementation is 1-1..1-9; 1-7 has a selected
+> near-clean expert (0103 1.877432M), 1-8 has a selected strict-clean expert
+> (0118 1.960392M), and 1-9 is a selected **single-route** expert
+> (0122 2.060360M) because the user confirmed 1-9 is a precision map with one
+> route to optimize. 1-10..1-16 follow the same procedure. See
+> [`audit/2026-10-29-expert-portfolio-and-student-decision.md`](audit/2026-10-29-expert-portfolio-and-student-decision.md).
+
+**Level pipeline tooling (2026-10-30).** The post-NEAT artifact step is now
+repeatable: `tools/level.py data` classifies strict/near/all-success routes,
+filters the accepted tier, builds train/holdout pools, and writes the
+deduplicated eval union. It reproduces the existing 1-8 result exactly
+(26 strict routes, 37/14 states, 40 eval) and the 1-7 near-clean fallback
+(10/10 states). It also warns when the fastest route cluster is holdout-only,
+which is the 1-8 4.4167 s / 4.4667 s tradeoff. Follow
+[`runbooks/new-level.md`](runbooks/new-level.md) and record selections in
+[`reference/level-ledger.md`](reference/level-ledger.md).
+
+**1-9 single-route expert (0121/0122/0123/0124, 2026-10-30).** The 1-8
+population transferred to 1-9 immediately. The seeded NEAT run was stopped at
+generation 89 after finding 11 strict-clean routes / 6 clusters, best
+**2.9500 s**. The fastest route (`926883...`) was replayed in `lean_stick` at
+**43/43 decisions, 2.9500 s**, and used for a canonical-only 1-9 DDQN fine-tune
+from the 1-8 expert. All eight checkpoints finish canonical 1-9 at **2.9500 s**;
+the selected checkpoint is `ddqn_2060360_steps.zip`, under the provisional
+**3.0648 s** gate. Training monitor: 85% finish in the last 200 episodes.
+
+Retention is partial: deterministic canonical 1-1..1-9 finishes **1-1
+(2.5167 s), 1-3 (6.0167 s), and 1-9 (2.9500 s)**; 1-1 and 1-9 pass the
+provisional gates, 1-3 finishes but misses its gate, and 1-2, 1-4, 1-5, 1-6,
+1-7, and 1-8 fail. This is a 1-9-only expert, not a multi-level policy. See
+[`../experiments/0122_ddqn_1_9_single_route/README.md`](../experiments/0122_ddqn_1_9_single_route/README.md)
+and [`reference/level-ledger.md`](reference/level-ledger.md).
+
+**Next level:** 1-10 (DOUBLE_SHORT), par 3.0336 / provisional gate 3.3336. The
+1-10 level analysis still needs to be exported. The NEAT population seed is
+`runs/neat_transfer_1_9_from_1_8/neat-checkpoint-89`; the expert base is the
+selected 1-9 `ddqn_2060360_steps.zip`. See the ledger for the handoff.
+
+**Fresh lean_stick 191 chain (2026-10-29; 1-1..1-5 selected as a two-model chain; 1-6 any-start expert 32/32, 4.60 canonical, 4.28 gate open).** The expanded
 191 fine-tune (0053) reproduced the earlier signal-arm failure pattern: 1-3
 regressed sharply and 1-4 improved only from 1/11 to 2/11. The chain was
 restarted at 1-1 with a fresh 191 backbone, no 188 weights, the 12/8 discovered
@@ -163,6 +279,96 @@ so the 0078 "half speed" show actually ran at normal speed. Watch it with
 `make watch` (`WATCH_LEVEL=1-4` for one level). See
 [`../experiments/0079_show_chain_1_1_to_1_4_0073/README.md`](../experiments/0079_show_chain_1_1_to_1_4_0073/README.md).
 
+**1-5 route collection + DDQN (0080–0088, 2026-10-29; selected two-model chain).**
+0080 extended the 0047 1-5 population from generation 20 to 50: 284 routes,
+16 clean, best clean **4.6833 s**, generation 50 382/384. The raw reward ranked
+a 7.1167 s finisher above the 4.6833 s route, so 0081 added
+`--time-fitness-weight 20` and ran at **action_repeat 2** (30 Hz). It was
+stopped at generation 95 with **best clean 4.39999 s** and an archive of
+**569 routes / 130 clean**; the speed bin went from 0 to roughly 88–100%, but
+the search plateaued above the 3.41 s acceptance gate.
+
+0082 tried the 2-frame 4.40 s expert (32 train routes, 28/32 replayed, 4,191
+expert transitions) with a 2-frame anchor (median 3.25 s, 409 timeouts). Its
+deterministic 1.58M eval was **1-5 0/1 (death), 1-4 timeout, 1-1 2.9333 s**, so
+the control-rate change was rejected. 0085 retried at **4 frames** with all 16
+clean 4-frame routes (16/16 replay, **1,510 expert transitions**, 4.68 s cluster
+included), the proven 1.53M 4-frame anchor, and the 1.555M resume. Its final
+1.655M deterministic eval (repeated twice) is **1-5 3.1667 s** (finish,
+efficiency 1.0), **1-3 3.1667 s**, **1-1 1.5667 s**, but **1-4 fail** (death +
+timeout) and **1-2 5.3500 s**. The 1.555M old chain model still holds 1-1..1-4
+(0079: 1.5667 / 3.1500 / 3.2667 / 4.4667), so the practical chain is two models:
+0085 final for 1-5, 1.555M for 1-1..1-4. That passes every 0.2 s gate (1-5
++0.057 s). 0088 then tried a single-model retention fine-tune from 1.655M with
+2 x 1-5 + 2 x 1-4 + 2 x 1-3 + 2 x 1-2 and a fresh 1.555M all-level anchor
+(5,105 episodes, median 3.00 s, best 1.5667 s, 6 timeouts). Its final checkpoint
+gave **1-5 3.5000 s** (0.09 s over the 3.41 s outer gate), **1-4 timeout**,
+1-3 3.2000 s, 1-2 3.0167 s, and 1-1 1.5667 s. The fine-tune fixed 1-2 and 1-3
+but did not recover 1-4 and pushed 1-5 outside the gate, so the single-model
+attempt is rejected. The selected deliverable is the two-model chain. A future
+single-model attempt should freeze the 1-5 head or give 1-4 its own expert
+buffer rather than repeating the same fine-tune. See
+[`../experiments/0081_neat_speed_1_5_from_0080/README.md`](../experiments/0081_neat_speed_1_5_from_0080/README.md),
+[`../experiments/0085_ddqn_expert_replay_1_5_4frame/README.md`](../experiments/0085_ddqn_expert_replay_1_5_4frame/README.md),
+and
+[`../experiments/0088_ddqn_retention_1_5_4frame/README.md`](../experiments/0088_ddqn_retention_1_5_4frame/README.md).
+
+**1-6 any-start expert (0090–0100, 2026-10-29; 32/32 feasible starts, canonical 4.60 s, speed gate open).**
+0090 seeded the **4-frame** 1-5 population on 1-6 and found a 4.5500 s best / 25
+clean routes. 0091 trained the 1-6 DDQN from the selected 1-5 model. Its best
+checkpoint is **1.705M at 4.5667 s** (`runs/ddqn_expert_replay_1_6_lean_stick/dqn/checkpoints/ddqn_1705000_steps.zip`;
+1.68M 4.6833; 1.73M 8.60; 1.755M 8.3167; final 7.25). That model is
+canonical-only: on the full 32-state pool it finishes only **11/32** (20 deaths,
+1 timeout, median 6.1167 s). It lost 1-5/1-4 and is not a chain member.
+
+0093 ran the 1-6 speed search for 30 generations (602 s): best **4.5000 s**,
+archive **376 routes / 263 clean**, still +0.22 over the 4.28 gate. Expanding
+all 263 clean routes against the exported level analysis gives **32 unique
+grounded state starts** (cell/facing/powerup), including the true holdout
+`[22,16]` facing `-1`. The old 0090 pool had only 11 train / 6 holdout states
+because it used 22 routes.
+
+The 0095 fast replayed routes are **not reproducible** in isolation. A second
+replay gave 4.7167 s for the 3.1833 s route, 5.0500 s for the 3.9833 s route,
+and a death at 2.7167 s for the 4.0667 s route. The 4.0667 s "clean route" is
+therefore not usable teacher data. 0097 rebuilt the expert buffer from the
+**85 stable routes / 7,365 transitions** whose replay is no more than 0.25 s
+faster than the source, then trained 8 x 1-6 from the 1.705M checkpoint on
+canonical + 31 state starts (50/50 weight), with no old-level anchor.
+
+The 0097 sweep:
+
+```text
+1.7425M: canonical 4.5500; 27/32 states
+1.7550M: canonical 4.6500; 31/32 states (1 timeout)
+1.7675M: canonical 4.6500; 32/32 states (0 deaths/timeouts)
+1.7925M: canonical 4.5500; 31/32 states (one death)
+1.8050M: canonical 4.5500; 31/32 states (one death)
+```
+
+0099 repaired the single remaining failure (`[21,16]` facing `-1`) with a
+targeted suffix expert buffer and selected **1.815M**:
+
+```text
+runs/ddqn_1_6_start_repair/dqn/checkpoints/ddqn_1814952_steps.zip
+canonical:   1/1, 4.6000 s, 0 deaths, 0 timeouts
+32 states:   32/32, 0 deaths, 0 timeouts, median 6.0417 s, best 4.6667 s
+spawn_ok:    32/32
+repeat:      same 4.6000 / 32/32
+```
+
+This is the first 1-6 expert that covers every NEAT-discovered feasible start.
+It is still **0.32 s over the 4.28 s gate** and 0.62 s over the user's 3.98 s;
+the stable NEAT route is 4.50 s, so the speed gap is now a route/search problem,
+not only a start-coverage problem. Keep the 1.705M 4.5667 model as the
+canonical reference and the 1.815M model as the any-start teacher. The next
+speed options are a proper 2-frame attempt or a faster clean NEAT route; do not
+re-use the non-reproducible 3.3/4.07 replays as deterministic targets. See
+[`../audit/2026-10-29-1-6-ddqn-investigation.md`](../audit/2026-10-29-1-6-ddqn-investigation.md),
+[`../audit/2026-10-29-run-reliability.md`](../audit/2026-10-29-run-reliability.md),
+and
+[`../experiments/0097_ddqn_1_6_feasible_starts/README.md`](../experiments/0097_ddqn_1_6_feasible_starts/README.md).
+
 **Evaluation/action-semantics fix (2026-10-29).** The eval factory did not pass
 `reassert_held_jump` to Godot, while training did. That made the first 0058 1M
 eval report `2.7000 s` instead of `1.5667 s`. The Python side now defaults the
@@ -245,8 +451,8 @@ The 100k probe was stopped for the decision point:
 1-4 improved only slightly (1/11 -> 2/11) and 1-3 regressed, so the checkpoint
 is not promotable. Do not retrain the whole backbone yet; the next decision is
 whether to continue 191 with more old-level protection or freeze part of the
-188 backbone. The 1-5 transfer (0047) is a completed diagnostic (384/384, 9
-clean at 4.6833 s) and is not being pursued further right now. See the
+188 backbone. The 1-5 transfer (0047) was a diagnostic (384/384, 9 clean at
+4.6833 s); 0080/0081 now extend it into a speed-targeted route search. See the
 [level-transfer playbook](audit/2026-10-29-level-transfer-playbook.md) and
 the [reward/fitness audit](audit/2026-10-29-reward-fitness-audit.md).
 
@@ -951,6 +1157,7 @@ re-measured here.
 | 794 sensor PPO | 1-2 | **3.0667 s** canonical; full 1-2 strata | `runs/ppo_sensor_1_2_from900k/` |
 | 794 sensor PPO | 1-3 | not solved: canonical 0/1, medium 25/46, hard 5/27 | `runs/ppo_sensor_1_3_from1_2/` |
 | 794 distilled | 1-3 | **3.9 s** canonical; medium 43/46, hard 25/27, easy 24/24 | `runs/distill_1_3_merged_available/` |
+| DDQN single-route | 1-9 | **2.9500 s** canonical; 8/8 checkpoints; retention 3/9 finish, 2/9 pass gate | `runs/ddqn_1_9_single_route/` |
 | Deployed 58/256 | 1-1…1-16 | 16/16, 100/100, 0 deaths, **78.583 s** sum; 1-1 2.333 s | `godot/src/resources/ai/student_obs58_256.json` in the game repo |
 
 **2026-10-28 contract validation:**

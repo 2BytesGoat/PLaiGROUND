@@ -55,6 +55,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run without opening the game window.",
     )
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=1,
+        help="Number of preview episodes to run in the same window.",
+    )
     parser.add_argument("--tag", default=None)
     parser.add_argument("--device", default=None)
     parser.add_argument("--verbose", type=int, default=None)
@@ -102,36 +108,44 @@ def main() -> int:
         show_window=not args.headless,
         speedup=args.speedup,
     )
+    episodes = max(1, int(args.episodes))
+    all_rows: list[dict] = []
     try:
-        rows = run_starts(
-            model,
-            env,
-            starts,
-            preprocessor=preprocessor,
-            max_decisions=run.max_decisions,
-            action_repeat=run.action_repeat,
-            force_start_jump=(
-                bool(starts[0].get("canonical"))
-                and bool(run.env.get("force_start_jump", False))
-            ),
-        )
+        for episode in range(episodes):
+            rows = run_starts(
+                model,
+                env,
+                starts,
+                preprocessor=preprocessor,
+                max_decisions=run.max_decisions,
+                action_repeat=run.action_repeat,
+                force_start_jump=(
+                    bool(starts[0].get("canonical"))
+                    and bool(run.env.get("force_start_jump", False))
+                ),
+            )
+            all_rows.extend(rows)
+            row = rows[0]
+            print(
+                f"[watch {episode + 1}/{episodes}] "
+                f"algorithm={run.algorithm_name} level={level} "
+                f"start={row.get('start_kind')} "
+                f"cell={row.get('start_cell') or '-'} "
+                f"finished={row['finished']} time={row['run_time'] or '-'} "
+                f"steps={row['steps']} reward={row['reward']:.2f}",
+                flush=True,
+            )
     finally:
         env.close()
 
-    summary = summarize(rows)
-    row = rows[0]
-    print(
-        f"[watch] algorithm={run.algorithm_name} level={level} "
-        f"start={row.get('start_kind')} cell={row.get('start_cell') or '-'} "
-        f"finished={row['finished']} time={row['run_time'] or '-'} "
-        f"steps={row['steps']} reward={row['reward']:.2f}"
-    )
+    summary = summarize(all_rows)
     print(
         f"[watch] finish={summary['finishes']}/{summary['agents']} "
-        f"timeouts={summary['timeouts']} spawn_ok={row['spawn_ok']}",
+        f"timeouts={summary['timeouts']} "
+        f"spawn_ok={sum(1 for row in all_rows if row['spawn_ok'])}",
         flush=True,
     )
-    return 0 if row["finished"] else 1
+    return 0 if all(row["finished"] for row in all_rows) else 1
 
 
 if __name__ == "__main__":

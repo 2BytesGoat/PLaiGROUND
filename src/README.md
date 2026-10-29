@@ -23,7 +23,7 @@ uv pip install --python .venv/bin/python -e . --no-deps
 | `src/plaiground/envs/` | `GodotEnv`, Gymnasium/SB3 adapters, shared factory, runtime/launcher, legacy wrapper. |
 | `src/plaiground/models/extractors/` | Frozen legacy grid/autoencoder feature extractors. |
 | `src/plaiground/observations/` | Observation contract (`spec.py`), lean decoder, sklearn-style preprocessing, `lean_io.py`. |
-| `src/plaiground/data/` | Route filtering, clean-start pool construction, route extraction, and shared start/pool loaders. |
+| `src/plaiground/data/` | Route filtering, strict/near/all route tiers, clean-start pool construction, route extraction, and shared start/pool loaders. |
 | `src/plaiground/models/` | Model architectures (`LeanMLP`) and frozen legacy extractors. |
 | `src/plaiground/algorithms/genetic/` | NEAT population, all-level, and lineage trainers. |
 | `src/plaiground/algorithms/reinforcement/` | Thin PPO/DQN/Double-DQN adapters (`ppo.py`, `dqn.py`, `ddqn.py`). |
@@ -44,6 +44,7 @@ uv pip install --python .venv/bin/python -e . --no-deps
 | `scripts/reinforcement/01_ppo.py` | PPO train from an experiment manifest. |
 | `scripts/reinforcement/02_dqn.py` | DQN train from an experiment manifest. |
 | `scripts/reinforcement/03_ddqn.py` | Double-DQN train from an experiment manifest. |
+| `tools/level.py` | Route tiers, filtered pools, eval union, and per-level status. |
 | `tools/evaluate.py` | Shared PPO/DQN canonical + start-set evaluation. |
 | `tools/repo_index.py` | Generate `docs/code-map.md` and `.cache/repo-index.json`. |
 | `tools/context.py` | Rank code, experiments, docs, and runs for a task query. |

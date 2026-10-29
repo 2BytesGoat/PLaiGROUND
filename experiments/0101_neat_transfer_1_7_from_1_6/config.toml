@@ -1,0 +1,67 @@
+# 0101 — 1-7 NEAT transfer from the 4-frame 1-6 population.
+
+[experiment]
+id = "0101"
+name = "neat_transfer_1_7_from_1_6"
+status = "stopped"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "50dcc66"
+allow_dirty = false
+
+[env]
+level = "1-7"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "NEAT route search keeps the 61-value contract; the eventual DDQN replays the routes in the lean_stick 191 environment."
+
+[action]
+reassert_held_jump = true
+
+[fitness]
+time_weight = 20.0
+formula = "finisher fitness = game reward - 20 * run_time"
+
+[source]
+source_experiment = "0093"
+resume_checkpoint = "runs/neat_speed_1_6_from_0090/neat-checkpoint-81"
+source_level = "1-6"
+source_generation = 81
+note = "Use the final rebalanced 1-6 population. It is 4-frame and has a stable 4.50 s clean route."
+
+[targets]
+user_time = 4.9728
+acceptable_time = 5.2728
+note = "Provisional: level par time plus 0.30 s. The route search is gated on clean-route coverage first."
+
+[collection]
+record_paths = true
+generations = 50
+min_clean_routes = 25
+checkpoint_interval = 1
+rebalance_every = 2
+rebalance_final = true
+port = 18800
+seed = 42
+note = "No target-time early stop. Stop at 25 clean routes or 50 generations, then decide whether to extend the speed search."
+
+[output]
+dir = "runs/neat_transfer_1_7_from_1_6"
+archive_dir = "runs/neat_transfer_1_7_from_1_6/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --level 1-7 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_speed_1_6_from_0090/neat-checkpoint-81 --output-dir runs/neat_transfer_1_7_from_1_6 --archive-dir runs/neat_transfer_1_7_from_1_6/archive --generations 50 --parallel 8 --action-repeat 4 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 1 --rebalance-every 2 --rebalance-final --min-clean-routes 25 --time-fitness-weight 20 --port 18800"

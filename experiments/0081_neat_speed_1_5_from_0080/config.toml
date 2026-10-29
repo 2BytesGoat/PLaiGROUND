@@ -1,0 +1,81 @@
+# 0081 — speed-selected 1-5 NEAT search from the 0080 population.
+# The raw game reward ranks a 7.12 s finisher above the 4.68 s route. This run
+# adds an explicit time penalty so the fast lineage is selected and mutated.
+
+[experiment]
+id = "0081"
+name = "neat_speed_1_5_from_0080"
+status = "stopped"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "fe7821d"
+allow_dirty = false
+
+[env]
+level = "1-5"
+population = 384
+parallel = 8
+action_repeat = 2
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+
+[action]
+reassert_held_jump = true
+note = "30 Hz control (2 physics frames per decision) instead of the 15 Hz used by 0047/0080. The 1-5 bunny-hop timing may need the finer resolution."
+
+[fitness]
+time_weight = 20.0
+formula = "finisher fitness = game reward - 20 * run_time"
+note = "Only finishers are penalized; deaths and timeouts keep their raw reward. At weight 20 the 4.68 s route beats the 7.12 s fitness-best route by about 39 points."
+
+[source]
+source_experiment = "0080"
+resume_checkpoint = "runs/neat_extend_1_5_from_0047/neat-checkpoint-50"
+archive_dir = "runs/neat_transfer_1_5_from_1_4/archive"
+source_generation = 50
+
+[targets]
+user_time = 3.11
+acceptable_time = 3.41
+note = "User time plus 0.3 s is the red-flag threshold; 3.11 s is the goal."
+
+[collection]
+record_paths = true
+generations = 100
+target_time = 3.11
+min_clean_routes = 0
+checkpoint_interval = 1
+rebalance_every = 2
+rebalance_final = true
+port = 18300
+seed = 42
+note = "Disable the clean-route early stop: the archive already has 16 clean slow routes, and stopping at 25 would end the speed search early."
+
+[handoff]
+from_run = "runs/neat_extend_1_5_from_0047"
+to_run = "runs/neat_speed_1_5_from_0080"
+files = [
+  "best_time.json",
+  "best_time_genome.pkl",
+  "best_clean.json",
+  "best_clean_genome.pkl",
+]
+note = "Copy only raw-time bests. Do not copy history.csv or genome_stats.csv because fitness semantics change."
+
+[output]
+dir = "runs/neat_speed_1_5_from_0080"
+archive_dir = "runs/neat_transfer_1_5_from_1_4/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --level 1-5 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_extend_1_5_from_0047/neat-checkpoint-50 --output-dir runs/neat_speed_1_5_from_0080 --archive-dir runs/neat_transfer_1_5_from_1_4/archive --generations 100 --parallel 8 --action-repeat 2 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 1 --rebalance-every 2 --rebalance-final --target-time 3.11 --time-fitness-weight 20 --port 18300"

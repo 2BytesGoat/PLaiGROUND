@@ -43,6 +43,26 @@ DEFAULT_OUTPUT = REPO / "runs" / "neat_1_1"
 DEFAULT_MAX_STEPS = 600  # 10 seconds at 60 decisions/s (action_repeat=1)
 
 
+def apply_time_penalty(
+    scores: np.ndarray,
+    finish_times: np.ndarray,
+    weight: float,
+) -> np.ndarray:
+    """Subtract ``weight * run_time`` from each finisher's fitness.
+
+    The game reward already contains a time-pressure term, but the finish
+    bonus and flow/efficiency shaping dominate it: slow finishers can outrank
+    fast ones. This optional term adds explicit selection for speed without
+    changing non-finisher scores. ``weight=0`` is a no-op.
+    """
+    if weight <= 0.0:
+        return scores
+    adjusted = np.array(scores, dtype=np.float64, copy=True)
+    finished = np.isfinite(finish_times)
+    adjusted[finished] -= float(weight) * finish_times[finished]
+    return adjusted
+
+
 class RewardEvaluator:
     """Evaluate every genome as one agent in the same deterministic level."""
 
@@ -62,8 +82,10 @@ class RewardEvaluator:
         initial_generation: int = 0,
         obs_encoding: str = "legacy",
         reassert_held_jump: bool = False,
+        time_fitness_weight: float = 0.0,
     ) -> None:
         self.level = level
+        self.time_fitness_weight = max(0.0, float(time_fitness_weight))
         self.max_steps = max_steps
         self.output_dir = output_dir
         self.action_repeat = action_repeat
@@ -381,9 +403,10 @@ class RewardEvaluator:
             # train()/evaluate() own the final close.
             pass
 
-        # The environment reward is the fitness. No second fitness function is
-        # added here: flow progress, efficiency, time pressure, finish, and
-        # death are already encoded by PlayerAITrainingController.get_reward().
+        # The environment reward is the base fitness. The optional time penalty
+        # makes speed an explicit selection term; the game's own time pressure
+        # is too small relative to finish/flow shaping to rank fast routes first.
+        scores = apply_time_penalty(scores, finish_times, self.time_fitness_weight)
         for (genome_id, genome), score in zip(genomes, scores):
             genome.fitness = float(score)
 
@@ -1000,6 +1023,7 @@ def train(args: argparse.Namespace) -> None:
         initial_generation=initial_generation,
         obs_encoding=args.obs_encoding,
         reassert_held_jump=args.reassert_held_jump,
+        time_fitness_weight=args.time_fitness_weight,
     )
 
     last_rebalance_generation: int | None = None
@@ -1123,6 +1147,7 @@ def evaluate(args: argparse.Namespace) -> None:
         initial_generation=int(getattr(population, "generation", 0)),
         obs_encoding=args.obs_encoding,
         reassert_held_jump=args.reassert_held_jump,
+        time_fitness_weight=args.time_fitness_weight,
     )
     start = time.time()
     try:
@@ -1245,6 +1270,13 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help="Stop after the generation whose best finish time is <= this value.",
+    )
+    parser.add_argument(
+        "--time-fitness-weight",
+        type=float,
+        default=0.0,
+        help="Subtract this many fitness points per second of finish time "
+        "(0 = off; only finishers are affected).",
     )
     parser.add_argument(
         "--min-clean-routes",

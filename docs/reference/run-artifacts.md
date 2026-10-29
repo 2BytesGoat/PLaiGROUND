@@ -4,7 +4,7 @@
 each active run directory is for and where to look first. Add a row when a run
 becomes important; do not commit the run itself.
 
-Sizes are approximate from 2026-10-28.
+Sizes are approximate from 2026-10-30.
 
 ## Active / reference runs
 
@@ -54,6 +54,36 @@ Sizes are approximate from 2026-10-28.
 | `runs/neat_explore_1_3_long/rebalanced_fixed/` | 508 KB | **seed; innovation tracker fixed** | Rebalanced checkpoint 66 with tracker advanced to 5691; use instead of the original rebalanced checkpoint. | `rebalanced-66`, `rebalanced-.portfolio.json` |
 | `runs/benchmarks/2026-10-29_macbook-air-m5_clean/` | 1 MB | **reference; battery sweep** | NEAT throughput sweep on Apple M5. Battery winner: **8×12 at 42.11 s/generation**; 12 processes oversubscribed. | `results.md`, `results.json` |
 | `runs/benchmarks/2026-10-29_macbook-air-m5_ac/` | 1 MB | **reference; AC winner** | AC-power rerun: **8×12 at 28.81 s/generation**, 2.64 GB peak. | `results.md`, `results.json` |
+| `runs/ddqn_expert_replay_1_4_lean_stick/` | 186 MB | **complete; 1.555M selected** | 0073/0079: 1-4 expert replay, 1.555M chain. 1-1..1-4 canonical **1.5667 / 3.1500 / 3.2667 / 4.4667**, all finish, no deaths. | `dqn/checkpoints/ddqn_1555000_steps.zip`, `eval/` |
+| `runs/chain_check_1_1_to_1_4_1555k/` | 108 KB | **complete; chain check** | 0079: windowed 1-1..1-4 replay of the 1.555M checkpoint; times match 0073 exactly. | `eval/watch_1555k_1x/summary.json` |
+| `runs/neat_speed_1_5_from_0080/` | 26 MB | **stopped; best 4.4000 s** | 0081: time-penalized 2-frame search, stopped at generation 95. 569 routes / 130 clean; 2-frame subset 32 train / 4 holdout; speed plateaued above the 3.41 s gate. | `clean_2frame_routes.json`, `filtered_2frame/`, `pool_2frame/` |
+| `runs/ddqn_expert_replay_1_5_lean_stick/` | 138 MB | **stopped; 2-frame negative** | 0082: 2-frame 4.40 s expert, 4,191 transitions, 2-frame anchor. 1.58M deterministic: **1-5 0/1, 1-4 timeout, 1-1 2.9333 s**. | `expert_buffer_1_5_2frame.pkl`, `eval/eval_1580000/summary.json` |
+| `runs/ddqn_anchor_1555_2frame/` | 1.4 GB | **complete; degraded 2-frame anchor** | 0083: 200k 2-frame transitions from the 4-frame 1.555M model. 2,229 episodes, median 3.25 s, 409 timeouts; do not mix with 4-frame training. | `rare/replay_buffer_200k.pkl`, `replay_buffer_200k.json` |
+| `runs/ddqn_expert_replay_1_5_4frame/` | 145 MB | **complete; 1-5 3.1667 selected** | 0085: 16 clean 4-frame routes / 1,510 expert transitions; final **1-5 3.1667 s** (twice), 1-1/1-3 retained, 1-4/1-2 not. | `dqn/dqn_final.zip`, `eval/eval_final/summary.json` |
+| `runs/ddqn_anchor_1555_all_levels_4frame/` | 1.4 GB | **complete; retention anchor** | 0087: 200k all-level 4-frame anchor from 1.555M. 5,105 episodes, median 3.00 s, best 1.5667 s, 6 timeouts. | `rare/replay_buffer_200k.pkl` |
+| `runs/ddqn_retention_1_5_4frame/` | 80 MB | **complete; single-model negative** | 0088: 25k retention fine-tune. Final **1-5 3.5000 s**, 1-4 timeout, 1-3 3.2000, 1-2 3.0167, 1-1 1.5667. Not selected. | `eval/eval_final/summary.json` |
+| `runs/neat_transfer_1_6_from_1_5/` | 3.8 GB | **complete; 1-6 seed + speed archive** | 0090/0093: 4-frame 1-6 search. Initial 4.5500 s / 25 clean; speed run best **4.5000 s**, 376 routes / 263 clean; 0093 finished in 602 s. | `history.csv`, `archive/`, `best_clean.json` |
+| `runs/neat_transfer_1_6_from_1_5/pool_state/` | 128 KB | **historical; small state pool** | The first 1-6 analysis pool: 11 train / 6 holdout state starts (5 shared keys), canonical weight 0.70. The full 263-route expansion is in `runs/neat_speed_1_6_from_0090/pool_state_*`. | `train_start_pool.json`, `holdout_start_pool.json`, `split.json` |
+| `runs/neat_speed_1_6_from_0090/` | 17 MB | **complete; 1-6 speed** | 0093: 30-generation time-penalized continuation. Best 4.5000 s at gen 68; target 3.98 not reached. `filtered/` holds 133 clean / 33 clusters / 104 train / 29 holdout; `filtered_all/` holds all 263 clean / 227 train / 36 holdout. | `history.csv`, `filtered/summary.json`, `filtered_all/summary.json` |
+| `runs/neat_speed_1_6_from_0090/pool_state_50/` | 160 KB | **complete; any-start pool** | All 263 clean routes expanded: 31 train states + canonical, 16 holdout states (15 shared), 0.5/0.5 weights. `eval_all_start_pool.json` is the 32-state coverage gate. | `train_start_pool.json`, `holdout_start_pool.json`, `eval_all_start_pool.json`, `split.json` |
+| `runs/neat_speed_1_6_from_0090/pool_state_70/` | 160 KB | **complete; conservative pool** | Same 31/32 states with 0.7 canonical / 0.3 state weights. Used by 0099. | `train_start_pool.json`, `holdout_start_pool.json`, `eval_all_start_pool.json` |
+| `runs/ddqn_expert_replay_1_6_lean_stick/` | 148 MB | **complete; 1-6 4.57 canonical** | 0091: 1-6 DDQN from the 1-5 model. Best checkpoint **1.705M: 4.5667 s**; 1.68M 4.6833; 1.73M 8.60; 1.755M 8.3167; final 7.25; old levels fail. Full 32-state pool: **11/32**, 20 deaths, 1 timeout, median 6.1167 (see 0097 baseline). | `dqn/checkpoints/ddqn_1705000_steps.zip`, `eval/selected_default_check/summary.json` |
+| `runs/ddqn_anchor_1_6_1680/` | 1.4 GB | **complete; 1-6-only anchor** | 0094: 200k rare transitions from the 1.68M model. 3,224 episodes, 1,697 finishes / 1,412 deaths / 115 timeouts; median 4.6833; stochastic best finish 3.0667; reported 2.4333 is a **death**. | `rare/replay_buffer_200k.pkl`, `rare/collect_episodes_200k.csv` |
+| `runs/ddqn_1_6_retrain/` | 489 MB | **complete; 1-6-only negative** | 0095: 8 x 1-6 + 1-6 anchor + 4.07 s replay. Final **6.3833 s**; intermediate 8.50/timeouts. The 4.07 replay is not reproducible in isolation; see the 0097 audit. | `eval/eval_final/summary.json`, `expert_1_6/expert_routes.npz` |
+| `runs/ddqn_1_6_feasible_starts/` | 150 MB | **complete; any-start base** | 0097: 100k from 1.705M, 8 x 1-6, 32 state starts, 85 stable expert routes. First 32/32 at **1.7675M** (canonical 4.65); 1.805M 4.55 but 31/32. | `dqn/checkpoints/ddqn_1767480_steps.zip`, `eval/check_*/summary.json`, `expert_1_6/stable_expert_buffer.pkl` |
+| `runs/ddqn_1_6_start_repair/` | 80 MB | **complete; selected 1-6 expert** | 0099: targeted suffix repair from 1.805M; selected **1.815M**. Canonical **4.6000 s**; **32/32** states, 0 deaths/timeouts, median 6.0417, spawn 32/32; repeat-stable. Speed gate 4.28 open. | `dqn/checkpoints/ddqn_1814952_steps.zip`, `eval/selected_repeat/summary.json`, `expert_1_6/repair_suffix_buffer.pkl` |
+| `runs/neat_transfer_1_7_from_1_6/` | 1.5 GB | **stopped; 1-7 transfer** | 0101: 4-frame 1-6 population transferred to 1-7. Generations 81-92: 240 routes / 10 clusters / **0 strict clean**, best 7.9667 s. | `neat-checkpoint-92`, `archive/routes.json`, `history.csv` |
+| `runs/neat_clean_1_7_from_0101_attempt2/` | 4.3 GB | **complete; 1-7 route archive** | 0102: high-mutation cleanup from six 1-7 cluster representatives. 902 routes / 37 clusters / **0 strict clean**, best **7.0333 s** (gen 9, revisit 0.107). 20-state all-success pool and 10-state near-clean pool. | `neat-checkpoint-30`, `archive/routes.json`, `filtered_all_success_g30/`, `pool_all_success_g30/`, `pool_near_clean_g30/` |
+| `runs/ddqn_1_7_feasible_starts/` | 347 MB | **complete; selected 1-7 expert** | 0103: 100k from 1.815M, 8 x 1-7, 20-start all-success pool, 2,495 stable expert transitions. Selected **1.877432M**: canonical **5.2333 s**; near-clean **10/10**, 0 deaths/timeouts, median 7.9583; all-success 18/20 (2 diagnostic timeouts). | `dqn/checkpoints/ddqn_1877432_steps.zip`, `eval/selected_repeat/summary.json`, `expert_1_7/stable_expert_buffer.pkl` |
+| `runs/neat_transfer_1_8_from_1_7/` | 144 MB | **complete; 1-8 clean archive** | 0105: final 1-7 population transferred to 1-8 (DOUBLE_JUMP). 161 finishers / **26 strict-clean routes / 11 clusters**, best **4.4167 s**, stopped in 16 generations. `pool_clean_g46/` has 37 train / 14 holdout states (40 unique eval); `pool_all_success_g46/` has 102 train / 63 holdout (107 unique eval). | `neat-checkpoint-46`, `archive/routes.json`, `pool_clean_g46/`, `pool_all_success_g46/` |
+| `runs/ddqn_1_8_feasible_starts/` | 279 MB | **complete; 1-8 first expert** | 0106: 100k from 1.877432M, 8 x 1-8, clean pool. 16/16 expert routes replayed; stable buffer 1,800 transitions. Best early checkpoint **1.939912M**: canonical 4.5167, clean 39/40, all-success 106/107. | `dqn/checkpoints/ddqn_1939912_steps.zip`, `eval/`, `expert_1_8/stable_expert_buffer.pkl` |
+| `runs/ddqn_1_8_canonical_repair/` | 177 MB | **complete; coverage repair** | 0109: canonical-heavy 25k from 1.939912M. 1.949912M reaches **40/40** clean states, canonical 4.5167, 0 deaths/timeouts. | `dqn/checkpoints/ddqn_1949912_steps.zip`, `eval/ddqn_1949912_steps/summary.json` |
+| `runs/ddqn_1_8_canonical_route/` | 40 MB | **complete; canonical fix** | 0112: canonical-only 5k from 1.949912M. 1.952408M canonical **4.4667 s** but clean 39/40. | `dqn/checkpoints/ddqn_1952408_steps.zip`, `eval/ddqn_1952408_steps/summary.json` |
+| `runs/ddqn_1_8_start_repair/` | 77 MB | **complete; start repair** | 0114: targeted `[4,21]/-1` suffix from 1.952408M. 1.959896M first **40/40** model at canonical 4.5167; 1.962392M canonical 4.4667 but 39/40. | `dqn/checkpoints/ddqn_1959896_steps.zip`, `dqn/checkpoints/ddqn_1962392_steps.zip`, `eval/` |
+| `runs/ddqn_1_8_last_start_repair/` | 45 MB | **complete; negative** | 0116: targeted `[3,21]/-1` suffix from 1.962392M over-corrected; best 33/40 clean. Not selected. | `eval/ddqn_1964888_steps/summary.json` |
+| `runs/ddqn_1_8_canonical_nudge/` | 37 MB | **complete; selected 1-8 expert** | 0118: 500-step low-LR canonical nudge from 1.959896M. Selected **1.960392M**: canonical **4.4667 s**, clean **40/40**, 0 deaths/timeouts, median 9.8833; all-success 106/107 (one high-revisit timeout). | `dqn/checkpoints/ddqn_1960392_steps.zip`, `eval/selected_repeat/summary.json`, `eval/selected_all_success/summary.json` |
+| `runs/neat_transfer_1_9_from_1_8/` | 31 MB | **stopped; 1-9 single-route archive** | 0121: final 1-8 population transferred to 1-9 (CHAIN_JUMPS), stopped at generation 89. **11 strict-clean routes / 6 clusters**, best **2.9500 s**. `level.py data` gives 9 train / 2 holdout routes, 6/8 state starts, 11 eval states. The fastest route (`926883...`) is the selected single-route source. | `neat-checkpoint-89`, `archive/routes.json`, `strict_clean_routes_g89.json`, `pool_clean_g89/`, `single_route/` |
+| `runs/ddqn_1_9_single_route/` | 12 MB | **complete; selected 1-9 single-route expert** | 0122: 100k canonical-only DDQN from 1.960392M, one-route buffer (43 transitions). All 8 checkpoints finish canonical **2.9500 s**, 0 deaths/timeouts. Selected **2.060360M**. Retention 1-1..1-9: 1-1/1-3/1-9 finish; only 1-1/1-9 pass gate. | `dqn/checkpoints/ddqn_2060360_steps.zip`, `eval/final_1_1_to_1_9/summary.json`, `expert_1_9/stable_expert_buffer.pkl` |
 
 All older PPO/DQN/NEAT-transfer/smoke run directories were removed on
 2026-10-28. Their committed experiment manifests remain historical records.
@@ -71,9 +101,13 @@ All older PPO/DQN/NEAT-transfer/smoke run directories were removed on
 | `strata/sampling_plan.json` | Proposed canonical/medium/hard mix. |
 | `ppo/start_pool.json` | Weighted PPO reset pool (canonical/cell/prefix entries). |
 | `ppo/start_pool_summary.json` | Pool counts, weights, focus/heldout starts. |
+| `strict_clean_routes_g<G>.json`, `near_clean_routes_g<G>.json`, `all_success_routes_g<G>.json` | Re-computed route tiers from a NEAT archive; produced by `tools/level.py data`. |
+| `route_quality_g<G>.json` | Tier counts, best times, and the thresholds used. |
 | `filtered/summary.json` | Route-filter counts: input/unique routes, clusters, kept train/holdout routes. |
-| `pool/train_start_pool.json`, `pool/holdout_start_pool.json` | Clean-start state pools for PPO; the holdout file is evaluation-only. |
-| `pool/split.json` | Start-pool counts, weights, checkpoint rejection stats, and train/holdout key overlap. |
+| `pool/train_start_pool.json`, `pool/holdout_start_pool.json` | Clean-start state pools; the holdout file is evaluation-only. |
+| `pool/eval_<tag>_start_pool.json` | Deduplicated train+holdout union for the accepted evaluation gate. |
+| `pool/split.json` | Start-pool counts, weights, checkpoint rejection stats, train/holdout key overlap, and `unique_eval_states`. |
+| `level_data_summary.json` | One level's tier counts, selected quality, filtered/pool paths, eval union, fastest cluster, and warnings. |
 | `preprocessing.pkl`, `preprocessing.json` | Fitted lean one-hot pipeline and its input/output metadata; load these with the model. |
 | `monitor.csv` | SB3 `VecMonitor` episode summary: `r`, `l`, `t`, plus start/level/run metadata. New runs use this instead of `episodes.csv`. |
 | `episodes.csv` | Historical PPO per-episode rows (pre-2026-10-28 harness). New runs use `monitor.csv`. |
@@ -116,6 +150,7 @@ not tracked; do not try to add it to git.
 
 1. Use a descriptive `runs/<experiment>_<level>_<variant>/` name.
 2. Keep the standard subdirs (`checkpoints/`, `eval/`, `godot/`, `userdata/`).
-3. Record the command, branch/commit, game dirty state, and key result in
-   `docs/status.md` or a dated audit.
-4. Add a row to this page when the run becomes part of the reference set.
+3. After NEAT, run `tools/level.py data` to create the route tiers and pools.
+4. Record the command, branch/commit, game dirty state, and key result in
+   `docs/status.md`, `docs/reference/level-ledger.md`, or a dated audit.
+5. Add a row to this page when the run becomes part of the reference set.

@@ -6,8 +6,8 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 ## Stats
 
-- 83 source modules, 20 test modules, 57 classes, 269 top-level functions, 321 methods
-- 78 experiment manifests, 36 docs
+- 86 source modules, 26 test modules, 66 classes, 309 top-level functions, 350 methods
+- 123 experiment manifests, 43 docs
 - Local run artifacts are indexed in `.cache/repo-index.json`; use `make context q="..."` or [`reference/run-artifacts.md`](reference/run-artifacts.md).
 
 ## Source by area
@@ -15,9 +15,9 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | Area | Modules |
 |---|---:|
 | `scripts/` | 8 |
-| `src/` | 56 |
-| `tests/` | 20 |
-| `tools/` | 19 |
+| `src/` | 57 |
+| `tests/` | 26 |
+| `tools/` | 21 |
 
 ### scripts/
 
@@ -43,10 +43,10 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `src/plaiground/algorithms/genetic/neat/all_levels.py` | — | `parse_levels`, `checkpoint_generation`, `read_history` +8 | 387 | Train one NEAT population per campaign level, then show checkpoints. |
 | `src/plaiground/algorithms/genetic/neat/lineage.py` | — | `read_history`, `summarize`, `checkpoint_generation` +8 | 488 | Carry one NEAT population through the campaign in order. |
 | `src/plaiground/algorithms/genetic/neat/portfolio.py` | `PortfolioEntry` | `time_bin`, `_route_clusters`, `build_entries` +6 | 644 | Quality-diversity portfolio helpers for NEAT checkpoints. |
-| `src/plaiground/algorithms/genetic/neat/trainer.py` | `RewardEvaluator` | `load_config`, `ensure_population_size`, `train` +4 | 1335 | Train a NEAT policy for Dragon Jump level 1-1. |
+| `src/plaiground/algorithms/genetic/neat/trainer.py` | `RewardEvaluator` | `apply_time_penalty`, `load_config`, `ensure_population_size` +5 | 1367 | Train a NEAT policy for Dragon Jump level 1-1. |
 | `src/plaiground/algorithms/reinforcement/__init__.py` | — | — | 2 | Reinforcement-learning trainers. |
 | `src/plaiground/algorithms/reinforcement/ddqn.py` | `DoubleDQN` | `main` | 187 | Train a Double DQN policy from an experiment manifest. |
-| `src/plaiground/algorithms/reinforcement/dqn.py` | — | `make_model`, `_copy_expanded_policy`, `load_resumed_model` +3 | 365 | Train a DQN policy from an experiment manifest. |
+| `src/plaiground/algorithms/reinforcement/dqn.py` | — | `make_model`, `_copy_expanded_policy`, `load_resumed_model` +4 | 393 | Train a DQN policy from an experiment manifest. |
 | `src/plaiground/algorithms/reinforcement/ppo.py` | — | `_make_model`, `_load_resumed_model`, `main` | 179 | Train a PPO policy from an experiment manifest. |
 | `src/plaiground/algorithms/reinforcement/replay.py` | `RareReplayBuffer`, `ProtectedReplayBuffer` | `pad_anchor_observations`, `state_bucket_key` | 382 | Replay buffers for protected multi-level DDQN training. |
 | `src/plaiground/algorithms/supervised/__init__.py` | — | — | 2 | Supervised learning workflows such as behavior cloning and distillation. |
@@ -54,20 +54,21 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `src/plaiground/baselines/heuristic.py` | — | `agent_brain`, `main` | 36 | Course-era if/else baseline for the legacy 58 observation. |
 | `src/plaiground/baselines/random.py` | — | `agent_brain`, `main` | 29 | Random-action baseline for the legacy wrapper path. |
 | `src/plaiground/data/__init__.py` | — | — | 7 | Route archives, start pools, samplers, and offline datasets. |
+| `src/plaiground/data/level_data.py` | `LevelDataError`, `QualitySpec` | `_finite_float`, `_route_time`, `_route_signature` +13 | 529 | Prepare one level's route tiers and clean-start pools from a NEAT archive. |
 | `src/plaiground/data/pools.py` | — | `flatten_reset_state`, `load_start_pool` | 79 | Load and normalize PPO/DQN start pools. |
 | `src/plaiground/data/route_filter.py` | `RouteCluster` | `load_routes`, `_cells`, `_path_key` +10 | 332 | Pure post-processing for clean NEAT routes. |
 | `src/plaiground/data/route_starts.py` | — | `load_json`, `cell_value`, `state_record` +9 | 506 | Extract clean-start state pools from NEAT checkpoint snapshots. |
-| `src/plaiground/data/start_pool.py` | — | `_finite`, `_cell_value`, `_is_cell_standable` +6 | 408 | Build PPO clean-start pools from filtered NEAT routes. |
+| `src/plaiground/data/start_pool.py` | — | `_finite`, `_cell_value`, `_is_cell_standable` +7 | 454 | Build PPO clean-start pools from filtered NEAT routes. |
 | `src/plaiground/envs/__init__.py` | — | — | 8 | Game transport, Gymnasium, and vector-environment adapters. |
 | `src/plaiground/envs/factory.py` | — | `make_env`, `build_vec_env`, `make_eval_env` | 210 | Shared environment construction for PPO and DQN. |
-| `src/plaiground/envs/godot.py` | `GodotEnv` | `_require_pair`, `_normalise_spawn`, `interactive` | 844 | This script is derived from code originally published in the repository: https://github.com/edbeeching/godotr… |
+| `src/plaiground/envs/godot.py` | `GodotEnv` | `_require_pair`, `_normalise_spawn`, `interactive` | 887 | This script is derived from code originally published in the repository: https://github.com/edbeeching/godotr… |
 | `src/plaiground/envs/runtime.py` | — | `resolve_env_path`, `isolated_home` | 47 | Shared Godot process/runtime helpers. |
 | `src/plaiground/envs/single_agent.py` | `SingleAgentGodotEnv` | — | 447 | One Godot training world exposed as a standard Gymnasium environment. |
 | `src/plaiground/envs/stable_baselines_wrapper.py` | `StableBaselinesGodotEnv` | — | 197 | This script is derived from code originally published in the repository: https://github.com/edbeeching/godotr… |
 | `src/plaiground/envs/utils.py` | `ActionSpaceProcessor` | `lod_to_dol`, `dol_to_lod`, `convert_macos_path` +2 | 151 | This script is derived from code originally published in the repository: https://github.com/edbeeching/godotr… |
 | `src/plaiground/envs/vec_env.py` | `MultiAgentGodotVecEnv` | `_flatten_obs`, `_single_binary_action_space`, `_isolated_env` | 375 | SB3 vector environment for N agents per Godot process. |
 | `src/plaiground/evaluation/__init__.py` | — | — | 20 | Shared deterministic evaluation for PPO and DQN. |
-| `src/plaiground/evaluation/rollout.py` | — | `finite_float`, `policy_observations`, `predict_actions` +13 | 499 | Algorithm-agnostic deterministic evaluation for canonical and pool starts. |
+| `src/plaiground/evaluation/rollout.py` | — | `finite_float`, `policy_observations`, `predict_actions` +13 | 524 | Algorithm-agnostic deterministic evaluation for canonical and pool starts. |
 | `src/plaiground/experiments/__init__.py` | — | — | 29 | Experiment configuration and provenance helpers. |
 | `src/plaiground/experiments/config.py` | — | `resolve_experiment`, `load_experiment`, `find_experiments` | 43 | Load committed experiment manifests. |
 | `src/plaiground/experiments/provenance.py` | — | `_git`, `git_metadata`, `capture_provenance` +1 | 90 | Capture code and game provenance for a run. |
@@ -97,13 +98,19 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 | Module | Classes | Top-level functions | Lines | Summary |
 |---|---|---|---:|---|
+| `tests/test_build_expert_buffer.py` | `ExpertBufferMaskTest` | — | 72 | Tests for route-level filtering in the expert replay builder. |
+| `tests/test_build_start_expert_buffer.py` | `StartExpertBufferTest` | — | 72 | Tests for extracting start-aligned expert transitions. |
+| `tests/test_collect_dqn_buffer.py` | `CollectDqnBufferStatsTest` | — | 68 | Tests for the DQN anchor collector summary. |
 | `tests/test_env_fallback.py` | `FakeGame`, `FakeTimeoutGame`, `FallbackInfoTest` | — | 110 | Regression tests for training-env info keys used by VecMonitor. |
-| `tests/test_evaluation.py` | `FakeModel`, `FakeEnv`, `EvaluationTest` | — | 198 | Tests for the shared deterministic evaluation engine. |
+| `tests/test_evaluation.py` | `FakeModel`, `FakeEnv`, `EvaluationTest` | — | 275 | Tests for the shared deterministic evaluation engine. |
 | `tests/test_experiments.py` | `ExperimentConfigTest` | — | 32 | Tests for experiment manifests and code/game provenance. |
 | `tests/test_factory.py` | `TinyGym`, `FactoryTest` | — | 132 | Tests for shared vector-environment construction. |
+| `tests/test_godot_socket.py` | `FakeSocket`, `GodotSocketTest` | `_env` | 68 | Tests for the low-level Godot socket framing and failure modes. |
 | `tests/test_info_protocol.py` | `InfoProtocolTest` | `_env`, `_columns` | 234 | Unit checks for Godot's static + columnar info wire format. |
 | `tests/test_lean_io.py` | `LeanIOTest` | — | 89 | Tests for creating and loading the lean preprocessing pipeline. |
+| `tests/test_level_data.py` | `LevelDataTest` | `make_route`, `state`, `strict_routes` | 302 | Tests for level route-tier classification and pool preparation. |
 | `tests/test_models.py` | `LeanMLPTest` | — | 42 | Tests for the declared lean model architecture. |
+| `tests/test_neat_trainer.py` | `TimePenaltyTest` | — | 43 | Tests for the optional NEAT speed-selection fitness term. |
 | `tests/test_observations.py` | `ObservationSpecTest` | — | 65 | Observation-contract tests, including the versioned legacy hold encoding. |
 | `tests/test_pools.py` | `PoolLoaderTest` | — | 76 | Tests for shared start/spawn pool loaders. |
 | `tests/test_portfolio.py` | `PortfolioTest` | — | 155 |  |
@@ -115,24 +122,26 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tests/test_route_starts.py` | `RouteStartTest` | `_analysis`, `_checkpoint` | 107 | Tests for the DQN route-start extraction gates. |
 | `tests/test_runner.py` | `RunResolverTest` | — | 152 | Tests for the config-driven run resolver. |
 | `tests/test_spawn_validation.py` | `SpawnValidationTest` | — | 33 | Tests for the runtime start-pool spawn guard. |
-| `tests/test_start_pool.py` | `StartPoolTest` | `route` | 119 | Tests for clean-start pool construction from filtered routes. |
-| `tests/test_trainers.py` | `TinyEnv`, `TrainerConstructionTest` | — | 102 | Small model-construction tests for the PPO/DQN adapters. |
+| `tests/test_start_pool.py` | `StartPoolTest` | `route` | 123 | Tests for clean-start pool construction from filtered routes. |
+| `tests/test_trainers.py` | `TinyEnv`, `TrainerConstructionTest` | — | 137 | Small model-construction tests for the PPO/DQN adapters. |
 
 ### tools/
 
 | Module | Classes | Top-level functions | Lines | Summary |
 |---|---|---|---:|---|
 | `tools/benchmark_neat.py` | — | `_hardware`, `_tree_rss`, `_history_stats` +4 | 350 | Benchmark NEAT throughput across parallelism and speedup settings. |
-| `tools/build_expert_buffer.py` | — | `_success_mask`, `main` | 152 | Build a fixed 1-4 expert replay buffer from successful NEAT routes. |
-| `tools/build_start_pool.py` | — | `parse_args`, `main` | 67 | Build train/holdout clean-start pools from filtered NEAT routes. |
+| `tools/build_expert_buffer.py` | — | `_success_mask`, `main` | 235 | Build a fixed 1-4 expert replay buffer from successful NEAT routes. |
+| `tools/build_start_expert_buffer.py` | — | `_match_starts`, `main` | 224 | Build a small expert buffer for the starts in a clean-start pool. |
+| `tools/build_start_pool.py` | — | `parse_args`, `main` | 75 | Build train/holdout clean-start pools and their eval union. |
 | `tools/check_observation.py` | — | `main` | 158 | Smoke-check the raw local-state observation from Godot. |
-| `tools/collect_dqn_buffer.py` | — | `_episode_rows`, `_fmt_stats`, `main` | 245 | Collect and save a DQN replay buffer without training. |
+| `tools/collect_dqn_buffer.py` | — | `_episode_rows`, `_fmt_stats`, `main` | 261 | Collect and save a DQN replay buffer without training. |
 | `tools/collect_expert_routes.py` | — | `_load_actions`, `_flag_stats`, `main` | 322 | Replay successful NEAT routes in the current observation environment. |
 | `tools/context.py` | — | `tokenize`, `count_hits`, `score_text` +12 | 586 | Return a compact context pack for a free-text task. |
 | `tools/diagnose_dqn.py` | — | `_spawn_for`, `_q_values`, `main` | 182 | Diagnose deterministic DQN rollouts with Q-value and action telemetry. |
 | `tools/evaluate.py` | — | `main` | 44 | Evaluate a saved PPO/DQN checkpoint from an experiment manifest. |
 | `tools/extract_route_starts.py` | — | `parse_args`, `_required_path`, `main` | 92 | Extract clean-start state pools from NEAT checkpoint snapshots. |
 | `tools/filter_routes.py` | — | `parse_args`, `main` | 73 | CLI for post-processing clean NEAT routes. |
+| `tools/level.py` | — | `_default_analysis`, `_infer_generation`, `_level_meta` +12 | 417 | Prepare and inspect one Dragon Jump level's expert pipeline. |
 | `tools/make_ppo_start_pool.py` | — | `main` | 225 | Build a weighted PPO start pool from level strata and clean NEAT routes. |
 | `tools/rebalance_neat.py` | — | `parse_args`, `main` | 59 | Rebalance a NEAT checkpoint around a portfolio of route/time representatives. |
 | `tools/record_provenance.py` | — | `parse_args`, `main` | 40 | Write code/game provenance metadata for an experiment run. |
@@ -140,7 +149,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tools/seed_neat_checkpoint.py` | — | `parse_args`, `max_innovation`, `main` | 126 | Seed a NEAT population from one or more archived finisher genomes. |
 | `tools/start_strata.py` | — | `standable_cells`, `percentile`, `main` | 231 | Stratify standable starts by shortest-path distance to the exit. |
 | `tools/summarize_episodes.py` | — | `percentile`, `as_bool`, `start_kind` +4 | 155 | Report training episodes by start source, with a canonical-only mode. |
-| `tools/watch.py` | — | `parse_args`, `main` | 139 | Preview a saved PPO or DQN checkpoint in the game window. |
+| `tools/watch.py` | — | `parse_args`, `main` | 153 | Preview a saved PPO or DQN checkpoint in the game window. |
 
 ## Experiments
 
@@ -224,6 +233,51 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `0077` | `eval_expert_replay_1_1_0073` | `complete` | `reinforcement.ddqn` | `1-1` | — |
 | `0078` | `show_expert_replay_1_4_0073` | `complete` | `reinforcement.ddqn` | `1-4` | — |
 | `0079` | `show_chain_1_1_to_1_4_0073` | `complete` | `reinforcement.ddqn` | `1-1, 1-2, 1-3, 1-4` | — |
+| `0080` | `neat_extend_1_5_from_0047` | `complete` | `genetic.neat` | `1-5` | — |
+| `0081` | `neat_speed_1_5_from_0080` | `stopped` | `genetic.neat` | `1-5` | — |
+| `0082` | `ddqn_expert_replay_1_5_lean_stick` | `stopped` | `reinforcement.ddqn` | `1-5, 1-5, 1-5, 1-5, 1-4, 1-3, 1-3, 1-2` | — |
+| `0083` | `ddqn_anchor_1555_2frame` | `complete` | `reinforcement.ddqn` | `1-1, 1-2, 1-3, 1-4, 1-1, 1-2, 1-3, 1-4` | — |
+| `0084` | `eval_ddqn_1_5_0082` | `complete` | `reinforcement.ddqn` | `1-5, 1-4, 1-3, 1-2, 1-1` | — |
+| `0085` | `ddqn_expert_replay_1_5_4frame` | `complete` | `reinforcement.ddqn` | `1-5, 1-5, 1-5, 1-5, 1-4, 1-3, 1-3, 1-2` | — |
+| `0086` | `eval_ddqn_1_5_4frame_0085` | `complete` | `reinforcement.ddqn` | `1-5, 1-4, 1-3, 1-2, 1-1` | — |
+| `0087` | `ddqn_anchor_1555_all_levels_4frame` | `complete` | `reinforcement.ddqn` | `1-1, 1-2, 1-3, 1-4, 1-1, 1-2, 1-3, 1-4` | — |
+| `0088` | `ddqn_retention_1_5_4frame` | `complete` | `reinforcement.ddqn` | `1-5, 1-5, 1-4, 1-4, 1-3, 1-3, 1-2, 1-2` | — |
+| `0089` | `eval_ddqn_retention_1_5_4frame` | `complete` | `reinforcement.ddqn` | `1-5, 1-4, 1-3, 1-2, 1-1` | — |
+| `0090` | `neat_transfer_1_6_from_1_5` | `complete` | `genetic.neat` | `1-6` | — |
+| `0091` | `ddqn_expert_replay_1_6_lean_stick` | `complete` | `reinforcement.ddqn` | `1-6, 1-6, 1-6, 1-6, 1-5, 1-4, 1-4, 1-3` | — |
+| `0092` | `eval_ddqn_1_6_0091` | `complete` | `reinforcement.ddqn` | `1-6, 1-5, 1-4, 1-3, 1-2, 1-1` | — |
+| `0093` | `neat_speed_1_6_from_0090` | `complete` | `genetic.neat` | `1-6` | — |
+| `0094` | `ddqn_anchor_1_6_1680` | `complete` | `reinforcement.ddqn` | `1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6` | — |
+| `0095` | `ddqn_1_6_retrain_1680` | `complete` | `reinforcement.ddqn` | `1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6` | — |
+| `0096` | `eval_ddqn_1_6_retrain_1680` | `complete` | `reinforcement.ddqn` | `1-6` | — |
+| `0097` | `ddqn_1_6_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6` | — |
+| `0098` | `eval_ddqn_1_6_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-6` | — |
+| `0099` | `ddqn_1_6_start_repair` | `complete` | `reinforcement.ddqn` | `1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6, 1-6` | — |
+| `0100` | `eval_ddqn_1_6_start_repair` | `complete` | `reinforcement.ddqn` | `1-6` | — |
+| `0101` | `neat_transfer_1_7_from_1_6` | `stopped` | `genetic.neat` | `1-7` | — |
+| `0102` | `neat_clean_1_7_from_0101` | `complete` | `genetic.neat` | `1-7` | — |
+| `0103` | `ddqn_1_7_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-7, 1-7, 1-7, 1-7, 1-7, 1-7, 1-7, 1-7` | — |
+| `0104` | `eval_ddqn_1_7_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-7` | — |
+| `0105` | `neat_transfer_1_8_from_1_7` | `complete` | `genetic.neat` | `1-8` | — |
+| `0106` | `ddqn_1_8_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8` | — |
+| `0107` | `eval_ddqn_1_8_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0108` | `eval_ddqn_1_8_all_success` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0109` | `ddqn_1_8_canonical_repair` | `complete` | `reinforcement.ddqn` | `1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8` | — |
+| `0110` | `eval_ddqn_1_8_canonical_repair` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0111` | `eval_ddqn_1_8_force_start` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0112` | `ddqn_1_8_canonical_route` | `complete` | `reinforcement.ddqn` | `1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8` | — |
+| `0113` | `eval_ddqn_1_8_canonical_route` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0114` | `ddqn_1_8_start_repair` | `complete` | `reinforcement.ddqn` | `1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8` | — |
+| `0115` | `eval_ddqn_1_8_start_repair` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0116` | `ddqn_1_8_last_start_repair` | `complete` | `reinforcement.ddqn` | `1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8` | — |
+| `0117` | `eval_ddqn_1_8_last_start_repair` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0118` | `ddqn_1_8_canonical_nudge` | `complete` | `reinforcement.ddqn` | `1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8, 1-8` | — |
+| `0119` | `eval_ddqn_1_8_canonical_nudge` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0120` | `eval_ddqn_1_8_final_all_success` | `complete` | `reinforcement.ddqn` | `1-8` | — |
+| `0121` | `neat_transfer_1_9_from_1_8` | `stopped` | `genetic.neat` | `1-9` | — |
+| `0122` | `ddqn_1_9_single_route` | `complete` | `reinforcement.ddqn` | `1-9, 1-9, 1-9, 1-9, 1-9, 1-9, 1-9, 1-9` | — |
+| `0123` | `eval_ddqn_1_9_single_route` | `complete` | `reinforcement.ddqn` | `1-9` | — |
+| `0124` | `eval_ddqn_1_9_retention_all` | `complete` | `reinforcement.ddqn` | `1-1, 1-2, 1-3, 1-4, 1-5, 1-6, 1-7, 1-8, 1-9` | — |
 
 ## Docs
 
@@ -242,10 +296,14 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/audit/2026-10-28-repository-restructure.md` | `Repository restructure` | 8 | `implemented` | Date: 2026-10-28 Scope: PLaiGROUND Python tree only; game repo untouched |
 | `docs/audit/2026-10-28-start-pool-clock-bias.md` | `Audit — start-pool resets, the zeroed r…` | 26 | `investigation + design decisi…` | Date: 2026-10-28 Scope: scripts/reinforcement/01ppo.py start-pool resets, tools/makeppostartpool.py… |
 | `docs/audit/2026-10-28-training-harness-composition.md` | `Training harness composition and PPO de…` | 21 | `PPO split and pruned; remaini…` | Date: 2026-10-28 Branch: neat PLaiGROUND commit at audit: af5ce9d plus the uncommitted baseline-eva… |
-| `docs/audit/2026-10-29-level-transfer-playbook.md` | `Level-transfer playbook — 2026-10-29` | 8 | — | This is the repeatable NEAT path for adding level N after N-1. It prevents the "try a random idea"… |
+| `docs/audit/2026-10-29-1-6-ddqn-investigation.md` | `1-6 DDQN investigation — 2026-10-29` | 17 | `any-start 1-6 expert selected…` | 4.6000 s); 4.28 s speed gate still open. The 3.3333 s stochastic mode and one 2-frame attempt remai… |
+| `docs/audit/2026-10-29-expert-portfolio-and-student-decision.md` | `Decision — per-level NEAT experts and o…` | 8 | `accepted` | Date: 2026-10-29 Scope: the Dragon Jump campaign AI and the level-testing use case. The architectur… |
+| `docs/audit/2026-10-29-level-transfer-playbook.md` | `Level-transfer playbook — 2026-10-29` | 8 | — | Scope: this audit covers NEAT discovery only. For the full route-tiers → expert → evaluate → repair… |
 | `docs/audit/2026-10-29-neat-portfolio-and-parallelism.md` | `NEAT portfolio and parallelism plan — 2…` | 11 | — | The 384-genome exploratory run (experiment 0021) and its 40-generation continuation (0022) found su… |
 | `docs/audit/2026-10-29-protected-replay.md` | `Protected replay for multi-level DDQN —…` | 9 | — | The 0025 1-3 DDQN run solved 1-3 but regressed 1-1/1-2 at some checkpoints: |
 | `docs/audit/2026-10-29-reward-fitness-audit.md` | `Reward / NEAT fitness audit — 2026-10-29` | 7 | — | Why did the 17.6 s, backtracking 1-4 genome beat the 4.9833 s clean genome in NEAT fitness? |
+| `docs/audit/2026-10-29-run-reliability.md` | `Run reliability audit — 2026-10-29` | 20 | — | Scope: the active 1-1 .. 1-6 DQN/DDQN and NEAT runs, plus the shared evaluation, replay-collection,… |
+| `docs/audit/2026-10-30-1-8-expert.md` | `Audit — 1-8 (DOUBLE_JUMP) NEAT transfer…` | 8 | `complete; 1-8 expert selected` | Date: 2026-10-30 Game: ../dragon-jump-remaster at 50dcc66, clean Level analysis: ../dragon-jump-rem… |
 | `docs/blog-diversity-as-utility.md` | `The Utility of the B-Team` | 12 | `idea` | Updated: 2026-10-29 |
 | `docs/blog-growing-a-hand.md` | `Growing a Hand` | 12 | `idea` | Updated: 2026-10-27 |
 | `docs/experiments/compact-policy-deployment.md` | `Compact policy options for JSON deploym…` | 12 | `proposed; no compact student…` | Date: 2026-10-28 Related: ../../experiments/0001ppocleanstart11/README.md |
@@ -257,13 +315,16 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/experiments/ppo-distillation.md` | `PPO policy distillation` | 14 | `deployed/reference — the sele…` | game baseline; the older 128-hidden/experiment results are historical. Last updated: 2026-10-27 |
 | `docs/experiments/ppo-pilot.md` | `PPO pilot` | 12 | `active/reference — the 794 se…` | Historical note (2026-10-28). The legacy PPO flags in this document (--init-student, --eval-stochas… |
 | `docs/index.md` | `PLaiGROUND — docs index` | 8 | — | PLaiGROUND is the external Python/RL lab for Dragon Jump. It connects to the game's training mode o… |
-| `docs/known-issues.md` | `Known issues` | 36 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
+| `docs/known-issues.md` | `Known issues` | 49 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
+| `docs/reference/ddqn-1-5-chain.md` | `1-5 DDQN chain — selected two-model can…` | 7 | `selected for evaluation, not…` | Built: 2026-10-29 |
 | `docs/reference/deployed-model-58.md` | `Deployed AI model: 58-value student` | 15 | `deployed and frozen for the d…` | Built: 2026-10-26 Runtime artifact: godot/src/resources/ai/studentobs58256.json |
 | `docs/reference/glossary.md` | `Glossary` | 5 | — | Terms used across PLaiGROUND docs and run artifacts. When a term also exists in the game vault, the… |
+| `docs/reference/level-ledger.md` | `Level ledger` | 4 | `active` | Last updated: 2026-10-30 |
 | `docs/reference/observation-contracts.md` | `Observation and reset contracts` | 19 | — | Python-side summary of the game's training contract. The canonical definitions live in the game rep… |
 | `docs/reference/reward-contract.md` | `Reward contract` | 12 | `shipped 2026-10-28` | Owner: godot/src/player/controllers/playeraitrainingcontroller.gd Raw telemetry: getdynamicinfo() a… |
 | `docs/reference/run-artifacts.md` | `Run artifacts` | 6 | — | runs/ is generated and gitignored. This page is the committed index of what each active run directo… |
-| `docs/status.md` | `Status` | 6 | — | Updated: 2026-10-29 Branch: neat HEAD: f7853ef — getting closer to the best workflow Working tree:… |
+| `docs/runbooks/new-level.md` | `New-level pipeline` | 12 | `active` | Last updated: 2026-10-30 |
+| `docs/status.md` | `Status` | 6 | — | Updated: 2026-10-30 Branch: neat HEAD: f7853ef — getting closer to the best workflow Working tree:… |
 | `src/README.md` | `Source layout` | 4 | — | src/ is the installable Python package root. Entry points live outside it. |
 
 ## Query this map

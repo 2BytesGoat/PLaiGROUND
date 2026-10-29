@@ -253,8 +253,18 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "agents": len(rows),
         "finishes": sum(1 for row in rows if row["finished"]),
-        "deaths": sum(int(row["deaths"]) for row in rows),
-        "timeouts": sum(1 for row in rows if not row["finished"]),
+        # A death is terminal before the horizon; a timeout is the horizon.
+        # Keep the two failure modes separate so a death is never reported as
+        # a slow/timeout episode.
+        "deaths": sum(
+            1
+            for row in rows
+            if not row["finished"] and not bool(row.get("timed_out"))
+        ),
+        "timeouts": sum(1 for row in rows if bool(row.get("timed_out"))),
+        "spawn_failures": sum(
+            1 for row in rows if not bool(row.get("spawn_ok", True))
+        ),
         "best_time": min(finish_times) if finish_times else None,
         "median_time": (
             float(np.median(finish_times)) if finish_times else None
@@ -438,6 +448,21 @@ def evaluate_set(
         }
     )
     write_rows(run.eval_dir / tag / f"{name}.csv", rows)
+    if summary["spawn_failures"]:
+        failed = [
+            {
+                "agent": row["agent"],
+                "start_kind": row["start_kind"],
+                "expected": row["start_cell"],
+            }
+            for row in rows
+            if not row["spawn_ok"]
+        ]
+        raise RuntimeError(
+            f"evaluation start-pool spawn failed for {len(failed)}/"
+            f"{len(rows)} starts in {path}; refusing to publish a summary "
+            f"from canonical fallbacks: {failed[:5]}"
+        )
     print(
         f"[eval {name}] finishes={summary['finishes']}/{summary['agents']} "
         f"spawn_ok={summary['spawn_ok']}/{summary['agents']} "

@@ -96,6 +96,41 @@ class TrainerConstructionTest(unittest.TestCase):
             finally:
                 vec_env.close()
 
+    def test_dqn_learning_rate_override_updates_schedule_and_optimizer(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._run(Path(tmp), "dqn")
+            vec_env = DummyVecEnv([TinyEnv])
+            try:
+                model = dqn._make_model(run, vec_env)
+                model.learning_rate = 0.0001
+                model._setup_lr_schedule()
+                override = Run(
+                    config={
+                        **run.config,
+                        "algorithm": {
+                            **run.config["algorithm"],
+                            "learning_rate": 0.00005,
+                        },
+                    },
+                    config_path=run.config_path,
+                    output_dir=run.output_dir,
+                    timesteps=run.timesteps,
+                    resume=run.resume,
+                    preprocessing_path=run.preprocessing_path,
+                    show=run.show,
+                    device=run.device,
+                    verbose=run.verbose,
+                )
+                dqn._apply_learning_rate_override(model, override)
+                self.assertAlmostEqual(model.learning_rate, 0.00005)
+                self.assertAlmostEqual(model.lr_schedule(1.0), 0.00005)
+                for group in model.policy.optimizer.param_groups:
+                    self.assertAlmostEqual(group["lr"], 0.00005)
+            finally:
+                vec_env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

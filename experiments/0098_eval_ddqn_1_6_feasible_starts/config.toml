@@ -1,0 +1,75 @@
+# 0098 — evaluate the 1-6 feasible-start expert.
+
+[experiment]
+id = "0098"
+name = "eval_ddqn_1_6_feasible_starts"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "50dcc66"
+allow_dirty = false
+
+[env]
+levels = ["1-6"]
+n_envs = 1
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reassert_held_jump = true
+reward_profile = "default"
+base_port = 25800
+eval_port = 25801
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean_stick"
+preprocessing = "lean_stick"
+expected_raw_size = 191
+model_input_size = 957
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 1
+
+[data]
+archive = "runs/neat_transfer_1_6_from_1_5/archive/routes.json"
+finishers = "runs/neat_transfer_1_6_from_1_5/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-6.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_speed_1_6_from_0090/pool_state_50/train_start_pool.json"
+holdout_pool = "runs/neat_speed_1_6_from_0090/pool_state_50/holdout_start_pool.json"
+expert_routes = "runs/ddqn_1_6_feasible_starts/expert_1_6/fast_routes.json"
+expert_data = "runs/ddqn_1_6_feasible_starts/expert_1_6/fast_expert_routes.npz"
+
+[evaluation]
+canonical = true
+train_pool = false
+holdout_pool = false
+sets = ["runs/neat_speed_1_6_from_0090/pool_state_50/eval_all_start_pool.json"]
+
+[run]
+preprocessing_from = "runs/ddqn_fresh_1_1_lean_stick/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_1_6_feasible_starts"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

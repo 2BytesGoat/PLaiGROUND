@@ -1,5 +1,9 @@
 # Level-transfer playbook — 2026-10-29
 
+> **Scope:** this audit covers NEAT discovery only. For the full
+> route-tiers → expert → evaluate → repair workflow, use
+> [`../runbooks/new-level.md`](../runbooks/new-level.md).
+
 This is the repeatable NEAT path for adding level N after N-1. It prevents the
 "try a random idea" loop and makes each stage produce a go/no-go artifact.
 
@@ -31,8 +35,8 @@ This is the repeatable NEAT path for adding level N after N-1. It prevents the
 
 6. BUILD THE POOL
    filter clean routes at Jaccard 0.5, cap 8 per cluster, 25% holdout
-   build train/holdout starts
-   only then start multi-level DQN/DDQN training
+   build train/holdout starts plus the deduplicated eval union
+   only then start the single-level DDQN expert for level N
 ```
 
 ## Seed tool

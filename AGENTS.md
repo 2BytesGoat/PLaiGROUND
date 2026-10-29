@@ -7,9 +7,13 @@ Guidance for coding agents and future maintainers working in this repository.
 Read these in order before changing anything:
 
 1. [`docs/status.md`](docs/status.md) — current branch, active experiment, verified results, next work.
-2. [`docs/index.md`](docs/index.md) — task-based front door and repo map.
-3. [`docs/architecture.md`](docs/architecture.md) — how the game ↔ Python stack fits together.
-4. [`docs/known-issues.md`](docs/known-issues.md) — current traps, cross-repo drift, unfinished work.
+2. [`docs/runbooks/new-level.md`](docs/runbooks/new-level.md) — the full
+   NEAT → expert → evaluate → repair procedure for a new level.
+3. [`docs/reference/level-ledger.md`](docs/reference/level-ledger.md) — the
+   selected expert and gate for each level.
+4. [`docs/index.md`](docs/index.md) — task-based front door and repo map.
+5. [`docs/architecture.md`](docs/architecture.md) — how the game ↔ Python stack fits together.
+6. [`docs/known-issues.md`](docs/known-issues.md) — current traps, cross-repo drift, unfinished work.
 
 The `README.md` and older experiment docs contain historical sections. When they
 disagree with `docs/status.md` or `docs/index.md`, the docs win.
@@ -55,17 +59,20 @@ The game source lives in a sibling repository:
 | `src/plaiground/models/extractors/` | Frozen legacy feature extractors. |
 | `src/plaiground/observations/spec.py` | Python mirror of the game's observation contract. |
 | `src/plaiground/observations/lean_io.py` | Load/create the fitted lean preprocessing pipeline. |
-| `src/plaiground/data/` | Route filtering, start-pool loading, and DQN route extraction. |
+| `src/plaiground/data/` | Route filtering, level route tiers, start-pool loading, and DQN route extraction. |
+| `src/plaiground/data/level_data.py` | Strict/near/all-success classification, filtered routes, and train/holdout/eval pools. |
 | `src/plaiground/evaluation/rollout.py` | Shared deterministic canonical/start-set evaluator. |
 | `src/plaiground/experiments/runner.py` | Experiment config -> run paths and the common CLI. |
 | `src/plaiground/models/` | Declared lean v1 model: `LeanMLP` 512×512 + SB3 policy kwargs. |
+| `tools/level.py` | `data` (route tiers/pools) and `status` (per-level view). |
 | `tools/evaluate.py` | Shared PPO/DQN evaluation entry point. |
 | `tools/extract_route_starts.py` | NEAT checkpoint -> clean-start DQN pool. |
 | `tests/` | Unit tests for the socket/info protocol, preprocessing, models, runner, evaluation, and route/pool handling. |
 | `runs/` | Generated run artifacts. **Gitignored; do not delete or rewrite without asking.** |
 | `archive/2026-10-27-cleanup/` | Historical scripts, runs, and docs moved out of the active tree. |
 | `docs/experiments/` | Historical/deep-dive experiment documents. New records start in `experiments/`. |
-| `docs/reference/` | Contracts, glossary, deployed model, run-artifact inventory. |
+| `docs/runbooks/` | Living procedures such as the new-level pipeline. |
+| `docs/reference/` | Contracts, glossary, deployed model, level ledger, run-artifact inventory. |
 | `docs/audit/` | Dated investigations and reviews. |
 | `environments/` | Game binaries / macOS source shim. Gitignored contents except `.gitkeep`. |
 | `notebooks/` | Tutorial notebooks, not the active training path. |
@@ -94,12 +101,18 @@ The game source lives in a sibling repository:
   1-1 population. Evaluate/evolve on N with `--record-paths` until the clean
   route target is met, then filter/cluster and build the N start pool.
   Zero-shot transfer is a diagnostic only; a canonical-only pool is a fallback.
+- **New-level pipeline:** after NEAT, run
+  `.venv/bin/python tools/level.py data --level N --run-dir <run> ...` to
+  create strict/near/all-success tiers, filtered routes, train/holdout pools,
+  and the deduplicated eval union. Follow
+  [`docs/runbooks/new-level.md`](docs/runbooks/new-level.md); record the
+  selected model in [`docs/reference/level-ledger.md`](docs/reference/level-ledger.md).
 - Do not move or rename scripts/docs without updating `README.md`,
   `docs/index.md`, `AGENTS.md`, and any import paths.
 - Preserve user changes. Never run `git reset --hard`, `git checkout --`, or
   clean untracked files unless the user explicitly asks.
-- Run `python -m unittest discover -s tests` after changing the socket client,
-  info decoding, or wrappers.
+- Run `.venv/bin/python -m unittest discover -s tests` after changing the
+  socket client, info decoding, wrappers, or level data tooling.
 
 ## Environment and game-side footguns
 

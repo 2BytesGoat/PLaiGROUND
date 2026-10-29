@@ -58,22 +58,38 @@ def _fmt_stats(name: str, rows: list[dict]) -> dict:
         if str(row.get("start_kind")) == "canonical"
         and row.get("run_time") is not None
     ]
-    times = sorted(float(row["run_time"]) for row in canonical)
+    finished = [row for row in canonical if bool(row.get("finished"))]
+    deaths = [
+        row
+        for row in canonical
+        if not bool(row.get("finished")) and not bool(row.get("timed_out"))
+    ]
+    finished_times = sorted(float(row["run_time"]) for row in finished)
+    death_times = sorted(float(row["run_time"]) for row in deaths)
     stats = {
         "episodes": len(rows),
-        "canonical_episodes": len(times),
-        "best_time": min(times) if times else None,
-        "median_time": median(times) if times else None,
-        "below_1_90": sum(value < 1.90 for value in times),
-        "below_1_75": sum(value < 1.75 for value in times),
-        "below_1_70": sum(value < 1.70 for value in times),
-        "below_1_6334": sum(value < 1.6334 for value in times),
+        "canonical_episodes": len(canonical),
+        "canonical_finished": len(finished_times),
+        "canonical_deaths": len(death_times),
+        # ``best_time`` is kept for existing readers; it now means best finish.
+        "best_time": min(finished_times) if finished_times else None,
+        "best_finished_time": min(finished_times) if finished_times else None,
+        "best_death_time": min(death_times) if death_times else None,
+        "median_time": median(finished_times) if finished_times else None,
+        "below_1_90": sum(value < 1.90 for value in finished_times),
+        "below_1_75": sum(value < 1.75 for value in finished_times),
+        "below_1_70": sum(value < 1.70 for value in finished_times),
+        "below_1_6334": sum(value < 1.6334 for value in finished_times),
         "timeouts": sum(bool(row.get("timed_out")) for row in rows),
     }
     print(
         f"[collect {name}] episodes={stats['episodes']} "
         f"canonical={stats['canonical_episodes']} "
-        f"median={stats['median_time']} best={stats['best_time']} "
+        f"finished={stats['canonical_finished']} "
+        f"deaths={stats['canonical_deaths']} "
+        f"best_finished={stats['best_finished_time']} "
+        f"best_death={stats['best_death_time']} "
+        f"median={stats['median_time']} "
         f"<1.75={stats['below_1_75']} <1.633={stats['below_1_6334']} "
         f"timeouts={stats['timeouts']}",
         flush=True,

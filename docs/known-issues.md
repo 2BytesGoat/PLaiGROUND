@@ -117,8 +117,10 @@ result in the pool. See
 The reset/world-state/powerup/`info_request` path is implemented and smoke-tested,
 but the clean-start experiment is not yet validated or promotable:
 
-- 1-8+ powerup routes have not been re-recorded through the one-pass capture and
-  full reset/eval path; the powerup/world-state unit test is not a route gate.
+- 1-8 powerup routes are now re-recorded through the one-pass capture and
+  replayed/evaluated in `lean_stick` (0105/0106/0118); 1-9+ still need the same
+  route-level validation, and the powerup/world-state unit test alone is not a
+  route gate.
 - The one-pass capture records non-grounded checkpoints (jump states); the
   extractor filters them, but the route registry still needs an explicit
   grounded/standable gate.
@@ -254,12 +256,14 @@ restores grounded velocity, `run_time`, `best_run_time`, `run_active`, and
 a `state_from_info()` helper. The docs are stale. The limitation is narrower
 than “no snapshots”: no jump states, powerups, or dissolve timers.
 
-### 12. The game repo is dirty
+### 12. Game provenance can drift from the manifest
 
-`../dragon-jump-remaster` is on `prepare-for-expo` at `360b055` with
-uncommitted raw-state, reward, force-start, and terminal-death changes. Any
-number measured now is from a dirty tree. Record the dirty state with the
-result.
+The game repo is on `prepare-for-expo`, currently `50dcc66` (clean). The active
+experiment manifests record `fe7821d`; the two commits after it (`editor` fix,
+Steam auth tool) do not change the training/observation code, but every future
+result should record the actual HEAD and dirty state. The old caveat about
+`360b055` is historical. Use `tools/record_provenance.py` or compare the
+manifest commit at run start; do not infer provenance from the manifest alone.
 
 ### 13. The deployed-model baseline is quoted differently
 
@@ -407,6 +411,11 @@ at `runs/neat_clean_450/pool_pre_standability/`.
 See
 [`audit/2026-10-28-ppo-timeout-root-cause.md`](audit/2026-10-28-ppo-timeout-root-cause.md).
 
+For 1-6, the deterministic 1.705M checkpoint is 4.5667 s (repeatable at speedup
+12 and 16), but the 0094 2% exploration anchor has 155 finishes under 4.28 s
+(including 96 at 3.3333 s). The canonical trace is not a reliability result;
+report the deterministic gate separately from the stochastic distribution.
+
 ### 25. `--speedup` below 1.0 is silently 1x — low
 
 The game's `_apply_speedup()` clamps `--speedup` to `[1.0, 16.0]` and returns
@@ -416,6 +425,172 @@ with `speedup = 0.5` (0078) or `0.25` therefore runs at normal speed; there is
 no slow-motion path today. True slow motion needs a game-side branch that keeps
 `Engine.physics_ticks_per_second` at 60 and only lowers `Engine.time_scale`;
 lowering the tick rate instead changes the per-tick simulation.
+
+### 26. NEAT fitness does not rank fast finishers first — medium
+
+The raw game reward is dominated by the finish bonus and flow/efficiency
+shaping. In the 1-5 archive, the 4.6833 s route scores 561.08 while a 7.1167 s
+route scores 570.93 and an 18.72 s finisher scores 561.70. Reproduction therefore
+selects slow finishers; rebalancing only archives the fast genome. Use
+`--time-fitness-weight W` (default 0) to subtract `W * run_time` from finisher
+fitness. At W=20 the 4.68 s route ranks above the 7.12 s route. Do not confuse
+the fitness-best genome with the fastest route.
+
+### 27. Changing action_repeat breaks the old-level anchor — high
+
+The 1.555M chain model was trained at `action_repeat=4`. Re-collecting the
+1-1..1-4 anchor at `action_repeat=2` (0083) gives 2,229 episodes, median 3.25 s,
+best 1.6167 s, and 409 timeouts. The 0082 deterministic 1.58M eval then failed:
+1-5 0/1 (death), 1-4 timeout, 1-1 2.9333 s. Do not mix 4-frame anchor
+transitions with a 2-frame online env: the reward horizon and the next-state
+delay differ. Use one action repeat for the online env, the expert replay, and
+the anchor. The 2-frame expert was archived; 0085 retried at 4 frames.
+
+Also, `collect_dqn_buffer.py` without `--rare-buffer` writes a plain
+`ReplayBuffer`; the DDQN trainer rejects it as an anchor. Use
+`--rare-buffer --gap-quantile 0.9`.
+
+### 28. Single-model 1-5 training damages 1-4 and late 1-2 — high
+
+The 0085 final 1.655M checkpoint gives **1-5 3.1667 s**, 1-1 1.5667 s, and 1-3
+3.1667 s, but **1-4 fails** (one death + one timeout) and **1-2 regresses to
+5.3500 s**. The 1-5 schedule has only one 1-4 env and the old anchor has no 1-4
+transitions. Use the 1.555M chain model for 1-1..1-4. A 25k retention fine-tune
+with 2 x 1-4 and 2 x 1-2 plus a 1.555M all-level anchor (0088) was tried: its
+final restored 1-2 (3.0167 s) and 1-3 (3.2000 s) but still timed out on 1-4 and
+pushed 1-5 to 3.5000 s, outside the 3.41 s gate. Do not repeat that recipe; a
+single-model attempt needs a frozen 1-5 head or a dedicated 1-4 expert buffer.
+Keep the 0085 final as the 1-5 fallback; do not use it for 1-2 or 1-4.
+
+### 29. `collect_dqn_buffer` “best” includes deaths — medium
+
+The 1-6 anchor summary reported `best=2.4333 s`, but that row is
+`finished=False`, length 35, reward -48.49: a death. `_fmt_stats` took
+`min(run_time)` over all canonical episodes without filtering on `finished`, so
+the 2.43 s death was presented as a fast route. The 2.6–2.8 s entries in the
+1-6 retrain monitor are also deaths. The collector now reports
+`best_finished_time`, `best_death_time`, `canonical_finished`, and
+`canonical_deaths`, and computes medians/speed bins from finished episodes only.
+The 1-6 anchor's 3.0667/3.2/3.3333 s entries are **real finished episodes** under
+2% exploration, not deaths; they are stochastic and are not deterministic
+checkpoints. The existing anchor metadata still contains the old
+`best=2.4333`; treat it as the death value. See
+[`audit/2026-10-29-1-6-ddqn-investigation.md`](audit/2026-10-29-1-6-ddqn-investigation.md).
+
+### 30. Checkpoint selection is manual and finals regress — high
+
+`dqn_final.zip` is the last save, not the best model. 0091's final is 7.25 s
+while 1.705M is 4.5667 s; 0060's final was worse than 1.3M; 0095's final is
+6.3833 s (best of that run, but worse than the 0091 1.705M source). The first
+0091 selection skipped 1.705M entirely and used 1.68M (4.6833 s). Evaluate
+**every** saved checkpoint with `tools/evaluate.py`, then record the selected
+path in the experiment README, `docs/status.md`, and
+`docs/reference/level-ledger.md`. See
+[`audit/2026-10-29-run-reliability.md`](audit/2026-10-29-run-reliability.md).
+`tools/level.py data` prepares the pools but deliberately does not select a
+checkpoint.
+
+### 31. The 1-6 fast mode is stochastic; the 4.07 s replay is not reproducible — high
+
+The 0094 1-6 anchor has 1,697 finishes; 155 are under 4.28 s, including 96 at
+3.3333 s and 19 at 3.2 s. These are real finishes from the 2% exploration
+policy, but no deterministic checkpoint selects them. More importantly, the
+0095 replayed routes are not stable in isolation: a second replay gave 4.7167 s
+for the 3.1833 s route, 5.0500 s for the 3.9833 s route, and a death at 2.7167 s
+for the 4.0667 s route. Route replay order/RNG carries over between routes.
+**Do not use the 3.3/4.07 replays as deterministic teacher actions.** The stable
+NEAT route is 4.50 s; the 0099 any-start expert is 4.60 s canonical. See
+[`audit/2026-10-29-1-6-ddqn-investigation.md`](audit/2026-10-29-1-6-ddqn-investigation.md).
+
+### 32. 1-6 had no state-start pool — addressed
+
+The original 1-6 pool was canonical-only because `runs/level_analysis/1-6.json`
+was missing. It is now exported. Expanding all 263 clean 0093 routes gives
+**32 unique state starts**, not 11: the old 0090 pool only used 22 routes.
+0097/0099 trained on canonical + 31 state starts and selected the 1.815M
+checkpoint, which finishes **32/32** with 0 deaths/timeouts (median 6.0417 s,
+canonical 4.6000 s, spawn_ok 32/32). The 1.705M canonical reference covers only
+11/32, confirming the old gap. Use
+`runs/neat_speed_1_6_from_0090/pool_state_70/` for the current 0.7/0.3 pool and
+`pool_state_50/` for the 0.5/0.5 training pool.
+
+### 33. Resumed DQN ignored the manifest learning rate — fixed
+
+SB3 restores the optimizer and learning-rate schedule from a checkpoint.
+Before 2026-10-29, `run.resume_from` kept the source run's LR even when the new
+manifest declared another value (0095's 5e-5 ran at 1e-4). `dqn.py` now applies
+the manifest LR after loading, rebuilds the schedule, updates optimizer groups,
+and 0099 logs `learning_rate 5e-05`. Use a fresh output directory when testing
+a new LR; checkpoints retain their optimizer state. The exploration epsilon
+schedule still follows the absolute timestep counter: a run resumed at 1.8M
+with `exploration_fraction=0.5` reports `current=0.02`, not a fresh 0.10 ramp.
+0103 therefore ran expert/replay-driven at 2% epsilon; a true exploration ramp
+needs a schedule reset or an explicit epsilon override.
+
+### 34. 1-7 has no strict-clean route archive — near-clean gate used
+
+The 1-7 transfer (0101) and the high-mutation cleanup (0102) both produced many
+successful routes but **zero strict-clean routes** under the standard
+`revisit_ratio <= 0.10` filter. The best 1-7 route is **7.0333 s** with revisit
+0.107, backtracks 1, and action flips 0.048. The accepted 1-7 gate therefore
+uses near-clean routes (`revisit_ratio <= 0.20`, `backtracks <= 2`, action flips
+<= 0.75), giving 10 grounded starts. The 20-state all-success diagnostic
+includes two timeouts from a high-revisit route (`8f687...`, revisit 0.43) and
+is not the clean gate. Do not describe the 18/20 all-success result as the
+accepted clean-start result; use the 10/10 near-clean result and record the
+strict-clean exception explicitly.
+
+### 35. 1-8 clean gate and the high-revisit all-success timeout
+
+Unlike 1-7, 1-8 produced strict-clean routes: 26 routes / 11 clusters, best
+4.4167 s. The selected 0118 **1.960392M** expert covers **40/40** strict-clean
+states with 0 deaths/timeouts and canonical **4.4667 s**. The broader
+all-success diagnostic is **106/107**, with one timeout at `[16,21]` facing `1`
+from route `36a6b1e1...` (revisit 0.226, not strict clean). Do not use the
+106/107 all-success result as the clean gate; the clean gate is 40/40. The
+fastest overall NEAT route (4.4167 s) is in holdout cluster `c000`; the expert
+reproduces the fastest train route (4.4667 s). That is a coverage/speed split
+tradeoff, not a model-selection failure. The final 1-8 target is still open.
+
+### 36. Canonical timing can be one frame above the provisional gate
+
+The 0109 repair reached full 1-8 clean coverage at canonical 4.5167 s, which is
+0.0023 s above the provisional 4.5144 s gate. The 0118 low-LR nudge fixed it to
+4.4667 s without losing coverage. If a future level lands within one frame of a
+provisional gate, prefer a short low-LR canonical nudge over accepting the
+near-miss or retraining from scratch.
+
+### 37. Route tiers and eval-pool unions were manual — resolved
+
+The 1-7/1-8 runs produced `strict_clean_routes`, `near_clean_routes`,
+`all_success_routes`, and `eval_*_start_pool.json` with ad-hoc snippets. The
+`clean`/`quality` fields were inconsistent, and the eval union was a manual
+train+holdout merge. `tools/level.py data` now recomputes strict/near/all tiers
+from the archive, filters the accepted tier, builds the pools, and writes the
+deduplicated eval union. It reproduces the 1-8 result exactly (26 strict, 37/14
+states, 40 eval) and the 1-7 near-clean fallback (10/10). It also warns when the
+fastest cluster is holdout-only. The checkpoint sweep remains manual; see
+known issue #30 and the runbook.
+
+### 38. 1-9 is a single-route expert, not an any-start or retention model
+
+The user confirmed 1-9 is a precision map with one route to optimize, so 0122
+was trained on the fastest clean route only (`926883...`, 2.9500 s) with
+canonical-only resets. The 11-route / 6-cluster pool from 0121 is retained as a
+diagnostic, not as an accepted start gate.
+
+The selected 1-9 checkpoint (`ddqn_2060360_steps.zip`) is a 1-9-only fine-tune
+of the 1-8 expert. Deterministic canonical 1-1..1-9 retention is partial:
+
+```text
+finish:     1-1 2.5167, 1-3 6.0167, 1-9 2.9500
+pass gate:  1-1, 1-9 only
+fail:       1-2, 1-4, 1-5, 1-6, 1-7, 1-8
+```
+
+Do not use the 1-9 checkpoint as evidence of old-level retention. A shared
+student still needs the per-level teachers and a dedicated retention/distillation
+evaluation.
 
 ## Historical experiment caveats
 

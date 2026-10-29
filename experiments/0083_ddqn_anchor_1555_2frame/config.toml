@@ -1,0 +1,79 @@
+# 0083 — 2-frame old-level anchor from the selected 1.555M DDQN.
+# Collected with epsilon 0.02 on 1-1..1-4 so the 1-5 2-frame run keeps the
+# old-level policy distribution it starts from.
+
+[experiment]
+id = "0083"
+name = "ddqn_anchor_1555_2frame"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "fe7821d"
+allow_dirty = false
+
+[env]
+levels = ["1-1", "1-2", "1-3", "1-4", "1-1", "1-2", "1-3", "1-4"]
+n_envs = 8
+agents_per_process = 1
+action_repeat = 2
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reassert_held_jump = true
+reward_profile = "default"
+base_port = 23200
+eval_port = 23300
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean_stick"
+preprocessing = "lean_stick"
+expected_raw_size = 191
+model_input_size = 957
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 1
+buffer_size = 200000
+learning_starts = 10000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.5
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.02
+
+[data]
+archive = "runs/neat_seeded_1_4_stick_full_population/archive/routes.json"
+finishers = "runs/neat_seeded_1_4_stick_full_population/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-4.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_seeded_1_4_stick_full_population/pool/multilevel_train_start_pool.json"
+
+[run]
+preprocessing_from = "runs/ddqn_fresh_1_1_lean_stick/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_anchor_1555_2frame"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

@@ -36,6 +36,8 @@ data/                small tutorial dataset
 | I want to… | Go to |
 |---|---|
 | See what is active and what has been verified | [`docs/status.md`](docs/status.md) |
+| Add or continue a level (NEAT → expert → eval) | [`docs/runbooks/new-level.md`](docs/runbooks/new-level.md) |
+| See the selected expert for each level | [`docs/reference/level-ledger.md`](docs/reference/level-ledger.md) |
 | Find a script or run artifact | [`src/README.md`](src/README.md) → [`docs/reference/run-artifacts.md`](docs/reference/run-artifacts.md) |
 | See what experiments exist and which game commit they used | [`experiments/README.md`](experiments/README.md) |
 | Understand the game ↔ Python protocol | [`docs/architecture.md`](docs/architecture.md) |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build train/holdout clean-start pools from filtered NEAT routes."""
+"""Build train/holdout clean-start pools and their eval union."""
 
 from __future__ import annotations
 
@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-time-to-exit", type=float, default=0.5)
     parser.add_argument("--canonical-weight", type=float, default=0.70)
     parser.add_argument("--state-weight", type=float, default=0.30)
+    parser.add_argument(
+        "--eval-pool-name",
+        default="eval_start_pool.json",
+        help="Filename for the deduplicated train+holdout evaluation union.",
+    )
     return parser.parse_args()
 
 
@@ -48,6 +53,7 @@ def main() -> int:
         min_time_to_exit=args.min_time_to_exit,
         canonical_weight=args.canonical_weight,
         state_weight=args.state_weight,
+        eval_pool_name=args.eval_pool_name,
     )
     summary = result["summary"]
     print(
@@ -56,9 +62,11 @@ def main() -> int:
         f"train_states={summary['train_states']} "
         f"holdout_states={summary['holdout_states']} "
         f"shared_state_keys={summary['shared_state_keys']} "
+        f"eval_states={summary['unique_eval_states']} "
         f"state_weight_each={summary['state_weight_each']:.6f}",
         flush=True,
     )
+    print(f"[pool] eval={result['eval_pool_path']}", flush=True)
     return 0
 
 
