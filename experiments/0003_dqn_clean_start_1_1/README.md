@@ -1,40 +1,38 @@
-# 0003 — raw-state DQN from clean starts (1-1)
+# 0003 — lean-state DQN from clean starts (1-1)
 
-Status: **planned**
+Status: **complete; negative at 1M**  
+Started: 2026-10-29
+Completed: 2026-10-29
 
-This manifest records the current DQN defaults for the raw-state clean-start
-path. It is the config-driven replacement for the old `02_dqn.py extract` /
-`train` / `eval` command sequence.
+This is the fair DQN comparison against PPO: same lean 188-value game packet,
+same fitted 188 → 954 preprocessing, same 12-start train pool / 8-start
+holdout pool, same reward, and the same canonical/train/holdout evaluation.
 
-## Data
-
-```bash
-.venv/bin/python tools/extract_route_starts.py --config experiments/0003_dqn_clean_start_1_1
-```
-
-Writes:
+## Inputs
 
 ```text
-runs/dqn_clean_start_1_1/spawns/1-1_spawn_pool.json
-runs/dqn_clean_start_1_1/spawns/1-1_start_pool.json
+observation:      lean 188
+preprocessing:    same fitted pipeline as PPO
+model input:      954
+model:            954 -> 512 -> 512 -> 2, ReLU
+environments:     8 processes × 1 agent
+timesteps:        1,000,000
+starts:           validated 12-start train / 8-start holdout
+reward:           current game reward (5/s time, continuous under-gold,
+                  -100 death, -100 timeout)
 ```
 
-The config points `[data].train_pool` at the flat start list.
+The preprocessor is loaded from:
+
+```text
+runs/ppo_clean_start_1_1_fresh/preprocessing.pkl
+```
 
 ## Train
 
 ```bash
 .venv/bin/python scripts/reinforcement/02_dqn.py \
   --config experiments/0003_dqn_clean_start_1_1
-```
-
-For a smoke:
-
-```bash
-.venv/bin/python scripts/reinforcement/02_dqn.py \
-  --config experiments/0003_dqn_clean_start_1_1 \
-  --timesteps 10000 \
-  --output-dir runs/dqn_clean_start_1_1_smoke
 ```
 
 ## Evaluate
@@ -45,5 +43,18 @@ For a smoke:
   --model runs/dqn_clean_start_1_1/dqn/dqn_final.zip
 ```
 
-Canonical and the configured evaluation set run in one persistent Godot
-process each. Results are written under `runs/dqn_clean_start_1_1/eval/<tag>/`.
+## Result
+
+The lean 8×8 DQN trained for 1M timesteps and was evaluated:
+
+```text
+canonical:    timeout (0/1)
+train pool:   8/12, median 2.9750 s, best 2.2333 s
+holdout pool: 7/8, median 5.2333 s, best 3.4167 s
+```
+
+All pool spawns were applied.
+
+The 64-environment run collected data quickly but only produced ~3,900 DQN
+gradient updates in 1M timesteps, versus ~31,000 in the 8×1 lean run. It did not
+learn the canonical finish. The selected 600k PPO model remains far ahead.

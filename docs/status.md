@@ -1,6 +1,6 @@
 # Status
 
-**Updated:** 2026-10-28
+**Updated:** 2026-10-29
 **Branch:** `neat`
 **HEAD:** `707b745` — `lean inputs`
 **Working tree:** the repository restructure (`src/plaiground/`, `scripts/`,
@@ -20,7 +20,307 @@ not yet run.)
 
 ## Current focus
 
-**Repository restructure (2026-10-28).** The code is now split into an importable
+**Lean DQN 0013 selected (2026-10-29).** Experiment 0013 continued the 1M DQN
+with the saved 200k replay buffer and selected the **1.85M** checkpoint:
+
+```text
+runs/dqn_clean_start_1_1_8x1_buffer_finetune/dqn/dqn_final.zip
+```
+
+Deterministic evaluation:
+
+```text
+canonical:    1/1, 1.6167 s
+train pool:   12/12, median 3.2500 s, best 1.6167 s
+holdout pool: 8/8, median 3.7917 s, best 3.3167 s
+```
+
+The fast 1.6167 s route became the deterministic argmax by 1.8M and remained
+stable at 1.825M and 1.85M. The original 1.025M–1.1M checkpoints all stayed at
+1.8667 s, so the planned +100k continuation was too short. SB3 treats
+`total_timesteps` as additional steps when the timestep counter is not reset;
+the run was stopped at 1.853M and the best checkpoint was promoted. The 1.85M
+model improves canonical time by **0.5333 s** over the 600k PPO baseline and
+**0.2500 s** over the 1M DQN. See
+[`../experiments/0013_dqn_clean_start_1_1_8x1_buffer_finetune/README.md`](../experiments/0013_dqn_clean_start_1_1_8x1_buffer_finetune/README.md).
+
+**Stable 600k PPO (historical baseline, 2026-10-28).** Experiment 0007 resumed
+the 500k checkpoint for 100k with **8×1 / `n_steps=600` / `batch_size=480`**.
+It was the selected 1-1 policy before the lean DQN work:
+
+```text
+runs/ppo_clean_start_1_1_best_100k/ppo_pilot_600k.zip
+```
+
+Deterministic evaluation:
+
+```text
+canonical:    1/1, 2.1500 s
+train pool:   12/12, median 3.3250 s
+holdout pool: 8/8, median 3.8583 s
+```
+
+Training canonical stability over the 100k continuation:
+
+```text
+≤2.2 s:   97.7%
+timeouts: 0.04%
+best:     2.133 s
+```
+
+This is a stability win, not a speed win: there were no canonical training
+episodes below 1.9 s in the 100k run. The 500k checkpoint remains the
+shorter-horizon baseline. See
+[`../experiments/0007_ppo_clean_start_1_1_stability_100k/results.md`](../experiments/0007_ppo_clean_start_1_1_stability_100k/results.md).
+
+**Fresh PPO clean-start (2026-10-28, complete; 500k baseline).** Experiment 0004
+trained a new lean PPO model from scratch for **500,000 timesteps** using the
+latest 1-1 NEAT routes and the corrected 12 train / 8 holdout start pool. No old
+PPO checkpoint, preprocessor, or output directory was reused. The 500k baseline
+checkpoint is:
+
+```text
+runs/ppo_clean_start_1_1_fresh/checkpoints/ppo_500000_steps.zip
+```
+
+Deterministic evaluation:
+
+```text
+canonical:    1/1, 2.1500 s
+train pool:   12/12, median 3.3333 s, best 2.1500 s
+holdout pool: 8/8, median 3.8583 s, best 3.4167 s
+```
+
+The 475k checkpoint regressed to canonical timeout, 6/12 train, and 5/8
+holdout; 500k recovered. The 500k run is complete and preserved in
+`runs/ppo_clean_start_1_1_fresh/`.
+
+**1M continuation (2026-10-28, complete; 500k retained).** Experiment 0005
+resumed the fresh 500k checkpoint for the remaining **500,000 timesteps** and
+reached 1,000,400. The final 1M model was evaluated:
+
+```text
+canonical:    1/1, 2.1500 s
+train pool:   12/12, median 3.4167 s
+holdout pool: 8/8, median 4.2750 s
+```
+
+The 500k checkpoint was retained at the time because its train and holdout
+medians were better (3.3333 s and 3.8583 s); the later 600k stable continuation
+superseded it without a time regression. The 1M run is preserved in
+`runs/ppo_clean_start_1_1_resume_1m/`. Training-monitor canonical time peaked
+around 850k–950k, collapsed at 970k–980k, and recovered near 990k. See
+[`../experiments/0005_ppo_clean_start_1_1_resume_1m/results.md`](../experiments/0005_ppo_clean_start_1_1_resume_1m/results.md).
+
+**PPO stability sweep (2026-10-28, complete; 8×1/600/480 selected).**
+Experiment 0006 tested five 50k continuations from the selected 500k
+checkpoint. The old 8×1 / 150 / 120 control degraded to canonical **4.9167 s**,
+train **8/12**, and holdout **5/8**. Larger rollouts fixed it:
+
+```text
+8×1 / 300 / 240:  canonical 2.1500 s, train 12/12 3.3000 s, holdout 8/8 3.8583 s
+8×1 / 600 / 480:  canonical 2.1500 s, train 12/12 3.3250 s, holdout 8/8 3.8583 s
+16×1 / 150 / 240: canonical timeout,     train 6/12,         holdout 5/8
+16×1 / 300 / 480: canonical 2.1500 s, train 12/12 3.4500 s, holdout 8/8 3.9667 s
+```
+
+The selected continuation config is **8 environments × 1 agent, `n_steps=600`,
+`batch_size=480`** (4,800 decisions per update). It tied the best canonical and
+holdout results, had the strongest training-monitor stability, and was faster
+than the old config. The 16×1/300 variant was the throughput reference (~820
+fps) but had worse deterministic pool medians. See
+[`../experiments/0006_ppo_clean_start_1_1_stability_sweep/results.md`](../experiments/0006_ppo_clean_start_1_1_stability_sweep/results.md).
+
+**100k stability confirmation (2026-10-28, complete; 600k PPO selected at the time).**
+Experiment 0007 resumed the 500k checkpoint for 100k timesteps with the
+winning 8×1/600/480 config. The 600k model is stable and matches the best
+deterministic results: canonical 2.1500 s, train 12/12 at 3.3250 s, holdout
+8/8 at 3.8583 s. It is selected as the stable 1-1 policy.
+
+**Time-trial reward experiment (2026-10-28, complete; no speed gain).**
+Experiment 0008 resumed the 225k checkpoint for 100k canonical-only timesteps
+with the new game reward (`5.0/s` time pressure, `+50` flat under-gold finish,
+`-100` death, `-100` training timeout). The 325k deterministic result is
+canonical **2.1500 s**, train **12/12 median 3.2917 s**, and holdout **8/8
+median 3.8583 s**. It did not lower canonical time; the flat bonus applies
+equally to 2.13 s and 1.63 s. The 600k PPO model remained the best PPO baseline. See
+[`../experiments/0008_ppo_time_trial_1_1_225k_100k/results.md`](../experiments/0008_ppo_time_trial_1_1_225k_100k/results.md).
+
+**Continuous under-gold time-trial (2026-10-28, complete; reward fixed, route
+not learned).** Experiment 0009 was the direct A/B against 0008: same 225k
+source, same 100k canonical-only budget, same 8×1/600/480 topology, with
+`min(50, 25 * max(0, gold_time - run_time))` replacing the flat 50. The
+continuous bonus correctly ranks 1.633 s (reward 556.8) above 2.133 s (546.4),
+but the fast route appeared only once in 3,114 canonical episodes. The 325k
+deterministic result is canonical **2.1500 s**, train **12/12 median 3.5583 s**,
+holdout **8/8 median 4.9500 s** — worse than 600k. The 600k stable model remains
+selected. More exploration/topology, not another 8×1 canonical-only run, is the
+next step. See
+[`../experiments/0009_ppo_time_trial_continuous_1_1_225k_100k/results.md`](../experiments/0009_ppo_time_trial_continuous_1_1_225k_100k/results.md).
+
+**8×8 continuous-reward time-trial (2026-10-29, complete; no speed gain).**
+Experiment 0010 tested 64 virtual environments with a 9,600-decision rollout
+from 225k. It completed at 330.6k: canonical **2.1500 s**, train 12/12 median
+**3.4167 s**, holdout 8/8 median **4.2750 s**. The 1.833 s training sample was
+not retained; only ~10 PPO updates fit into 100k. The 600k stable model remains
+selected. See
+[`../experiments/0010_ppo_time_trial_continuous_8x8_225k_100k/results.md`](../experiments/0010_ppo_time_trial_continuous_8x8_225k_100k/results.md).
+
+**Lean 8×8 DQN clean-start baseline (2026-10-29, complete; negative at 1M).**
+Experiment 0003 trained from scratch on the same inputs as PPO: lean 188 →
+fitted 954 preprocessing, 512×512 ReLU, 8 processes × 8 agents = 64
+environments, 1M timesteps, the validated 12-start train / 8-start holdout
+pools, and the current reward. The 1M result is canonical timeout, train 8/12
+(median 2.9750 s), and holdout 7/8 (median 5.2333 s). It produced only ~3,900
+gradient updates because of the 64-env batch; the 8×1 lean run produced ~31k at
+the same experience scale. The 600k PPO model was still the best PPO baseline. See
+[`../experiments/0003_dqn_clean_start_1_1/results.md`](../experiments/0003_dqn_clean_start_1_1/results.md).
+
+**DQN update-count/n-step run (2026-10-29, complete; source checkpoint).**
+Experiment 0012 was the corrected lean 8×1 DQN: 1M timesteps,
+`gradient_steps=4`, 3-step returns, 200k replay, 50% exploration, and final
+epsilon 0.02. It produced about 123k gradient updates instead of the failed 8×8
+run's ~3,900. Deterministic evaluation was canonical **1.8667 s**, train 12/12
+median **3.2833 s**, and holdout 8/8 median **3.8583 s**. The saved 200k replay
+buffer contained 41 canonical 1.633 s episodes and seeded experiment 0013.
+
+**Buffered DQN fine-tune (2026-10-29, complete; selected).** Experiment 0013
+continued the 1M DQN using the saved 200k replay buffer, which contains 41
+canonical 1.633 s episodes. It kept the 8×1 lean setup and
+`gradient_steps=4`, and continued the timestep counter rather than resetting.
+The planned +100k was too short: all 1.025M–1.1M checkpoints stayed at 1.8667 s;
+the fast route became deterministic at 1.8M. Training was stopped at 1.853M and
+the 1.85M checkpoint selected at **1.6167 s** canonical, train 12/12 median
+**3.2500 s**, holdout 8/8 median **3.7917 s**.
+
+**NEAT 1-2 transfer (2026-10-29, complete; first 1-2 pool).** Experiment 0014
+evaluated the final 192-genome 1-1 population
+(`runs/neat_clean_450/neat-checkpoint-25`) on 1-2, then resumed it there and
+collected clean routes. The zero-shot pass finished 46/192 genomes, found 23
+unique routes and 5 clean routes, best **3.5000 s**. Six generations on 1-2
+raised this to **25 clean routes** (79 unique), best **3.3667 s**, median
+**3.6333 s**, with 576 checkpoint snapshots. A permissive filter (Jaccard 0.5,
+8 per cluster) produced 7 clusters and 19 routes (16 train / 3 holdout), but one
+cluster supplied 22 of 32 train starts. The recommended diversity filter
+(Jaccard 0.7, one route per cluster) yields **12 clusters**, 9 train / 3 holdout
+routes, and a pool with **31 train entries (30 state + canonical) / 20 holdout
+states**; the largest train cluster contributes 11/31 starts. All 20 holdout
+states also occur on a train route, so the split is route-held out, not
+state-disjoint. Use
+`runs/neat_clean_450_1_2_transfer/pool_j07_cap1/`. See
+[`../experiments/0014_neat_transfer_1_2/README.md`](../experiments/0014_neat_transfer_1_2/README.md).
+
+**Zero-shot DQN on 1-2 (2026-10-29, complete; baseline).** Experiment 0015
+ran the selected 1.85M 1-1 DQN on 1-2 with the diverse start pool. Canonical
+finished in **9.1167 s**; train was **17/31** finishes (median 5.5000 s, best
+3.1833 s) and holdout **15/20** (median 5.9500 s). It can finish but struggles
+with many starts. See
+[`../experiments/0015_dqn_zero_shot_1_2/README.md`](../experiments/0015_dqn_zero_shot_1_2/README.md).
+
+**Multi-level DQN fine-tune (2026-10-29, pilot complete; candidate).**
+Experiment 0016 resumed the 1.85M 1-1 DQN with four 1-1 and four 1-2
+environments for 100k additional steps. The 1-1 retention gate passed exactly:
+canonical **1.6167 s**, train 12/12 median **3.2500 s**, holdout 8/8 median
+**3.8000 s**. The same model improved 1-2 from zero-shot canonical **9.1167 s**
+to **3.7500 s**, and now finishes **31/31** train starts (median 4.3833 s, best
+3.0500 s) and **20/20** holdout starts (median 4.0500 s, best 3.0500 s), with no
+deterministic timeouts. It is a strong level-agnostic 1-1/1-2 candidate, but the
+selected policy remains the 1-1 model until a promotion decision. See
+[`../experiments/0016_dqn_multilevel_1_1_1_2_transfer/README.md`](../experiments/0016_dqn_multilevel_1_1_1_2_transfer/README.md).
+
+**1-2 continuation (2026-10-29, complete; candidate).** Experiment 0017
+continued the 4×1-1 + 4×1-2 mix from the 1.95M pilot for another 100k steps.
+The 1-1 gate still passes: canonical **1.6167 s**, train 12/12 median
+**3.2667 s**, holdout 8/8 median **3.8000 s**. 1-2 start-pool medians improved
+over the pilot (train **4.0167 s**, holdout **3.3500 s**) while canonical stayed
+flat at **3.7833 s**; all 31 train and 20 holdout starts finish with no
+timeouts. The model is a strong level-agnostic 1-1/1-2 candidate, but canonical
+1-2 is still slower than the old NEAT/PPO references. The next planned step is a
+4+2+2 schedule for 1-3 with a ~300k budget.
+
+A deterministic action/Q diagnostic found that the slow 1-2 canonical route is
+**confident but jittery**, not epsilon noise: 17 action flips in 55 decisions
+(flip rate 0.315), mean Q-margin 19.1, while the fast 1-2 state has 6/27 flips
+(0.231) and mean margin 31.3. The clean 1-1 canonical route has 5/23 flips
+(0.227), so the canonical 1-2 policy is the outlier. This points to route/action
+policy quality rather than Q ties. Diagnostic artifacts are under
+`runs/dqn_zero_shot_1_2/eval/diagnostics/`. See
+[`../experiments/0017_dqn_multilevel_1_1_1_2_100k/README.md`](../experiments/0017_dqn_multilevel_1_1_1_2_100k/README.md).
+
+**NEAT transfer rule (2026-10-29).** For every new level N, collect routes by
+evolving the **previous level's evolved NEAT population** on N, not by
+transferring from 1-1. Zero-shot transfer is diagnostic only; canonical-only
+start pools are a fallback. For 1-3, the seed is
+`runs/neat_clean_450_1_2_transfer/neat-checkpoint-31`. This rule is also in
+[`../AGENTS.md`](../AGENTS.md).
+
+**1-3 NEAT route collection (2026-10-29, complete; zero finishers).**
+Experiment 0020 evolved the 1-2 population on 1-3 with a 300-step horizon for
+20 generations. It finished in **532.8 s** with **0/192 finishes**, 0 clean
+routes, and no checkpoint files. The best genome plateaued at fitness 74.67
+from generation 32 and ended around `y≈424`; the exit is `y=10` from a
+`y≈416` start. This is a wall-jump capability gap, not a timeout near the
+finish. Experiment 0019, the canonical-only 1-3 DQN fallback, was stopped at
+2.274M and is not a candidate.
+
+**Exploratory 1-3 NEAT (2026-10-29, complete; finishers found).** Experiment
+0021 ran a fresh 384-genome, higher-mutation search on 1-3 for 30 generations.
+It found **12 unique routes and 113 checkpoint snapshots**, best **4.2000 s**,
+with 8/384 finishes in the final generation. No route passed the strict clean
+filter: the best route has revisit ratio 0.116 against a 0.10 limit, with zero
+backtracks and 0.21 flip rate. This is a real capability jump over the zero
+finishers from the 192-genome transfer.
+
+**Longer 1-3 NEAT (2026-10-29, complete; strong portfolio).** Experiment 0022
+continued the 384-genome population for 40 more generations in 1,610.1 s. It
+finished at **220/384 (~57%)**, with **304 unique routes**, 6,361 finisher
+records/checkpoints, and **53 strict clean routes**. The fastest route is
+4.2333 s but unclean; the best clean route is **5.4667 s** and the clean median
+is **5.9833 s**. The clean set spans 13 route clusters at Jaccard 0.5 (26 at
+0.7). This is enough for a real 1-3 start pool and a 1-4 seed portfolio.
+
+**Next NEAT step — two-tier discovery + deployment portfolio (planned).**
+After 0022, do not force a Gaussian on the live population. Separate:
+
+```text
+discovery:   large/high-mutation NEAT; non-finishers allowed; fitness + novelty
+deployment:  finishers only; best genome per route cluster × finish-time bin
+```
+
+Suggested deployment portfolio: 10–15% speedrunners (<4.5 s), 60–70% median
+finishers (4.5–6.0 s) across different clusters, 10–15% slow/robust only if
+behaviorally distinct, and 5–10% exploration kept outside the final seed.
+“All must finish” is a final portfolio filter, not an early training constraint.
+Vanilla NEAT parameters can widen the distribution but cannot enforce this
+portfolio; that needs custom reproduction or a MAP-Elites-style archive. For the
+1-4 seed, prefer a portfolio (speedrunner, robust median, diverse route
+representative) over one average genome. See
+[`../experiments/0022_neat_explore_1_3_long/README.md`](../experiments/0022_neat_explore_1_3_long/README.md).
+
+**Double DQN continuation (2026-10-29, complete; 2.9667 s candidate).**
+Experiment 0018 resumed the 2.05M level-agnostic 1-1/1-2 model for 300k steps
+with a dedicated Double-DQN class and entry point. The final 2.35M checkpoint
+failed the 1-1 holdout gate (median 4.1833 s), so the **2.15M checkpoint** was
+selected instead:
+
+```text
+1-1 canonical: 1.6167 s
+1-1 train:     12/12, median 3.2750 s
+1-1 holdout:   8/8, median 3.7917 s   PASS
+1-2 canonical: 2.9667 s
+1-2 train:     31/31, median 3.9167 s, best 2.9667 s
+1-2 holdout:   20/20, median 3.1417 s, best 3.0500 s
+```
+
+The selected DDQN checkpoint ties the best PPO 1-2 canonical reference and
+beats the old NEAT 1-2 transfer, while preserving the 1-1 behavior. The DDQN
+canonical action trace is also smoother: 10 flips / 44 decisions versus 17 / 55
+for the 2.05M DQN. The selected model is
+`runs/dqn_multilevel_1_1_1_2_ddqn_300k/dqn/checkpoints/ddqn_2150000_steps.zip`.
+See
+[`../experiments/0018_dqn_multilevel_1_1_1_2_ddqn_300k/README.md`](../experiments/0018_dqn_multilevel_1_1_1_2_ddqn_300k/README.md).
+
+The code is now split into an importable
 `src/plaiground/` package, thin `scripts/`, data/evaluation `tools/`, and
 committed `experiments/` manifests. The package is installed editable with
 `uv pip install --python .venv/bin/python -e . --no-deps`. The 1M PPO process
@@ -85,7 +385,7 @@ Fixes now in place:
 - canonical evaluation reports **one deterministic trial**;
 - the pool builder rejects non-standable cells, and the runtime env rejects a
   silent spawn fallback;
-- `tools/trace_ppo.py` records per-step action/state traces.
+- `tools/watch.py` previews a PPO/DQN checkpoint in the game window.
 
 The corrected 400k evaluation is canonical **1/1 at 2.15 s**, train pool
 **12/12**, holdout pool **8/8**. See

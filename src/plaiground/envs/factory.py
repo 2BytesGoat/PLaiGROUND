@@ -21,6 +21,7 @@ from plaiground.experiments.runner import Run
 from .godot import GodotEnv
 from .runtime import isolated_home
 from .single_agent import SingleAgentGodotEnv
+from .vec_env import MultiAgentGodotVecEnv
 
 
 INFO_KEYWORDS = (
@@ -105,6 +106,36 @@ def build_vec_env(
 
     (run.output_dir / "godot").mkdir(parents=True, exist_ok=True)
     run.monitor_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if run.agents_per_process > 1:
+        if len(levels) > 1:
+            raise ValueError(
+                "multi-agent training currently supports one level per run"
+            )
+        vec_env = MultiAgentGodotVecEnv(
+            env_path=env_path,
+            level=levels[0],
+            n_agents_per_process=run.agents_per_process,
+            n_processes=run.n_envs,
+            seed=run.seed,
+            action_repeat=run.action_repeat,
+            speedup=run.speedup,
+            max_decisions=run.max_decisions,
+            base_port=run.base_port,
+            output_dir=run.output_dir,
+            obs_encoding=run.obs_encoding,
+            reward_profile=str(run.env.get("reward_profile", "default")),
+            show_window=run.show,
+            spawn_pool=pool,
+            spawn_seed=int(run.env.get("start_seed", 0)),
+            preprocessor=preprocessor,
+        )
+        return VecMonitor(
+            vec_env,
+            filename=str(run.monitor_path),
+            info_keywords=INFO_KEYWORDS,
+        )
+
     env_fns = [
         partial(
             make_env,
@@ -139,16 +170,18 @@ def make_eval_env(
     port: int,
     log_name: str,
     home_name: str,
+    show_window: bool | None = None,
+    speedup: float | None = None,
 ) -> GodotEnv:
     run.eval_dir.mkdir(parents=True, exist_ok=True)
     GodotEnv.DEFAULT_TIMEOUT = run.timeout
     return GodotEnv(
         env_path=env_path,
         port=port,
-        show_window=run.show,
+        show_window=run.show if show_window is None else show_window,
         seed=run.seed,
         action_repeat=run.action_repeat,
-        speedup=run.speedup,
+        speedup=run.speedup if speedup is None else speedup,
         nb_agents=num_agents,
         level=level,
         convert_action_space=True,

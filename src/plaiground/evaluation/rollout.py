@@ -306,7 +306,7 @@ def write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
             )
 
 
-def _load_model(algorithm: str, path: Path, device: str):
+def load_model(algorithm: str, path: Path, device: str):
     if algorithm == "ppo":
         from stable_baselines3 import PPO
 
@@ -318,7 +318,7 @@ def _load_model(algorithm: str, path: Path, device: str):
     raise ValueError(f"unknown algorithm {algorithm!r}")
 
 
-def _load_preprocessor(run: Run) -> Any | None:
+def load_preprocessor(run: Run) -> Any | None:
     if run.obs_encoding != "lean" and run.preprocessing != "lean":
         return None
     if not run.preprocessing_path.exists():
@@ -449,8 +449,8 @@ def evaluate_run(
 ) -> dict[str, Any]:
     tag = _safe_tag(tag or model_path.stem)
     run.eval_dir.mkdir(parents=True, exist_ok=True)
-    model = _load_model(run.algorithm_name, model_path, run.device)
-    preprocessor = _load_preprocessor(run)
+    model = load_model(run.algorithm_name, model_path, run.device)
+    preprocessor = load_preprocessor(run)
     env_path = resolve_env_path()
 
     summary: dict[str, Any] = {

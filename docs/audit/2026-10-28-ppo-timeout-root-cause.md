@@ -89,8 +89,8 @@ The old evaluator wrote 100 rows with identical `steps`, `run_time`, `reward`,
   reset, exit, and unsupported cells before pool construction.
 - `SingleAgentGodotEnv` now raises if Godot reports a different spawn cell than
   the pool requested, instead of silently training on a fallback.
-- `tools/trace_ppo.py` records per-step action, cell, position, velocity, and
-  run time for checkpoint comparison.
+- `tools/watch.py` previews the selected PPO/DQN checkpoint in the game; the
+  old PPO-only tracer was removed.
 - The train/holdout pools were rebuilt after backing up the old pool.
 
 ## Corrected pool

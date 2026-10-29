@@ -1,0 +1,59 @@
+[experiment]
+id = "0014"
+name = "neat_transfer_1_2"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-2"
+population = 192
+parallel = 8
+action_repeat = 4
+speedup = 8.0
+max_steps = 150
+
+[source]
+population_checkpoint = "runs/neat_clean_450/neat-checkpoint-25"
+source_level = "1-1"
+
+[collection]
+record_paths = true
+min_clean_routes = 25
+generations = 20
+
+[result]
+clean_routes = 25
+unique_routes = 79
+best_time = 3.3667
+median_clean_time = 3.6333
+filtered_routes = 19
+filtered_clusters = 7
+train_routes = 16
+holdout_routes = 3
+train_states = 31
+train_pool_entries = 32
+holdout_states = 20
+shared_state_keys = 20
+diverse_jaccard = 0.7
+diverse_max_per_cluster = 1
+diverse_clusters = 12
+diverse_filtered_routes = 12
+diverse_train_routes = 9
+diverse_holdout_routes = 3
+diverse_train_states = 30
+diverse_holdout_states = 20
+diverse_shared_state_keys = 20
+
+[output]
+dir = "runs/neat_clean_450_1_2_transfer"
+archive_dir = "runs/neat_clean_450_1_2_transfer/archive"

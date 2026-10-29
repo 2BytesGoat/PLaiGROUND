@@ -73,6 +73,11 @@ The game source lives in a sibling repository:
   copying a file back to its original path if needed.
 - Keep `docs/status.md` current when an experiment starts, stops, or produces a
   result. Add a dated audit for a deep investigation instead of bloating status.
+- **NEAT transfer rule:** when adding a new level N, seed route collection from
+  the evolved population of the previous level (N-1), not from the original
+  1-1 population. Evaluate/evolve on N with `--record-paths` until the clean
+  route target is met, then filter/cluster and build the N start pool.
+  Zero-shot transfer is a diagnostic only; a canonical-only pool is a fallback.
 - Do not move or rename scripts/docs without updating `README.md`,
   `docs/index.md`, `AGENTS.md`, and any import paths.
 - Preserve user changes. Never run `git reset --hard`, `git checkout --`, or

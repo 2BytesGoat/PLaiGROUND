@@ -150,7 +150,8 @@ canonical start for invalid cells (non-standable, exit, malformed).
 
 Static info also exposes `gold_time`, `gold_ratio_cap`, and the default reward
 weights (`reward_time_per_second`, `reward_finish_bonus`,
-`reward_death_penalty`, `reward_progress_weight`, `reward_efficiency_weight`,
+`reward_under_gold_rate`, `reward_under_gold_cap`, `reward_death_penalty`,
+`reward_progress_weight`, `reward_efficiency_weight`,
 `reward_shaping_gamma`) for Python custom rewards. See
 [`reward-contract.md`](reward-contract.md).
 

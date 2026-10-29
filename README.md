@@ -138,6 +138,7 @@ active entry points are config-driven.
 
 | Track | Level(s) | Result |
 |---|---|---|
+| Lean DQN 8×1, 1.85M | 1-1 | **1.6167 s** canonical; train 12/12 median 3.2500 s; holdout 8/8 median 3.7917 s |
 | NEAT 8×24 | 1-1 / 1-2 / 1-3 | 2.15 / 3.0167 / 3.5667 s |
 | 754 PPO multilevel, 200k | 1-1 / 1-2 / 1-3 | 1.6667 / 2.9667 / 5.2333 s; full 242-start coverage |
 | 794 sensor PPO | 1-1 / 1-2 | 2.1333 / 3.0667 s |

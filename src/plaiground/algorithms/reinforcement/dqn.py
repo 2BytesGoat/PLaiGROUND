@@ -11,6 +11,8 @@ hyperparameters, checkpoint cadence, and data paths.
 
 from __future__ import annotations
 
+import pickle
+
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import CheckpointCallback
 
@@ -20,18 +22,23 @@ from plaiground.experiments.runner import (
     Run,
     activation_module,
     parse_train_args,
+    resolve_path,
     run_from_args,
     train_start_pool,
 )
+from plaiground.observations.lean_io import (
+    load_lean_preprocessor,
+    prepare_lean_preprocessor,
+)
 
 
-def _make_model(run: Run, vec_env):
+def make_model(run: Run, vec_env, model_cls=DQN):
     algorithm = run.algorithm
     policy_kwargs = {
         "net_arch": run.hidden,
         "activation_fn": activation_module(run.activation),
     }
-    return DQN(
+    return model_cls(
         "MlpPolicy",
         vec_env,
         learning_rate=float(algorithm.get("learning_rate", 1e-4)),
@@ -42,6 +49,7 @@ def _make_model(run: Run, vec_env):
         gamma=float(algorithm.get("gamma", 0.99)),
         train_freq=int(algorithm.get("train_freq", 4)),
         gradient_steps=int(algorithm.get("gradient_steps", 1)),
+        n_steps=int(algorithm.get("n_steps", 1)),
         target_update_interval=int(
             algorithm.get("target_update_interval", 1_000)
         ),
@@ -64,20 +72,45 @@ def _make_model(run: Run, vec_env):
     )
 
 
-def main() -> None:
-    run = run_from_args(parse_train_args(__doc__ or "Train DQN."))
-    if run.resume is not None:
-        raise SystemExit(
-            "DQN resume is not supported yet; start a new run or load the "
-            "checkpoint manually"
-        )
+def load_resumed_model(run: Run, vec_env, model_cls=DQN):
+    model = model_cls.load(str(run.resume), env=vec_env, device=run.device)
+    print(
+        f"resumed {model_cls.__name__} checkpoint: {run.resume} "
+        f"(timesteps={model.num_timesteps})",
+        flush=True,
+    )
+    return model
+
+
+def run_training(
+    run: Run,
+    *,
+    model_cls=DQN,
+    checkpoint_prefix: str = "dqn",
+) -> None:
     run.ensure_dirs()
     env_path = resolve_env_path()
     start_pool = train_start_pool(run, required=True)
-    vec_env = build_vec_env(run, env_path, start_pool, preprocessor=None)
+    if run.preprocessing == "lean":
+        if run.preprocessing_path.exists():
+            preprocessor = load_lean_preprocessor(run.preprocessing_path)
+            print(
+                f"preprocessing: loaded lean pipeline "
+                f"{run.preprocessing_path} ({preprocessor.output_size} inputs)",
+                flush=True,
+            )
+        else:
+            preprocessor = prepare_lean_preprocessor(run, env_path)
+    else:
+        preprocessor = None
+    vec_env = build_vec_env(
+        run, env_path, start_pool, preprocessor=preprocessor
+    )
 
     print(
-        f"DQN level={run.level} envs={run.n_envs} "
+        f"{model_cls.__name__} levels={','.join(run.levels)} "
+        f"envs={run.total_envs} "
+        f"(processes={run.n_envs}, agents_per_process={run.agents_per_process}) "
         f"timesteps={run.timesteps} action_repeat={run.action_repeat} "
         f"obs={run.obs_encoding} starts={len(start_pool)} "
         f"output={run.output_dir}",
@@ -89,15 +122,36 @@ def main() -> None:
         print("tensorboard not installed; training continues without it", flush=True)
 
     try:
-        model = _make_model(run, vec_env)
+        if run.resume is not None:
+            model = load_resumed_model(run, vec_env, model_cls)
+        else:
+            model = make_model(run, vec_env, model_cls)
+
+        buffer_value = run.config.get("run", {}).get("replay_buffer_from")
+        if buffer_value:
+            buffer_path = resolve_path(buffer_value)
+            with buffer_path.open("rb") as handle:
+                model.replay_buffer = pickle.load(handle)
+            print(
+                f"loaded replay buffer: {buffer_path} "
+                f"({model.replay_buffer.size() * model.replay_buffer.n_envs} transitions)",
+                flush=True,
+            )
+
+        # When reset_timesteps is false, SB3 treats total_timesteps as the
+        # additional budget and adds the checkpoint's current step count.
+        reset_timesteps = bool(
+            run.config.get("run", {}).get("reset_timesteps", True)
+        )
         checkpoint = CheckpointCallback(
-            save_freq=max(1, run.checkpoint_freq // run.n_envs),
+            save_freq=max(1, run.checkpoint_freq // run.total_envs),
             save_path=str(run.checkpoint_dir),
-            name_prefix="dqn",
+            name_prefix=checkpoint_prefix,
         )
         model.learn(
             total_timesteps=run.timesteps,
             callback=checkpoint,
+            reset_num_timesteps=reset_timesteps,
             progress_bar=False,
         )
         model.save(str(run.model_path))
@@ -110,6 +164,16 @@ def main() -> None:
         f"--config {run.config_path} --model {run.model_path}",
         flush=True,
     )
+
+
+# Backward-compatible private names used by older callers/tests.
+_make_model = make_model
+_load_resumed_model = load_resumed_model
+
+
+def main() -> None:
+    run = run_from_args(parse_train_args(__doc__ or "Train DQN."))
+    run_training(run)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 # 0004 — Fresh PPO clean-start run on 1-1
 
-Status: planned  
+Status: complete; 500k selected
 Started: 2026-10-28
+Completed: 2026-10-28
 
 ## Question
 
@@ -40,9 +41,26 @@ Evaluation is separate:
 ```bash
 .venv/bin/python tools/evaluate.py \
   --config experiments/0004_ppo_clean_start_1_1_fresh \
-  --model runs/ppo_clean_start_1_1_fresh/checkpoints/ppo-400000.zip
+  --model runs/ppo_clean_start_1_1_fresh/checkpoints/ppo_500000_steps.zip
 ```
 
 ## Result
 
-Pending.
+Training completed at **500,000 timesteps**. Selected checkpoint:
+
+```text
+runs/ppo_clean_start_1_1_fresh/checkpoints/ppo_500000_steps.zip
+```
+
+Deterministic evaluation:
+
+```text
+canonical:    1/1, 2.1500 s
+train pool:   12/12, median 3.3333 s, best 2.1500 s
+holdout pool: 8/8, median 3.8583 s, best 3.4167 s
+```
+
+All train/holdout spawns were applied (`spawn_ok` 12/12 and 8/8).
+
+The 475k checkpoint regressed to canonical timeout, 6/12 train, and 5/8
+holdout; 500k recovered. The selected model is not installed in the game.

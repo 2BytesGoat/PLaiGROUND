@@ -1,0 +1,93 @@
+# Experiment 0013: buffered DQN continuation from the 1M clean-start policy.
+
+[experiment]
+id = "0013"
+name = "dqn_clean_start_1_1_8x1_buffer_finetune"
+status = "complete"
+started = "2026-10-29"
+
+[workflow]
+name = "reinforcement.dqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-1"
+n_envs = 8
+action_repeat = 4
+max_decisions = 150
+speedup = 8.0
+force_start_jump = false
+reward_profile = "default"
+base_port = 13000
+eval_port = 13100
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean"
+preprocessing = "lean"
+expected_raw_size = 188
+model_input_size = 954
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+# Additional steps after resume_from (1M + 850k = selected 1.85M checkpoint).
+timesteps = 850000
+n_steps = 3
+learning_rate = 0.0001
+buffer_size = 200000
+learning_starts = 10000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.5
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.02
+
+[data]
+archive = "runs/neat_clean_450/filtered/train_clean_routes.json"
+finishers = "runs/neat_clean_450/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-1.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_clean_450/pool/train_start_pool.json"
+holdout_pool = "runs/neat_clean_450/pool/holdout_start_pool.json"
+
+[checkpointing]
+save_freq = 25000
+
+[evaluation]
+canonical = true
+train_pool = true
+holdout_pool = true
+
+[run]
+resume_from = "runs/dqn_clean_start_1_1_8x1_1m/dqn/dqn_final.zip"
+replay_buffer_from = "runs/dqn_clean_start_1_1_8x1_1m/dqn/replay_buffer_200k.pkl"
+reset_timesteps = false
+preprocessing_from = "runs/ppo_clean_start_1_1_fresh/preprocessing.pkl"
+selected_checkpoint = "dqn_final.zip"
+selected_canonical_median = 1.6167
+selected_train_median = 3.2500
+selected_holdout_median = 3.7917
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/dqn_clean_start_1_1_8x1_buffer_finetune"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"

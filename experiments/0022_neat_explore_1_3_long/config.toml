@@ -1,0 +1,52 @@
+[experiment]
+id = "0022"
+name = "neat_explore_1_3_long"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-3"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 8.0
+max_steps = 300
+
+[source]
+population_checkpoint = "runs/neat_explore_1_3/neat-checkpoint-30"
+source_level = "1-3"
+source_generations = 30
+
+[collection]
+record_paths = true
+generations = 40
+
+[result]
+generations = 40
+wall_seconds = 1610.1
+final_finishes = 220
+population = 384
+best_fitness = 582.4852
+best_time = 4.2333
+unique_routes = 304
+finisher_records = 6361
+checkpoint_files = 6361
+strict_clean_routes = 53
+clean_best_time = 5.4667
+clean_median_time = 5.9833
+clusters_jaccard_0_5 = 13
+clusters_jaccard_0_7 = 26
+
+[output]
+dir = "runs/neat_explore_1_3_long"
+archive_dir = "runs/neat_explore_1_3_long/archive"

@@ -3,7 +3,7 @@
 [experiment]
 id = "0004"
 name = "ppo_clean_start_1_1_fresh"
-status = "planned"
+status = "complete"
 started = "2026-10-28"
 
 [workflow]
@@ -79,6 +79,10 @@ selection_metric = "canonical_median_then_holdout"
 [run]
 device = "auto"
 verbose = 1
+selected_checkpoint = "checkpoints/ppo_500000_steps.zip"
+selected_canonical_median = 2.1500
+selected_train_median = 3.3333
+selected_holdout_median = 3.8583
 
 [output]
 dir = "runs/ppo_clean_start_1_1_fresh"

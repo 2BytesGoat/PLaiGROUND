@@ -100,6 +100,14 @@ class Run:
         return int(self.env.get("n_envs", 8))
 
     @property
+    def agents_per_process(self) -> int:
+        return int(self.env.get("agents_per_process", 1))
+
+    @property
+    def total_envs(self) -> int:
+        return self.n_envs * self.agents_per_process
+
+    @property
     def action_repeat(self) -> int:
         return int(self.env.get("action_repeat", 4))
 

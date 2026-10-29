@@ -40,12 +40,14 @@ class RunResolverTest(unittest.TestCase):
                 output_dir=Path(tmp) / "run",
             )
             self.assertEqual(run.algorithm_name, "dqn")
-            self.assertEqual(run.obs_encoding, "raw")
+            self.assertEqual(run.obs_encoding, "lean")
+            self.assertEqual(run.preprocessing, "lean")
             self.assertEqual(run.hidden, [512, 512])
             self.assertEqual(run.activation, "relu")
             self.assertEqual(run.model_path.name, "dqn_final.zip")
             self.assertEqual(run.checkpoint_dir.name, "checkpoints")
-            self.assertEqual(len(run.eval_set_paths), 1)
+            self.assertTrue(run.evaluation["train_pool"])
+            self.assertTrue(run.evaluation["holdout_pool"])
 
     def test_timesteps_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

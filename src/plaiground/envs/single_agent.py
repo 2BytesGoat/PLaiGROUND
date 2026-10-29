@@ -25,6 +25,10 @@ RESET_STATE_KEYS = (
     "world_state",
 )
 
+# Training-only timeout penalty. The game controller does not know the
+# Python-side max_decisions horizon; apply it where truncation is decided.
+TIMEOUT_PENALTY = -100.0
+
 
 class SingleAgentGodotEnv(gym.Env):
     """One Godot training world exposed as a standard Gymnasium environment."""
@@ -388,6 +392,7 @@ class SingleAgentGodotEnv(gym.Env):
         if not done and self._steps >= self.max_decisions:
             done = True
             truncated = True
+            reward += TIMEOUT_PENALTY
 
         run_time = info.get("run_time", float("nan"))
         try:

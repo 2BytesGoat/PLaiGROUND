@@ -42,6 +42,7 @@ development/research repo, not part of the shipped game.
 | [`../experiments/0001_ppo_clean_start_1_1/`](../experiments/0001_ppo_clean_start_1_1/) | **complete manifest** | Exact config, game commit, and result record for the lean PPO run; 225k selected at 2.3167 s canonical. |
 | [`../experiments/0002_ppo_clean_start_1_1_horizon_1m/`](../experiments/0002_ppo_clean_start_1_1_horizon_1m/) | **stopped; 400k selected** | 1M-horizon continuation; found 2.15 s at 400k, then deterministic timeout windows. Stopped at 972.6k for investigation; no retrain. |
 | [`../experiments/0003_dqn_clean_start_1_1/`](../experiments/0003_dqn_clean_start_1_1/) | **planned manifest** | Config-driven raw-state DQN defaults for the 1-1 clean-start path. |
+| [`../experiments/0004_ppo_clean_start_1_1_fresh/`](../experiments/0004_ppo_clean_start_1_1_fresh/) | **complete; 500k selected** | Fresh 500k PPO from scratch on the corrected pool; canonical 2.15 s, train 12/12, holdout 8/8. |
 | [`experiments/compact-policy-deployment.md`](experiments/compact-policy-deployment.md) | **proposed** | Compact flat/embedding student options and the distillation plan for shipping a JSON policy. |
 | [`experiments/neat-1-1.md`](experiments/neat-1-1.md) | historical baseline | Early 32-agent NEAT 1-1 run (2.35 s). The 8×24 archive improved this to 2.15 s. |
 | [`experiments/neat-lineage.md`](experiments/neat-lineage.md) | available/historical | One population carried through the campaign in order. |

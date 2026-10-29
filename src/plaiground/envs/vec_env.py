@@ -21,6 +21,7 @@ from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnv
 
 from .godot import GodotEnv
+from .single_agent import TIMEOUT_PENALTY
 
 
 class MultiAgentGodotVecEnv(VecEnv):
@@ -45,6 +46,7 @@ class MultiAgentGodotVecEnv(VecEnv):
         training_no_cosmetics: bool = False,
         spawn_pool: Optional[list[dict]] = None,
         spawn_seed: int = 0,
+        preprocessor: Any | None = None,
     ) -> None:
         if n_agents_per_process < 1 or n_processes < 1:
             raise ValueError("n_agents_per_process and n_processes must be >= 1")
@@ -61,6 +63,7 @@ class MultiAgentGodotVecEnv(VecEnv):
         self._spawns: dict[int, dict] = {}
         self._spawn_pool: list[dict] = []
         self._spawn_rng = np.random.default_rng(spawn_seed)
+        self.preprocessor = preprocessor
         self.reset_count = 0
 
         root = Path(output_dir).resolve()
@@ -96,6 +99,13 @@ class MultiAgentGodotVecEnv(VecEnv):
         observation_space = self._envs[0].observation_space
         if isinstance(observation_space, spaces.Dict) and "obs" in observation_space.spaces:
             observation_space = observation_space.spaces["obs"]
+        if preprocessor is not None:
+            observation_space = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(int(preprocessor.output_size),),
+                dtype=np.float32,
+            )
         self.observation_space = observation_space
         self.action_space = _single_binary_action_space(self._envs[0].action_space)
         super().__init__(self.num_envs, self.observation_space, self.action_space)
@@ -157,6 +167,14 @@ class MultiAgentGodotVecEnv(VecEnv):
             entries.append({**spawn, "agent": agent})
         return entries
 
+    def _format_observations(self, observations: list[np.ndarray]) -> np.ndarray:
+        array = np.asarray(observations, dtype=np.float32)
+        if self.preprocessor is not None:
+            array = np.asarray(
+                self.preprocessor.transform(array), dtype=np.float32
+            )
+        return array
+
     # ------------------------------------------------------------------
     # VecEnv API
 
@@ -170,7 +188,7 @@ class MultiAgentGodotVecEnv(VecEnv):
             observations.extend(_flatten_obs(obs))
         self._steps = [0] * self.num_envs
         self._actions = None
-        return np.asarray(observations, dtype=np.float32)
+        return self._format_observations(observations)
 
     def step_async(self, actions: np.ndarray) -> None:
         actions = np.asarray(actions, dtype=np.int64).reshape(-1, 1)
@@ -206,14 +224,31 @@ class MultiAgentGodotVecEnv(VecEnv):
                 if not done_flags[agent] and self._steps[index] >= self.max_decisions:
                     done_flags[agent] = True
                     truncated = True
+                    rewards[agent] += TIMEOUT_PENALTY
                 if truncated:
                     info["TimeLimit.truncated"] = True
                 elif done_flags[agent]:
                     info.setdefault("TimeLimit.truncated", False)
+                spawn = self._spawns.get(index, {})
                 info["level"] = self.level
                 info["timed_out"] = bool(truncated)
                 info["decision_steps"] = self._steps[index]
                 info.setdefault("finished", False)
+                info.setdefault("run_time", 0.0)
+                info.setdefault(
+                    "start_source", "state" if spawn else "canonical"
+                )
+                info.setdefault(
+                    "start_kind", "state" if spawn else "canonical"
+                )
+                info.setdefault("start_cell", spawn.get("cell", ""))
+                info.setdefault("start_facing", spawn.get("facing", ""))
+                info.setdefault(
+                    "start_distance", spawn.get("start_distance", "")
+                )
+                info.setdefault(
+                    "prefix_len", len(spawn.get("prefix_actions", []))
+                )
                 infos[agent] = info
 
             reset_agents = [
@@ -239,7 +274,7 @@ class MultiAgentGodotVecEnv(VecEnv):
 
         self._actions = None
         return (
-            np.asarray(all_obs, dtype=np.float32),
+            self._format_observations(all_obs),
             np.asarray(all_rewards, dtype=np.float32),
             np.asarray(all_dones, dtype=bool),
             all_infos,

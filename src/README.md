@@ -26,7 +26,7 @@ uv pip install --python .venv/bin/python -e . --no-deps
 | `src/plaiground/data/` | Route filtering, clean-start pool construction, route extraction, and shared start/pool loaders. |
 | `src/plaiground/models/` | Model architectures (`LeanMLP`) and frozen legacy extractors. |
 | `src/plaiground/algorithms/genetic/` | NEAT population, all-level, and lineage trainers. |
-| `src/plaiground/algorithms/reinforcement/` | Thin PPO/DQN adapters (`ppo.py`, `dqn.py`). |
+| `src/plaiground/algorithms/reinforcement/` | Thin PPO/DQN/Double-DQN adapters (`ppo.py`, `dqn.py`, `ddqn.py`). |
 | `src/plaiground/algorithms/supervised/` | Reserved for behavior cloning, DAgger, and distillation workflows. |
 | `src/plaiground/evaluation/` | Shared deterministic evaluator (`rollout.py`). |
 | `src/plaiground/experiments/` | Experiment TOML loading, run resolution (`runner.py`), and provenance capture. |
@@ -43,12 +43,13 @@ uv pip install --python .venv/bin/python -e . --no-deps
 | `scripts/genetic/03_neat_lineage.py` | One population carried across levels. |
 | `scripts/reinforcement/01_ppo.py` | PPO train from an experiment manifest. |
 | `scripts/reinforcement/02_dqn.py` | DQN train from an experiment manifest. |
+| `scripts/reinforcement/03_ddqn.py` | Double-DQN train from an experiment manifest. |
 | `tools/evaluate.py` | Shared PPO/DQN canonical + start-set evaluation. |
 | `tools/extract_route_starts.py` | NEAT checkpoint -> clean-start DQN pool. |
 | `tools/filter_routes.py` | Route dedupe/clustering/holdout split. |
 | `tools/build_start_pool.py` | Validated train/holdout start pools. |
 | `tools/check_observation.py` | Raw observation smoke check. |
-| `tools/trace_ppo.py` | Per-step deterministic PPO rollout tracer. |
+| `tools/watch.py` | Preview a PPO or DQN checkpoint in the game window. |
 | `tools/summarize_episodes.py` | Episode CSV summaries. |
 | `tools/start_strata.py` | Legacy start stratification. |
 | `tools/make_ppo_start_pool.py` | Legacy prefix/strata pool builder. |

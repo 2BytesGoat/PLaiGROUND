@@ -14,9 +14,9 @@ r_t = progress + efficiency + time + finish + survival
 
 progress    = 1.0 * (C(s_prev) - 0.99 * C(s))       if both finite
 efficiency  = -0.02 * (wasted_t - wasted_prev)
-time        = -3.75 * (run_time_t - run_time_prev) * (1 - gold_ratio)
-finish      = +500                                   once, on the finish edge
-survival    = -50                                    once, on the death edge
+time        = -5.00 * (run_time_t - run_time_prev) * (1 - gold_ratio)
+finish      = +500 + min(50, 25 * max(0, gold_time - run_time))  once, on finish
+survival    = -100                                  once, on the death edge
 ```
 
 ### Progress
@@ -48,7 +48,7 @@ effective_time = max(run_time, gold_time / 3.0, 0.001)
   custom/unknown levels.
 
 The time term is **per second of run time**, not per decision. At
-`action_repeat=4` and 15 decisions/s, `-3.75/s` is equivalent to `-0.25` per
+`action_repeat=4` and 15 decisions/s, `-5.00/s` is equivalent to `-0.333` per
 decision; it stays consistent for NEAT's `action_repeat=1` runs. At gold pace
 the term is zero; below gold it is negative; above gold it is positive (bounded
 by the cap). Force-start means the run clock is active immediately, so there is
@@ -56,10 +56,14 @@ no idle/start penalty.
 
 ### Finish and survival
 
-- Finish: fixed `+500`. It does not depend on the agent's previous best or the
-  run time; time is handled by `gold_ratio` and the discount. `best_run_time`
-  remains telemetry only.
-- Death: `-50` once, on the spike/hazard edge.
+- Finish: fixed `+500`, plus a continuous under-gold bonus
+  `min(50, 25 * max(0, gold_time - run_time))`. A finish exactly at gold gets
+  only `+500`; 1.63 s and 2.13 s are now differentiated. The base bonus does
+  not depend on the agent's previous best. `best_run_time` remains telemetry
+  only.
+- Death: `-100` once, on the spike/hazard edge.
+- Timeout: the training wrapper applies `-100` when `max_decisions` truncates
+  the episode without a game-side death or finish.
 
 ## Terminal death semantics
 
@@ -67,7 +71,7 @@ In training, spike contact is terminal at the hazard:
 
 ```text
 spike -> Die state frozen at the hazard
-      -> death_started -> controller: done = true, reward -50
+      -> death_started -> controller: done = true, reward -100
       -> synchronizer returns the terminal observation at the spike
       -> next env.reset() samples the next start normally
 ```
@@ -114,15 +118,17 @@ There is no forced first jump and no idle phase. `--force-start-jump` /
 A Python custom reward must recompute progress with its own previous `C(s)`
 and use the same `gold_ratio` clamp. Static `info` also exposes `gold_time`,
 `gold_ratio_cap`, and the default weights (`reward_time_per_second`,
-`reward_finish_bonus`, `reward_death_penalty`, `reward_progress_weight`,
-`reward_efficiency_weight`, `reward_shaping_gamma`) so a custom reward can
-match the game or vary one term deliberately.
+`reward_finish_bonus`, `reward_under_gold_rate`, `reward_under_gold_cap`, `reward_death_penalty`,
+`reward_progress_weight`, `reward_efficiency_weight`,
+`reward_shaping_gamma`) so a custom reward can match the game or vary one term
+deliberately.
 
 ## Horizon and suicide tradeoff
 
-The time term is bounded to `[-3.75/s, +7.5/s]`. With a 10 s episode horizon,
-the worst-case time cost is about `-37.5`, still less negative than `-50` death.
-That keeps death the worst outcome.
+The time term is bounded to `[-5.00/s, +10.0/s]`. With a 10 s episode horizon,
+the worst-case time cost is about `-50`, still less negative than `-100` death.
+The explicit timeout penalty is `-100`, equal to death, so a clean slow finish
+is never worse than timing out.
 
 - PPO/DQN: `--max-decisions 150` at `action_repeat=4` = 10 s.
 - NEAT `07`: 600 decisions at `action_repeat=1` = 10 s.

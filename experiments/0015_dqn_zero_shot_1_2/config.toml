@@ -1,0 +1,91 @@
+[experiment]
+id = "0015"
+name = "dqn_zero_shot_1_2"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "reinforcement.dqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-2"
+n_envs = 8
+action_repeat = 4
+max_decisions = 150
+speedup = 1.0
+force_start_jump = false
+reward_profile = "default"
+base_port = 13200
+eval_port = 13300
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean"
+preprocessing = "lean"
+expected_raw_size = 188
+model_input_size = 954
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 1
+n_steps = 3
+learning_rate = 0.0001
+buffer_size = 200000
+learning_starts = 10000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.5
+exploration_initial_eps = 1.0
+exploration_final_eps = 0.02
+
+[data]
+archive = "runs/neat_clean_450_1_2_transfer/filtered_j07_cap1/train_clean_routes.json"
+finishers = "runs/neat_clean_450_1_2_transfer/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-2.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_clean_450_1_2_transfer/pool_j07_cap1/train_start_pool.json"
+holdout_pool = "runs/neat_clean_450_1_2_transfer/pool_j07_cap1/holdout_start_pool.json"
+
+[evaluation]
+canonical = true
+train_pool = true
+holdout_pool = true
+
+[result]
+canonical_time = 9.1167
+train_finishes = 17
+train_agents = 31
+train_median = 5.5000
+holdout_finishes = 15
+holdout_agents = 20
+holdout_median = 5.9500
+best_time = 3.1833
+
+[run]
+preprocessing_from = "runs/ppo_clean_start_1_1_fresh/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/dqn_zero_shot_1_2"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"
