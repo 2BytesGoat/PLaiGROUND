@@ -1,0 +1,59 @@
+[experiment]
+id = "0023"
+name = "neat_rebalanced_1_3_10gen"
+status = "complete"
+started = "2026-10-29"
+completed = "2026-10-29"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "adb9278"
+allow_dirty = true
+
+[env]
+level = "1-3"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[source]
+population_checkpoint = "runs/neat_explore_1_3_long/rebalanced/rebalanced-66"
+source_level = "1-3"
+source_generation = 66
+source_portfolio = "runs/neat_explore_1_3_long/rebalanced/rebalanced-.portfolio.json"
+
+[collection]
+record_paths = true
+generations = 10
+checkpoint_interval = 5
+
+[result]
+generations = 10
+wall_seconds = 257.8
+final_finishes = 238
+finish_rate_final = 0.620
+best_fitness = 582.4852
+best_time = 4.2333
+best_clean_time = 5.4667
+archive_routes = 364
+new_routes = 154
+clean_routes = 60
+new_clean_routes = 25
+clusters_jaccard_0_5 = 54
+clusters_jaccard_0_7 = 137
+source_clusters_jaccard_0_5 = 46
+source_clean_routes = 53
+last_saved_checkpoint = 72
+final_live_bins = "speed=0, median=7, slow=224, exploration=153"
+source_final_bins = "speed=5, median=4, slow=207, exploration=168"
+note = "Archive diversity improved, but the live population lost its speed tail. The final generation was not saved by the interval checkpointer; trainer now saves the final checkpoint. A 4-generation replay from checkpoint 72 produced a different final population (219 finishes), so it is a separate diagnostic, not the 0023 final."
+
+[output]
+dir = "runs/neat_rebalanced_1_3"
+archive_dir = "runs/neat_rebalanced_1_3/archive"

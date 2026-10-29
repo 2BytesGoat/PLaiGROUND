@@ -1,7 +1,10 @@
 # 0021 — Exploratory NEAT 1-3
 
-Status: running  
+Status: complete
+
 Started: 2026-10-29
+
+Completed: 2026-10-29
 
 ## Question
 

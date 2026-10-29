@@ -19,6 +19,7 @@ usable for the other notebooks.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import pickle
@@ -32,6 +33,7 @@ import numpy as np
 
 import neat
 
+from plaiground.algorithms.genetic.neat.portfolio import rebalance_live_population
 from plaiground.legacy.utils import setup_environment
 
 DEFAULT_LEVEL = "1-1"
@@ -882,11 +884,62 @@ def load_config(config_path: Path, population: int | None = None) -> neat.Config
     return config
 
 
+def ensure_population_size(population: neat.Population, target: int) -> bool:
+    """Keep NEAT's population at the configured size between generations.
+
+    NEAT can return one fewer genome than `pop_size` after reproduction when
+    species/survival rounding leaves a shortfall. The game evaluator requires
+    a population divisible by the process count, so repair the size before the
+    next evaluation.
+    """
+    current = len(population.population)
+    if current == target:
+        return False
+    if current > target:
+        ordered = sorted(
+            population.population.items(),
+            key=lambda item: (
+                item[1].fitness is not None,
+                item[1].fitness if item[1].fitness is not None else float("-inf"),
+            ),
+            reverse=True,
+        )
+        for key, _genome in ordered[target:]:
+            del population.population[key]
+    else:
+        next_key = max(population.population, default=0) + 1
+        parents = list(population.population.values())
+        while len(population.population) < target and parents:
+            child = copy.deepcopy(random.choice(parents))
+            child.key = next_key
+            next_key += 1
+            child.fitness = None
+            child.mutate(population.config.genome_config)
+            population.population[child.key] = child
+
+    population.species = neat.DefaultSpeciesSet(
+        population.config.species_set_config, population.reporters
+    )
+    population.species.speciate(
+        population.config, population.population, population.generation
+    )
+    print(
+        f"population size repaired: {current} -> {len(population.population)} "
+        f"(target {target})",
+        flush=True,
+    )
+    return True
+
+
 def train(args: argparse.Namespace) -> None:
     if args.action_repeat < 1:
         raise ValueError("--action-repeat must be >= 1")
     if args.min_clean_routes and not args.record_paths:
         raise ValueError("--min-clean-routes requires --record-paths")
+    if args.rebalance_every < 0:
+        raise ValueError("--rebalance-every must be >= 0")
+    if args.rebalance_every and not args.record_paths:
+        raise ValueError("--rebalance-every requires --record-paths")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -899,16 +952,17 @@ def train(args: argparse.Namespace) -> None:
         np.random.seed(args.seed)
         population = neat.Population(config)
     initial_generation = int(getattr(population, "generation", 0))
+    target_population = int(getattr(population.config, "pop_size", args.population))
+    ensure_population_size(population, target_population)
 
     population.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
-    population.add_reporter(
-        neat.Checkpointer(
-            args.checkpoint_interval,
-            filename_prefix=str(output_dir / "neat-checkpoint-"),
-        )
+    checkpointer = neat.Checkpointer(
+        args.checkpoint_interval,
+        filename_prefix=str(output_dir / "neat-checkpoint-"),
     )
+    population.add_reporter(checkpointer)
 
     evaluator = RewardEvaluator(
         level=args.level,
@@ -925,11 +979,49 @@ def train(args: argparse.Namespace) -> None:
         initial_generation=initial_generation,
     )
 
+    last_rebalance_generation: int | None = None
+
+    def rebalance_here() -> None:
+        nonlocal last_rebalance_generation
+        generation = int(population.generation)
+        result = rebalance_live_population(
+            population,
+            list(evaluator.route_archive.values()),
+            evaluator.archive_dir,
+            seed=args.seed,
+        )
+        result["output_checkpoint"] = str(
+            output_dir / f"neat-checkpoint-{generation}"
+        )
+        report_path = output_dir / f"rebalance-{generation}.json"
+        report_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        checkpointer.save_checkpoint(
+            population.config,
+            population.population,
+            population.species,
+            generation,
+        )
+        last_rebalance_generation = generation
+        print(
+            f"rebalanced population after generation {generation}: "
+            f"{result['portfolio_stats']['selected_by_bin']} | "
+            f"deployment={result['portfolio_stats']['deployment']}",
+            flush=True,
+        )
+
     start = time.time()
     stop_reason = "max generations"
     try:
         for _ in range(args.generations):
             population.run(evaluator, 1)
+            ensure_population_size(population, target_population)
+            if (
+                args.rebalance_every > 0
+                and (population.generation - initial_generation)
+                % args.rebalance_every
+                == 1
+            ):
+                rebalance_here()
             if (
                 args.min_clean_routes > 0
                 and evaluator.clean_checkpoint_route_count >= args.min_clean_routes
@@ -950,8 +1042,23 @@ def train(args: argparse.Namespace) -> None:
             ):
                 stop_reason = "stability plateau"
                 break
+        if (
+            args.rebalance_final
+            and args.rebalance_every > 0
+            and last_rebalance_generation != int(population.generation)
+        ):
+            rebalance_here()
     finally:
         evaluator.close()
+        # The interval checkpointer can miss the final generation. Always
+        # persist the population that finished training so it can seed the
+        # next level or be rebalanced.
+        checkpointer.save_checkpoint(
+            population.config,
+            population.population,
+            population.species,
+            population.generation,
+        )
     elapsed = time.time() - start
 
     if evaluator.best_genome is not None:
@@ -1129,6 +1236,17 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=5,
         help="Save a NEAT checkpoint every N generations.",
+    )
+    parser.add_argument(
+        "--rebalance-every",
+        type=int,
+        default=0,
+        help="Rebalance the live population every N generations (0 = off).",
+    )
+    parser.add_argument(
+        "--rebalance-final",
+        action="store_true",
+        help="Rebalance one final time after the last generation before saving.",
     )
     parser.add_argument(
         "--resume",

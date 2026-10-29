@@ -277,10 +277,88 @@ finished at **220/384 (~57%)**, with **304 unique routes**, 6,361 finisher
 records/checkpoints, and **53 strict clean routes**. The fastest route is
 4.2333 s but unclean; the best clean route is **5.4667 s** and the clean median
 is **5.9833 s**. The clean set spans 13 route clusters at Jaccard 0.5 (26 at
-0.7). This is enough for a real 1-3 start pool and a 1-4 seed portfolio.
+0.7). Filtering the clean set yielded 46 routes (35 train / 11 holdout) and a
+pool with **44 train entries (43 state + canonical) / 26 holdout states**.
 
-**Next NEAT step — two-tier discovery + deployment portfolio (planned).**
-After 0022, do not force a Gaussian on the live population. Separate:
+**Rebalanced 1-3 continuation (2026-10-29, complete; mixed).** Experiment 0023
+resumed the rebalanced 384-genome checkpoint 66 for 10 generations on 1-3 using
+8 processes × speedup 12 on AC. It finished in **257.8 s** with **238/384
+(62.0%)** final finishes, up from 220/384 (57.3%) in the source final generation.
+The archive improved to **364 unique routes / 60 clean routes / 54 clusters at
+Jaccard 0.5**, with 154 routes and 25 clean routes new versus 0022. However, the
+**live final population lost its speed tail**:
+
+```text
+source final (70):  5 speed / 4 median / 207 slow / 168 exploration
+0023 final (76):    0 speed / 7 median / 224 slow / 153 exploration
+```
+
+So one rebalance preserves/expands the archive but does not preserve the live
+deployment distribution. Do not use the one-shot final population as the 1-4
+seed. Rebalance every 2–3 generations or protect the speed/median genomes during
+reproduction. The interval checkpointer missed generation 76; the trainer now
+always saves the final checkpoint. The 4-generation replay from checkpoint 72
+saved a valid checkpoint 76 but is a separate trajectory (219 finishes).
+
+**Checkpoint rebalancer (2026-10-29, implemented; first test).** Added
+`src/plaiground/algorithms/genetic/neat/portfolio.py` and
+`tools/rebalance_neat.py`. It loads a checkpoint, adds archived route genomes to
+the candidate pool, bins genomes by finish time, selects route-cluster diversity,
+and writes a rebalanced checkpoint. On checkpoint 66 + the 0022 archive it found
+678 candidates, 213 finishers, and 46 clusters. The selected 384-genome
+population keeps all 213 finishers (3 speed, 56 median, 154 slow) and fills 171
+exploration slots; there are not enough fast finishers yet to fill the target
+portfolio quotas. The first output at
+`runs/neat_explore_1_3_long/rebalanced/rebalanced-66` had a low innovation
+tracker and produced one collision warning during 0023. The fixed rebalancer
+advances the tracker past the highest archived innovation and writes
+`runs/neat_explore_1_3_long/rebalanced_fixed/rebalanced-66` (tracker 5691). Use
+the fixed checkpoint for future seeds.
+
+**NEAT parallelism benchmark (2026-10-29, complete; 8×12 recommended).**
+Added `tools/benchmark_neat.py`, a reusable hardware-aware sweep. On the
+Apple M5 laptop, the battery sweep favored **8 processes × speedup 12** at
+**42.11 s/generation**. Plugged into AC with Low Power Mode off, the same combo
+improved to **28.81 s/generation** over 3 generations. A 12×12 rerun on AC was
+**40.53 s/generation**, confirming that 12 processes oversubscribe the 10-core
+CPU. Recommendation for this laptop: **8 processes, speedup 12** while on AC.
+The battery results were 46.59 s for 8×8 and 42.11 s for 8×12; 12×8 was 59.44 s.
+Re-run the benchmark on the new PC before adopting a default there.
+
+**Frequent-rebalance validation (2026-10-29, complete; hypothesis supported).**
+Experiment 0024 started from `rebalanced_fixed/rebalanced-66`, merged the 0022
+and 0023 archives (458 routes/genomes), and rebalanced the live population every
+2 generations. It completed the resumed run in **230.0 s** and produced a
+strong 1-4 seed:
+
+```text
+final generation:   384 / 384 finishes (100%)
+best time:          4.2333 s
+archive best clean: 4.7667 s
+archive:            655 routes / 105 clean / 60 clusters @ 0.5
+final bins:         3 speed / 78 median / 227 slow / 76 exploration
+protected seed:     311 deployable genomes
+```
+
+This is a decisive improvement over the one-shot 0023 final (238/384 finishes,
+0 speed / 7 median / 224 slow / 153 exploration, 364 routes, 60 clean, 46
+clusters). Frequent rebalancing preserved the live speed/median tail and roughly
+doubled the clean-route archive. The final checkpoint
+`runs/neat_frequent_rebalance_1_3/neat-checkpoint-76` is the current 1-4 seed;
+`rebalance-76.json` contains the 311-genome deployment portfolio. A separate
+evaluation of that checkpoint finished **384/384**, with 3 speed / 78 median /
+228 slow / 75 >10 s, so the seed is validated rather than only archived. The
+runner now repairs NEAT's occasional `pop_size - 1` shortfall after
+reproduction.
+
+**Next step — 1-4 seed (ready).** Use
+`runs/neat_frequent_rebalance_1_3/neat-checkpoint-76` as the 1-3 population for
+the 1-4 seed. It has 311 deployable genomes and the largest clean/route archive
+so far. Continue the same frequent-rebalance setting when evolving on 1-4; do
+not return to one-shot rebalancing.
+
+**Two-tier discovery + deployment portfolio (design).** Do not force a Gaussian
+on the live population. Separate:
 
 ```text
 discovery:   large/high-mutation NEAT; non-finishers allowed; fitness + novelty
@@ -296,6 +374,25 @@ portfolio; that needs custom reproduction or a MAP-Elites-style archive. For the
 1-4 seed, prefer a portfolio (speedrunner, robust median, diverse route
 representative) over one average genome. See
 [`../experiments/0022_neat_explore_1_3_long/README.md`](../experiments/0022_neat_explore_1_3_long/README.md).
+
+**DDQN 1-3 training (2026-10-29, complete; selected 2.30M).** Experiment 0025
+resumed the selected 2.15M 1-1/1-2 Double-DQN checkpoint for 300k additional
+steps with the 4+2+2 mix. The combined train pool had 88 level-tagged starts:
+12 × 1-1, 31 × 1-2, and 45 × 1-3 (44 state + canonical), built from the 0024
+archive. The final 2.45M checkpoint failed the 1-1 holdout gate (4.0083 s vs the
+3.89 s limit), so **2.30M is selected**:
+
+```text
+1-1: 1.6167 canonical; 12/12 train 3.2750; 8/8 holdout 3.8000
+1-2: 3.8667 canonical; 31/31 train 4.0000; 20/20 holdout 3.1667
+1-3: 3.1000 canonical; 45/45 train 5.2000; 23/23 holdout 5.4500
+```
+
+The 2.15M baseline solved only 40/45 train and 15/23 holdout on 1-3, with a
+5.1333 s canonical. 2.30M makes 1-3 fully solvable. The remaining tradeoff is
+the 1-2 canonical regression from 2.9667 to 3.8667 s; 1-2 train/holdout medians
+are close to the prior model. The selected checkpoint is
+`runs/dqn_multilevel_1_1_1_2_1_3_ddqn_300k/dqn/checkpoints/ddqn_2300000_steps.zip`.
 
 **Double DQN continuation (2026-10-29, complete; 2.9667 s candidate).**
 Experiment 0018 resumed the 2.05M level-agnostic 1-1/1-2 model for 300k steps

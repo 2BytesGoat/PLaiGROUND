@@ -9,6 +9,37 @@ A/B plan see
 For the clean-start state/world-state decisions see
 [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
 
+## NEAT checkpoint and portfolio traps
+
+### 1. Interval checkpointing can miss the final generation — resolved
+
+NEAT's interval checkpointer can end on a generation that is not a multiple of
+the interval (0022 stopped at 70 with the last checkpoint at 66; 0023 stopped at
+76 with the last checkpoint at 72). The trainer now always saves the final
+population after training. Existing runs may still lack a final checkpoint; use
+the last saved checkpoint and the route archive rather than assuming the final
+generation is recoverable.
+
+### 2. One-shot rebalancing does not preserve the live distribution — high
+
+The 0023 continuation started from a rebalanced population containing 3 speed /
+56 median / 154 slow finishers. After 10 generations, the archive had grown to
+364 routes / 60 clean / 54 clusters, but the live population was 0 speed / 7
+median / 224 slow / 153 exploration. NEAT selection culled the speed tail.
+
+**Fix:** rebalance every 2–3 generations, or protect the speed/median genomes
+during reproduction. Do not treat a single rebalanced checkpoint's final live
+population as a deployment portfolio. The archive can still provide the
+genomes; use the fixed rebalancer and rebuild the live population.
+
+### 3. NEAT can return `pop_size - 1` after reproduction — resolved
+
+NEAT species/survival rounding can leave the next population one genome short
+(0024 produced 383 from a 384 target). With `--parallel 8`, the evaluator then
+fails because 383 is not divisible by 8. The trainer now repairs the population
+to `config.pop_size` after restore and after every generation by cloning/mutating
+a parent; it also re-speciates after the repair.
+
 ## DQN route-spawns (clean-start core implemented; validation pending)
 
 ### 1. Mid-route cell resets zero the run clock — critical

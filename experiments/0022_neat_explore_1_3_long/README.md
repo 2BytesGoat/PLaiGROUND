@@ -1,7 +1,10 @@
 # 0022 — Long exploratory NEAT 1-3
 
-Status: running  
+Status: complete
+
 Started: 2026-10-29
+
+Completed: 2026-10-29
 
 ## Question
 
@@ -109,3 +112,58 @@ archive.
 
 For the 1-4 seed, prefer a portfolio of genomes: one speedrunner, one robust
 median finisher, and one diverse route representative.
+
+## Rebalancer test
+
+The first checkpoint rebalancer was run against `neat-checkpoint-66` and the
+full 0022 route archive:
+
+```text
+checkpoint genomes:   384
+archive genomes:      294
+candidate genomes:    678
+finishers:            213
+route clusters:       46
+selected population:  384
+  speed:              3
+  median:             56
+  slow:               154
+  exploration:        171
+```
+
+The source archive does not contain enough <4.5 s or 4.5–6.0 s finishers to
+fill the target quotas, so the current rebalancer preserves all 213 finishers
+and fills the rest with exploration genomes. That is acceptable for a discovery
+population; the deployment portfolio must use the 213 finishers only.
+
+Outputs:
+
+```text
+runs/neat_explore_1_3_long/rebalanced/rebalanced-66
+runs/neat_explore_1_3_long/rebalanced/rebalanced-.portfolio.json
+```
+
+The rebalanced checkpoint loads as a valid 384-genome population.
+
+## 1-3 start pool
+
+Filtering the 53 clean routes at Jaccard 0.5 with a 25% cluster holdout:
+
+```text
+input clean routes:  53
+clusters:            13
+filtered routes:     46
+train routes:        35
+holdout routes:      11
+train pool entries:  44  (43 state starts + canonical)
+holdout starts:      26
+shared state keys:   24
+```
+
+Artifacts:
+
+```text
+runs/neat_explore_1_3_long/filtered/
+runs/neat_explore_1_3_long/pool/train_start_pool.json
+runs/neat_explore_1_3_long/pool/holdout_start_pool.json
+```

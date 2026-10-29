@@ -241,6 +241,14 @@ def select_portfolio(
     return selected
 
 
+def _max_innovation(genomes: dict[int, Any]) -> int:
+    highest = 0
+    for genome in genomes.values():
+        for connection in getattr(genome, "connections", {}).values():
+            highest = max(highest, int(getattr(connection, "innovation", 0)))
+    return highest
+
+
 def _archive_candidates(
     checkpoint_population: dict[int, Any],
     routes: list[dict[str, Any]],
@@ -329,6 +337,19 @@ def rebalance_population(
     )
     entries, stats = build_entries(candidates, routes, jaccard=jaccard)
     stats["archive_candidates"] = candidate_stats
+    max_innovation = _max_innovation(candidates)
+    stats["max_innovation"] = max_innovation
+    tracker = getattr(config.genome_config, "innovation_tracker", None)
+    if tracker is None:
+        from neat.innovation import InnovationTracker
+
+        tracker = InnovationTracker(start_number=max_innovation)
+    else:
+        tracker.global_counter = max(
+            int(getattr(tracker, "global_counter", 0)), max_innovation
+        )
+        tracker.reset_generation()
+    config.genome_config.innovation_tracker = tracker
     target_size = len(population.population)
     selected = select_portfolio(
         entries,
@@ -338,12 +359,12 @@ def rebalance_population(
     )
     selected_ids = {entry.genome_id for entry in selected}
 
-    max_key = max(population.population) if population.population else 0
+    max_key = max(candidates) if candidates else 0
     next_key = max_key + 1
     new_population = {
-        genome_id: copy.deepcopy(population.population[genome_id])
+        genome_id: copy.deepcopy(candidates[genome_id])
         for genome_id in selected_ids
-        if genome_id in population.population
+        if genome_id in candidates
     }
     parents = list(new_population.values())
     while len(new_population) < target_size and parents:
@@ -362,6 +383,8 @@ def rebalance_population(
 
     # Rebuild a clean species set from the rebalanced population.
     rebalanced = neat.Population(config)
+    rebalanced.reproduction.innovation_tracker = tracker
+    config.genome_config.innovation_tracker = tracker
     rebalanced.population = new_population
     rebalanced.generation = original_generation
     species_config = config.species_set_config
@@ -374,16 +397,27 @@ def rebalance_population(
         config, rebalanced.population, rebalanced.species, original_generation
     )
     output_checkpoint = Path(f"{output_prefix}{original_generation}")
+    deployment = [
+        entry
+        for entry in selected
+        if entry.bin in {"speed", "median", "slow"}
+    ]
     portfolio = {
         "source_checkpoint": str(checkpoint),
         "source_generation": original_generation,
         "output_checkpoint": str(output_checkpoint),
         "target_size": target_size,
         "selected": [entry.as_dict() for entry in selected],
+        "deployment": [entry.as_dict() for entry in deployment],
         "portfolio_stats": {
             "selected": len(selected),
             "selected_by_bin": {
                 name: sum(1 for entry in selected if entry.bin == name)
+                for name in TIME_BINS
+            },
+            "deployment": len(deployment),
+            "deployment_by_bin": {
+                name: sum(1 for entry in deployment if entry.bin == name)
                 for name in TIME_BINS
             },
             "selected_by_cluster": len(
@@ -395,3 +429,112 @@ def rebalance_population(
     portfolio_path = output_prefix.with_suffix(".portfolio.json")
     portfolio_path.write_text(json.dumps(portfolio, indent=2), encoding="utf-8")
     return portfolio
+
+
+def rebalance_live_population(
+    population: neat.Population,
+    routes: list[dict[str, Any]],
+    archive_dir: Path,
+    *,
+    quotas: dict[str, float] | None = None,
+    jaccard: float = 0.5,
+    max_per_cluster: int = 32,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Rebalance an in-memory NEAT population without a checkpoint round-trip.
+
+    This is the frequent-rebalancing path: the trainer calls it after a
+    generation has been evaluated and reproduced, so the protected portfolio
+    becomes the parent population for the next generation.
+    """
+    import random
+
+    rng = random.Random(seed)
+    config = population.config
+    original_generation = int(getattr(population, "generation", 0))
+    candidates, routes, candidate_stats = _archive_candidates(
+        population.population, routes, Path(archive_dir)
+    )
+    entries, stats = build_entries(candidates, routes, jaccard=jaccard)
+    stats["archive_candidates"] = candidate_stats
+    max_innovation = _max_innovation(candidates)
+    stats["max_innovation"] = max_innovation
+    tracker = getattr(config.genome_config, "innovation_tracker", None)
+    if tracker is None:
+        from neat.innovation import InnovationTracker
+
+        tracker = InnovationTracker(start_number=max_innovation)
+    else:
+        tracker.global_counter = max(
+            int(getattr(tracker, "global_counter", 0)), max_innovation
+        )
+        tracker.reset_generation()
+    config.genome_config.innovation_tracker = tracker
+
+    target_size = len(population.population)
+    selected = select_portfolio(
+        entries,
+        total=target_size,
+        quotas=quotas,
+        max_per_cluster=max_per_cluster,
+    )
+    selected_ids = {entry.genome_id for entry in selected}
+
+    max_key = max(candidates) if candidates else 0
+    next_key = max_key + 1
+    new_population = {
+        genome_id: copy.deepcopy(candidates[genome_id])
+        for genome_id in selected_ids
+        if genome_id in candidates
+    }
+    parents = list(new_population.values())
+    while len(new_population) < target_size and parents:
+        parent = copy.deepcopy(rng.choice(parents))
+        parent.key = next_key
+        next_key += 1
+        parent.fitness = None
+        parent.mutate(config.genome_config)
+        new_population[parent.key] = parent
+
+    while len(new_population) < target_size:
+        genome = neat.DefaultGenome(next_key)
+        next_key += 1
+        genome.configure_new(config.genome_config)
+        new_population[genome.key] = genome
+
+    population.population = new_population
+    population.species = neat.DefaultSpeciesSet(
+        config.species_set_config, population.reporters
+    )
+    population.species.speciate(config, population.population, original_generation)
+    population.reproduction.innovation_tracker = tracker
+    config.genome_config.innovation_tracker = tracker
+
+    deployment = [
+        entry
+        for entry in selected
+        if entry.bin in {"speed", "median", "slow"}
+    ]
+    return {
+        "source_checkpoint": "live",
+        "source_generation": original_generation,
+        "target_size": target_size,
+        "selected": [entry.as_dict() for entry in selected],
+        "deployment": [entry.as_dict() for entry in deployment],
+        "portfolio_stats": {
+            "selected": len(selected),
+            "selected_by_bin": {
+                name: sum(1 for entry in selected if entry.bin == name)
+                for name in TIME_BINS
+            },
+            "deployment": len(deployment),
+            "deployment_by_bin": {
+                name: sum(1 for entry in deployment if entry.bin == name)
+                for name in TIME_BINS
+            },
+            "selected_by_cluster": len(
+                {entry.cluster_id for entry in selected if entry.cluster_id}
+            ),
+        },
+        "source_stats": stats,
+    }
