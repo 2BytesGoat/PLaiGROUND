@@ -1,0 +1,16 @@
+{
+  "level": "1-14",
+  "source": "canonical",
+  "summary": {
+    "level": "1-14",
+    "reason": "no NEAT start pool; warm-start pilot uses the canonical start only",
+    "starts": 1
+  },
+  "starts": [
+    {
+      "canonical": true,
+      "kind": "canonical",
+      "weight": 1.0
+    }
+  ]
+}

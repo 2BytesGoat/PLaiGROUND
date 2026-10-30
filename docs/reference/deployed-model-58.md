@@ -8,6 +8,12 @@ Runtime artifact: `godot/src/resources/ai/student_obs58_256.json`
 > [`../index.md`](../index.md) · Run artifacts:
 > [`run-artifacts.md`](run-artifacts.md).
 
+> **Still the production model.** A new shared `lean_stick`/one-hot candidate
+> now finishes 16/16 canonical levels, but it is Python-side only and requires a
+> game runtime change or a multi-hot/legacy distillation pass. Do not replace
+> this JSON model until that gate passes. See
+> [`../../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md`](../../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md).
+
 This is the model currently used by `WATCH AI` and campaign AI in Dragon Jump.
 It is one level-agnostic policy: there is no level ID and no per-level model
 selection. Some game docs quote 1-1 as **2.35 s**; the deployed evaluation in

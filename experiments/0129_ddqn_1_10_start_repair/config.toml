@@ -1,0 +1,100 @@
+# 0129 — targeted 1-10 start repair for three missing clean states.
+
+[experiment]
+id = "0129"
+name = "ddqn_1_10_start_repair"
+status = "complete"
+started = "2026-10-30"
+completed = "2026-10-30"
+
+[workflow]
+name = "reinforcement.ddqn"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "50dcc66"
+allow_dirty = false
+
+[env]
+levels = ["1-10", "1-10", "1-10", "1-10", "1-10", "1-10", "1-10", "1-10"]
+n_envs = 8
+agents_per_process = 1
+action_repeat = 4
+max_decisions = 150
+speedup = 12.0
+force_start_jump = false
+reassert_held_jump = true
+reward_profile = "default"
+base_port = 31600
+eval_port = 31700
+timeout = 180
+seed = 42
+start_seed = 42
+
+[observation]
+encoding = "lean_stick"
+preprocessing = "lean_stick"
+expected_raw_size = 191
+model_input_size = 957
+
+[model]
+arch = "dqn_mlp"
+hidden = [512, 512]
+activation = "relu"
+
+[algorithm]
+name = "dqn"
+timesteps = 10000
+n_steps = 3
+learning_rate = 0.00005
+buffer_size = 200000
+learning_starts = 1000
+batch_size = 256
+gamma = 0.99
+tau = 1.0
+train_freq = 4
+gradient_steps = 4
+target_update_interval = 1000
+exploration_fraction = 0.2
+exploration_initial_eps = 0.05
+exploration_final_eps = 0.02
+expert_td_weight = 0.2
+expert_batch_size = 64
+behavior_margin_weight = 1.0
+behavior_margin = 0.5
+old_margin_weight = 0.0
+old_margin_batch_size = 64
+
+[data]
+archive = "runs/neat_transfer_1_10_from_1_9/archive/routes.json"
+finishers = "runs/neat_transfer_1_10_from_1_9/archive/finishers.jsonl"
+level_analysis = "../dragon-jump-remaster/runs/level_analysis/1-10.json"
+min_time_to_exit = 0.5
+train_pool = "runs/neat_transfer_1_10_from_1_9/pool_clean_g131/train_start_pool.json"
+holdout_pool = "runs/neat_transfer_1_10_from_1_9/pool_clean_g131/holdout_start_pool.json"
+expert_routes = "runs/neat_transfer_1_10_from_1_9/filtered_clean_g131/train_clean_routes.json"
+expert_data = "runs/ddqn_1_10_feasible_starts/expert_1_10/expert_routes.npz"
+
+[checkpointing]
+save_freq = 2500
+
+[run]
+resume_from = "runs/ddqn_1_10_feasible_starts/dqn/checkpoints/ddqn_2122840_steps.zip"
+reset_timesteps = false
+expert_buffer_from = "runs/ddqn_1_10_feasible_starts/expert_1_10/repair_suffix_buffer.pkl"
+preprocessing_from = "runs/ddqn_fresh_1_1_lean_stick/preprocessing.pkl"
+device = "cpu"
+verbose = 1
+
+[output]
+dir = "runs/ddqn_1_10_start_repair"
+model_file = "dqn/dqn_final.zip"
+monitor_file = "dqn/monitor.csv"
+checkpoint_dir = "dqn/checkpoints"
+
+[evaluation]
+canonical = true
+train_pool = false
+holdout_pool = false
+sets = ["runs/neat_transfer_1_10_from_1_9/pool_clean_g131/eval_clean_start_pool.json"]

@@ -6,6 +6,7 @@ import unittest
 import torch
 
 from plaiground.models import LeanMLP, build_lean_mlp, lean_policy_kwargs
+from plaiground.models.student import GridStudent
 
 
 class LeanMLPTest(unittest.TestCase):
@@ -35,6 +36,20 @@ class LeanMLPTest(unittest.TestCase):
             LeanMLP(input_dim=0)
         with self.assertRaises(ValueError):
             LeanMLP(input_dim=10, hidden_sizes=(512, 0))
+
+
+class GridStudentTest(unittest.TestCase):
+    def test_forward_shape_and_grid_input_contract(self) -> None:
+        model = GridStudent(191, [64, 64], conv_channels=(8, 16))
+        values = torch.zeros((3, 191), dtype=torch.float32)
+        values[:, :49] = 2.0
+        values[:, 49:98] = 1.5707964
+        output = model(values)
+        self.assertEqual(tuple(output.shape), (3, 2))
+
+    def test_rejects_non_lean_stick_input(self) -> None:
+        with self.assertRaises(ValueError):
+            GridStudent(957, [64, 64])
 
 
 if __name__ == "__main__":

@@ -12,7 +12,9 @@ hyperparameters, checkpoint cadence, and data paths.
 from __future__ import annotations
 
 import pickle
+from pathlib import Path
 
+import torch
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.utils import LinearSchedule
@@ -76,6 +78,76 @@ def make_model(run: Run, vec_env, model_cls=DQN):
         verbose=run.verbose,
         device=run.device,
         seed=run.seed,
+    )
+
+
+def warm_start_from_student(
+    model,
+    run: Run,
+    student_path: str | Path | None = None,
+) -> None:
+    """Copy a supervised student MLP into a DQN Q-network.
+
+    The student and the DQN use the same flat ReLU architecture. Copying the
+    final layer as the Q-head preserves the student's greedy action because
+    both outputs are compared with ``argmax``. The Q-values are not calibrated
+    returns; callers should use a low learning rate and verify behavior parity.
+    """
+    value = (
+        student_path
+        if student_path is not None
+        else run.config.get("run", {}).get("init_student")
+    )
+    if not value:
+        return
+    path = resolve_path(value)
+    if not path.exists():
+        raise FileNotFoundError(f"student checkpoint not found: {path}")
+    if run.activation.lower() != "relu":
+        raise ValueError("student warm start requires [model].activation='relu'")
+    checkpoint = torch.load(
+        path, map_location="cpu", weights_only=False
+    )
+    if "state_dict" not in checkpoint or "hidden" not in checkpoint:
+        raise ValueError(f"{path} is not a student checkpoint")
+    input_dim = int(checkpoint.get("input_dim", 0))
+    observed_dim = int(model.observation_space.shape[0])
+    if input_dim != observed_dim:
+        raise ValueError(
+            f"student input_dim={input_dim} does not match DQN "
+            f"observation shape {model.observation_space.shape}"
+        )
+    hidden = [int(value) for value in checkpoint["hidden"]]
+    if hidden != list(run.hidden):
+        raise ValueError(
+            f"student hidden={hidden} does not match [model].hidden="
+            f"{run.hidden}"
+        )
+    student_state = {
+        f"q_net.{name.removeprefix('net.')}": tensor
+        for name, tensor in checkpoint["state_dict"].items()
+        if name.startswith("net.")
+    }
+    q_state = model.q_net.state_dict()
+    if set(student_state) != set(q_state):
+        raise ValueError(
+            "student layers do not match the DQN Q-network: "
+            f"student={sorted(student_state)} dqn={sorted(q_state)}"
+        )
+    for name, target in q_state.items():
+        source = student_state[name]
+        if tuple(source.shape) != tuple(target.shape):
+            raise ValueError(
+                f"student layer {name} shape {tuple(source.shape)} "
+                f"does not match DQN {tuple(target.shape)}"
+            )
+        target.copy_(source)
+    model.q_net.load_state_dict(q_state)
+    model.q_net_target.load_state_dict(model.q_net.state_dict())
+    print(
+        f"warm start: copied student {path} into DQN Q-network "
+        f"({input_dim} -> {hidden} -> 2)",
+        flush=True,
     )
 
 
@@ -249,10 +321,17 @@ def run_training(
         print("tensorboard not installed; training continues without it", flush=True)
 
     try:
+        init_student = run.config.get("run", {}).get("init_student")
+        if run.resume is not None and init_student:
+            raise ValueError(
+                "use either [run].resume_from or [run].init_student, not both"
+            )
         if run.resume is not None:
             model = load_resumed_model(run, vec_env, model_cls)
         else:
             model = make_model(run, vec_env, model_cls)
+            if init_student:
+                warm_start_from_student(model, run)
         _apply_exploration_overrides(model, run)
         _apply_learning_rate_override(model, run)
 

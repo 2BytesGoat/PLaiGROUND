@@ -9,10 +9,12 @@ from unittest import mock
 
 import gymnasium as gym
 import numpy as np
+import torch
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from plaiground.algorithms.reinforcement import dqn, ppo
 from plaiground.experiments.runner import Run
+from plaiground.models.student import StudentMLP
 
 
 class TinyEnv(gym.Env):
@@ -93,6 +95,38 @@ class TrainerConstructionTest(unittest.TestCase):
             try:
                 model = dqn._make_model(run, vec_env)
                 self.assertIsNotNone(model.q_net)
+            finally:
+                vec_env.close()
+
+    def test_dqn_warm_start_copies_student_into_q_networks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = self._run(root, "dqn")
+            student = StudentMLP(4, [8, 8])
+            checkpoint = root / "student.pt"
+            torch.save(
+                {
+                    "input_dim": 4,
+                    "hidden": [8, 8],
+                    "input_kind": "raw191",
+                    "state_dict": student.state_dict(),
+                },
+                checkpoint,
+            )
+            vec_env = DummyVecEnv([TinyEnv])
+            try:
+                model = dqn._make_model(run, vec_env)
+                dqn.warm_start_from_student(model, run, checkpoint)
+                student_state = student.state_dict()
+                for name, source in student_state.items():
+                    target = model.q_net.state_dict()[
+                        f"q_net.{name.removeprefix('net.')}"
+                    ]
+                    self.assertTrue(torch.equal(source, target))
+                for name, target in model.q_net_target.state_dict().items():
+                    self.assertTrue(
+                        torch.equal(target, model.q_net.state_dict()[name])
+                    )
             finally:
                 vec_env.close()
 

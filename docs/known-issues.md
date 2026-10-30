@@ -615,6 +615,22 @@ Do not use the 1-9 checkpoint as evidence of old-level retention. A shared
 student still needs the per-level teachers and a dedicated retention/distillation
 evaluation.
 
+### 39. 1-10 fast route and coverage states conflict — high
+
+The 0126 coverage expert selected **2.122840M** at canonical **5.3667 s** and
+**22/25** eval states. The 0129 targeted suffix repair reached the NEAT-best
+**4.7000 s** canonical but covers only **20/25**, and it did not fix the three
+states it targeted: `[8,25]` f1, `[9,25]` f1, and `[26,20]` f1 die at
+11/11/31 steps in both the coverage and repair runs. The repair also lost
+`[17,11]` f-1 and `[21,20]` f1.
+
+The fast route is a ~63-cell detour path family, and the coverage pool mixes
+several platform choices; a single deterministic policy has not covered both at
+4.70 s. The game's bundled AI also finishes 1-10 at **4.48 s**, so the 3.0336 s
+par is beyond the current controllers. Do not stack more 1-10 suffix repairs
+without a state-level diagnosis; prefer the 22/25 coverage checkpoint and record
+the speed gate as open.
+
 ## Historical experiment caveats
 
 - **Pre-fix PPO/NEAT numbers** were collected before the run-clock/start/reward
@@ -651,3 +667,50 @@ metadata (or the held-stick encoding), not only `obs_encoding`. Otherwise an
 exported 1-4 policy can be evaluated or shipped with legacy edge-triggered jump
 semantics. Add an export gate for a held-stick model that checks the flag and a
 short ceiling-stick replay.
+
+## Shared one-hot student is not a game artifact — high
+
+The first shared student that finishes all 16 canonical levels is
+`cand_verified_onehot957_512_false_ddqn2_w11x2_s2` (one-hot 957, 512×512, seed
+2; 16/16 finish, 12/16 strict, 82.4833 s sum). It is not a drop-in game model:
+`MLPPolicy` currently supports only legacy 58 or multi-hot dense JSON weights,
+while this checkpoint consumes `lean_stick` 191 transformed to the fitted
+957 one-hot vector. The bundled `student_obs58_256.json` remains the production
+fallback until one of these lands:
+
+1. a game-side `lean_stick` + one-hot spec and transform, or
+2. a multi-hot/legacy distillation pass from this candidate.
+
+Do not overwrite the bundled model or claim the new candidate is deployed until
+that gate passes. See
+[`../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md`](../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md).
+
+## 1-14 canonical requires legacy held-jump semantics — high
+
+No teacher or shared student currently finishes 1-14 under true
+`reassert_held_jump` semantics with a deterministic policy. The selected
+16/16 candidate finishes 1-14 only with `reassert_held_jump=false`; every other
+level uses true semantics. Shipping it therefore requires a per-level runtime
+semantics override, not just a model swap. This is a deployment decision, not a
+data-cleaning detail. A true-semantics 1-14 policy remains future work
+(frame-stack/history or a richer observation), because the single-frame 191
+observation has exact duplicate states with conflicting successful actions.
+
+## 7x7 grid encoder diagnostic — deferred
+
+A 7×7 convolutional encoder (tile one-hot, sin/cos rotation, phase, plus the 44
+player/collision/flow/flag values) was trained on the same verified dataset and
+evaluated on canonical levels:
+
+```text
+holdout:  96.79% (flat: 96.89%)
+1-3:      3.2667 s (strict pass)
+1-9:      death
+1-10:     timeout
+1-11:     timeout
+1-14:     11.9833 s (flat: 8.1833 s)
+```
+
+The encoder did not improve the fragile set and would require a new game-side
+convolution runtime. It is deferred; revisit only if the flat canonical model
+plateaus or strict 1-3 timing becomes the primary objective.

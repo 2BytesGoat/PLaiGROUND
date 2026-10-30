@@ -22,6 +22,7 @@ failure; the status column records the exception.
 | 1-7 | 4.9728 / 5.2728 | `0102` near-clean archive | `0103` 1.877432M | **5.2333** | near-clean 10/10; all-success 18/20 | final target unset |
 | 1-8 | 4.2144 / 4.5144 | `0105` strict-clean archive | `0118` 1.960392M | **4.4667** | strict-clean 40/40; all-success 106/107 | final target unset |
 | 1-9 | 2.7648 / 3.0648 | `0121` single-route archive | `0122` 2.060360M | **2.9500** | canonical single route | selected; retention: 1-1/1-3/1-9 finish |
+| 1-10 | 3.0336 / 3.3336 | `0125` NEAT transfer | `0126` 2.122840M | **5.3667** | 22/25 eval states | coverage expert; 3 deaths; speed gate open |
 
 ## Selected checkpoint paths
 
@@ -32,14 +33,34 @@ failure; the status column records the exception.
 1-7:      runs/ddqn_1_7_feasible_starts/dqn/checkpoints/ddqn_1877432_steps.zip
 1-8:      runs/ddqn_1_8_canonical_nudge/dqn/checkpoints/ddqn_1960392_steps.zip
 1-9:      runs/ddqn_1_9_single_route/dqn/checkpoints/ddqn_2060360_steps.zip
+1-10:     runs/ddqn_1_10_feasible_starts/dqn/checkpoints/ddqn_2122840_steps.zip
 ```
 
-## 1-9 handoff to 1-10
+## Shared distillation candidate
+
+The campaign-level student is not a per-level expert replacement yet, but it is
+the first shared policy that finishes every canonical level:
 
 ```text
-NEAT population: runs/neat_transfer_1_9_from_1_8/neat-checkpoint-89
-selected expert: runs/ddqn_1_9_single_route/dqn/checkpoints/ddqn_2060360_steps.zip
-level analysis:  ../dragon-jump-remaster/runs/level_analysis/1-10.json (export first)
+checkpoint: runs/distill_campaign_student/students/cand_verified_onehot957_512_false_ddqn2_w11x2_s2/student.pt
+input:      lean_stick 191 -> fitted 957 one-hot
+model:      957 -> 512 -> 512 -> 2, seed 2
+canonical:  16/16 finish, 12/16 strict, sum 82.4833 s
+strict miss: 1-3 +1.9666, 1-8 +0.0333, 1-12 +0.0500, 1-14 +1.2500
+```
+
+1-14 is evaluated with `reassert_held_jump=false`; all other levels use true
+held-jump semantics. The game JSON runtime still needs a `lean_stick` one-hot
+spec or a multi-hot/legacy distillation pass before this model can replace the
+bundled 58-value policy. See
+[`../../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md`](../../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md).
+
+## 1-10 handoff to 1-11
+
+```text
+NEAT population: runs/neat_transfer_1_10_from_1_9/neat-checkpoint-131
+selected expert: runs/ddqn_1_10_feasible_starts/dqn/checkpoints/ddqn_2122840_steps.zip
+level analysis:  ../dragon-jump-remaster/runs/level_analysis/1-11.json (export first)
 ```
 
 ## Ledger notes
@@ -66,5 +87,13 @@ level analysis:  ../dragon-jump-remaster/runs/level_analysis/1-10.json (export f
   (2.5167 s), 1-3 finishes slowly (6.0167 s, gate fail), 1-9 passes
   (2.9500 s); 1-2, 1-4, 1-5, 1-6, 1-7, and 1-8 fail. Do not treat the 1-9
   expert as a multi-level policy.
+- **1-10 is a coverage expert with the speed gate open.** The selected
+  2.122840M checkpoint is canonical **5.3667 s** and covers **22/25** eval
+  states (3 deaths, 0 timeouts, spawn 25/25). The 4.7000 s NEAT train route was
+  reproduced by a targeted repair (`ddqn_2127832_steps.zip`) but that checkpoint
+  covers only **20/25** and is a speed alternative, not selected. The three
+  missing states are `[8,25]` f1, `[9,25]` f1, and `[26,20]` f1; they die at
+  11/11/31 steps in both the coverage and repair runs. The bundled game AI also
+  finishes 1-10 at **4.48 s**, so the 3.0336 s par is beyond current controllers.
 - Gate numbers are provisional until the user sets a final target. Record the
   final target here when it is decided.

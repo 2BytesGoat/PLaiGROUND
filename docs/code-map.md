@@ -6,18 +6,18 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 ## Stats
 
-- 88 source modules, 28 test modules, 68 classes, 347 top-level functions, 361 methods
-- 123 experiment manifests, 44 docs
+- 99 source modules, 28 test modules, 77 classes, 388 top-level functions, 381 methods
+- 131 experiment manifests, 44 docs
 - Local run artifacts are indexed in `.cache/repo-index.json`; use `make context q="..."` or [`reference/run-artifacts.md`](reference/run-artifacts.md).
 
 ## Source by area
 
 | Area | Modules |
 |---|---:|
-| `scripts/` | 8 |
-| `src/` | 57 |
+| `scripts/` | 9 |
+| `src/` | 58 |
 | `tests/` | 28 |
-| `tools/` | 23 |
+| `tools/` | 32 |
 
 ### scripts/
 
@@ -31,6 +31,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `scripts/reinforcement/01_ppo.py` | — | — | 9 | Train or evaluate a PPO policy. |
 | `scripts/reinforcement/02_dqn.py` | — | — | 9 | Extract, train, or evaluate the route-spawn DQN. |
 | `scripts/reinforcement/03_ddqn.py` | — | — | 9 | Train a Double DQN policy from an experiment manifest. |
+| `scripts/supervised/03_distill_student.py` | — | `load_dataset`, `split_arrays`, `summarize` +3 | 456 | Train one level-agnostic student from captured teacher rollouts. |
 
 ### src/
 
@@ -46,7 +47,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `src/plaiground/algorithms/genetic/neat/trainer.py` | `RewardEvaluator` | `apply_time_penalty`, `load_config`, `ensure_population_size` +5 | 1367 | Train a NEAT policy for Dragon Jump level 1-1. |
 | `src/plaiground/algorithms/reinforcement/__init__.py` | — | — | 2 | Reinforcement-learning trainers. |
 | `src/plaiground/algorithms/reinforcement/ddqn.py` | `DoubleDQN` | `main` | 187 | Train a Double DQN policy from an experiment manifest. |
-| `src/plaiground/algorithms/reinforcement/dqn.py` | — | `make_model`, `_copy_expanded_policy`, `load_resumed_model` +4 | 393 | Train a DQN policy from an experiment manifest. |
+| `src/plaiground/algorithms/reinforcement/dqn.py` | — | `make_model`, `warm_start_from_student`, `_copy_expanded_policy` +5 | 472 | Train a DQN policy from an experiment manifest. |
 | `src/plaiground/algorithms/reinforcement/ppo.py` | — | `_make_model`, `_load_resumed_model`, `main` | 179 | Train a PPO policy from an experiment manifest. |
 | `src/plaiground/algorithms/reinforcement/replay.py` | `RareReplayBuffer`, `ProtectedReplayBuffer` | `pad_anchor_observations`, `state_bucket_key` | 382 | Replay buffers for protected multi-level DDQN training. |
 | `src/plaiground/algorithms/supervised/__init__.py` | — | — | 2 | Supervised learning workflows such as behavior cloning and distillation. |
@@ -85,6 +86,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `src/plaiground/models/extractors/legacy_grid_extractor.py` | `LegacyGridExtractor` | — | 73 | Spatial encoder for the legacy 58-value Dragon Jump observation. |
 | `src/plaiground/models/extractors/semantic_autoencoder.py` | `SemanticGridEncoder`, `SemanticGridAutoencoder`, `FrozenSemanticAutoencoderExtractor` | — | 204 | Semantic multi-hot autoencoder for the 754-value Dragon Jump observation. |
 | `src/plaiground/models/mlp.py` | `LeanMLP` | `lean_policy_kwargs`, `build_lean_mlp` | 70 | Lean v1 MLP architecture. |
+| `src/plaiground/models/student.py` | `StudentMLP`, `GridStudent`, `TorchPolicy` | — | 115 | Level-agnostic student MLP and the shared evaluator adapter. |
 | `src/plaiground/observations/__init__.py` | — | — | 38 | Observation contracts and lean preprocessing for PLaiGROUND models. |
 | `src/plaiground/observations/base.py` | `StateTransformer` | `is_single_array`, `restore_single`, `as_batch` | 48 | Base interfaces for the lean observation pipeline. |
 | `src/plaiground/observations/defaults.py` | — | `build_lean_pipeline`, `build_lean_stick_pipeline` | 39 | Ready-made lean observation pipeline. |
@@ -110,7 +112,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tests/test_info_protocol.py` | `InfoProtocolTest` | `_env`, `_columns` | 234 | Unit checks for Godot's static + columnar info wire format. |
 | `tests/test_lean_io.py` | `LeanIOTest` | — | 89 | Tests for creating and loading the lean preprocessing pipeline. |
 | `tests/test_level_data.py` | `LevelDataTest` | `make_route`, `state`, `strict_routes` | 302 | Tests for level route-tier classification and pool preparation. |
-| `tests/test_models.py` | `LeanMLPTest` | — | 42 | Tests for the declared lean model architecture. |
+| `tests/test_models.py` | `LeanMLPTest`, `GridStudentTest` | — | 57 | Tests for the declared lean model architecture. |
 | `tests/test_neat_trainer.py` | `TimePenaltyTest` | — | 43 | Tests for the optional NEAT speed-selection fitness term. |
 | `tests/test_observations.py` | `ObservationSpecTest` | — | 65 | Observation-contract tests, including the versioned legacy hold encoding. |
 | `tests/test_pools.py` | `PoolLoaderTest` | — | 76 | Tests for shared start/spawn pool loaders. |
@@ -125,7 +127,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tests/test_search.py` | `BoundedSearchTest` | `load_tool` | 100 | Tests for the bounded search tool. |
 | `tests/test_spawn_validation.py` | `SpawnValidationTest` | — | 33 | Tests for the runtime start-pool spawn guard. |
 | `tests/test_start_pool.py` | `StartPoolTest` | `route` | 123 | Tests for clean-start pool construction from filtered routes. |
-| `tests/test_trainers.py` | `TinyEnv`, `TrainerConstructionTest` | — | 137 | Small model-construction tests for the PPO/DQN adapters. |
+| `tests/test_trainers.py` | `TinyEnv`, `TrainerConstructionTest` | — | 171 | Small model-construction tests for the PPO/DQN adapters. |
 
 ### tools/
 
@@ -136,14 +138,22 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tools/build_expert_buffer.py` | — | `_success_mask`, `main` | 235 | Build a fixed 1-4 expert replay buffer from successful NEAT routes. |
 | `tools/build_start_expert_buffer.py` | — | `_match_starts`, `main` | 224 | Build a small expert buffer for the starts in a clean-start pool. |
 | `tools/build_start_pool.py` | — | `parse_args`, `main` | 75 | Build train/holdout clean-start pools and their eval union. |
+| `tools/capture_neat_paths.py` | — | `load_routes`, `load_actions`, `load_expert_starts` +1 | 200 | Capture clean NEAT routes and the selected expert's time on their starts. |
 | `tools/check_observation.py` | — | `main` | 158 | Smoke-check the raw local-state observation from Godot. |
+| `tools/collect_dagger.py` | `JSONPolicy` | `load_preprocessor`, `make_env`, `parse_args` +1 | 299 | Collect DAgger-style corrections around a distilled student. |
+| `tools/collect_ddqn_paths.py` | — | `make_env`, `parse_args`, `main` | 293 | Collect finish-validated rollouts from a DDQN policy for distillation. |
+| `tools/collect_distill_data.py` | `JSONPolicy` | `load_pool`, `spawns_for`, `start_key` +4 | 434 | Collect teacher rollouts for the campaign distillation pass. |
 | `tools/collect_dqn_buffer.py` | — | `_episode_rows`, `_fmt_stats`, `main` | 261 | Collect and save a DQN replay buffer without training. |
 | `tools/collect_expert_routes.py` | — | `_load_actions`, `_flag_stats`, `main` | 322 | Replay successful NEAT routes in the current observation environment. |
+| `tools/collect_noisy_teacher_paths.py` | `JSONPolicy` | `make_env`, `parse_args`, `main` | 328 | Collect finish-validated noisy teacher rollouts for late-level distillation. |
+| `tools/collect_teacher_paths.py` | `JSONPolicy` | `make_env`, `parse_args`, `main` | 265 | Collect a canonical 58-input teacher path and its 191-input replay. |
 | `tools/context.py` | — | `tokenize`, `count_hits`, `score_text` +12 | 586 | Return a compact context pack for a free-text task. |
 | `tools/diagnose_dqn.py` | — | `_spawn_for`, `_q_values`, `main` | 182 | Diagnose deterministic DQN rollouts with Q-value and action telemetry. |
 | `tools/evaluate.py` | — | `main` | 44 | Evaluate a saved PPO/DQN checkpoint from an experiment manifest. |
+| `tools/evaluate_student.py` | — | `load_start_pool`, `spawns_for`, `make_env` +3 | 226 | Evaluate a distilled PyTorch student on canonical and held-out starts. |
 | `tools/extract_route_starts.py` | — | `parse_args`, `_required_path`, `main` | 92 | Extract clean-start state pools from NEAT checkpoint snapshots. |
 | `tools/filter_routes.py` | — | `parse_args`, `main` | 73 | CLI for post-processing clean NEAT routes. |
+| `tools/init_ddqn_from_student.py` | `SpaceEnv` | `parse_args`, `main` | 98 | Write a DDQN checkpoint initialized from a distilled student MLP. |
 | `tools/level.py` | — | `_default_analysis`, `_infer_generation`, `_level_meta` +12 | 417 | Prepare and inspect one Dragon Jump level's expert pipeline. |
 | `tools/make_ppo_start_pool.py` | — | `main` | 225 | Build a weighted PPO start pool from level strata and clean NEAT routes. |
 | `tools/rebalance_neat.py` | — | `parse_args`, `main` | 59 | Rebalance a NEAT checkpoint around a portfolio of route/time representatives. |
@@ -151,6 +161,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tools/repo_index.py` | — | `rel`, `read_text`, `first_sentence` +22 | 822 | Build a deterministic search index for the PLaiGROUND repository. |
 | `tools/search.py` | — | `_matches_glob`, `iter_files`, `_compile` +7 | 387 | Bounded text search for agents and humans. |
 | `tools/seed_neat_checkpoint.py` | — | `parse_args`, `max_innovation`, `main` | 126 | Seed a NEAT population from one or more archived finisher genomes. |
+| `tools/soup_students.py` | — | `parse_args`, `main` | 107 | Average compatible distilled-student checkpoints into one model soup. |
 | `tools/start_strata.py` | — | `standable_cells`, `percentile`, `main` | 231 | Stratify standable starts by shortest-path distance to the exit. |
 | `tools/summarize_episodes.py` | — | `percentile`, `as_bool`, `start_kind` +4 | 155 | Report training episodes by start source, with a canonical-only mode. |
 | `tools/watch.py` | — | `parse_args`, `main` | 153 | Preview a saved PPO or DQN checkpoint in the game window. |
@@ -282,6 +293,14 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `0122` | `ddqn_1_9_single_route` | `complete` | `reinforcement.ddqn` | `1-9, 1-9, 1-9, 1-9, 1-9, 1-9, 1-9, 1-9` | — |
 | `0123` | `eval_ddqn_1_9_single_route` | `complete` | `reinforcement.ddqn` | `1-9` | — |
 | `0124` | `eval_ddqn_1_9_retention_all` | `complete` | `reinforcement.ddqn` | `1-1, 1-2, 1-3, 1-4, 1-5, 1-6, 1-7, 1-8, 1-9` | — |
+| `0125` | `neat_transfer_1_10_from_1_9` | `stopped` | `genetic.neat` | `1-10` | — |
+| `0126` | `ddqn_1_10_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-10, 1-10, 1-10, 1-10, 1-10, 1-10, 1-10, 1-10` | — |
+| `0127` | `eval_ddqn_1_10_feasible_starts` | `complete` | `reinforcement.ddqn` | `1-10` | — |
+| `0128` | `ddqn_1_10_feasible_starts_continue` | `complete` | `reinforcement.ddqn` | `1-10, 1-10, 1-10, 1-10, 1-10, 1-10, 1-10, 1-10` | — |
+| `0129` | `ddqn_1_10_start_repair` | `complete` | `reinforcement.ddqn` | `1-10, 1-10, 1-10, 1-10, 1-10, 1-10, 1-10, 1-10` | — |
+| `0130` | `distill_campaign_student` | `data-captured; training pending` | — | — | — |
+| `0131` | `ddqn_1_14_student_warmstart` | `running` | `reinforcement.ddqn` | `1-14` | — |
+| `0132` | `ddqn_1_14_student_warmstart_legacy` | `running` | `reinforcement.ddqn` | `1-14` | — |
 
 ## Docs
 
@@ -319,17 +338,17 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/experiments/ppo-distillation.md` | `PPO policy distillation` | 14 | `deployed/reference — the sele…` | game baseline; the older 128-hidden/experiment results are historical. Last updated: 2026-10-27 |
 | `docs/experiments/ppo-pilot.md` | `PPO pilot` | 12 | `active/reference — the 794 se…` | Historical note (2026-10-28). The legacy PPO flags in this document (--init-student, --eval-stochas… |
 | `docs/index.md` | `PLaiGROUND — docs index` | 8 | — | PLaiGROUND is the external Python/RL lab for Dragon Jump. It connects to the game's training mode o… |
-| `docs/known-issues.md` | `Known issues` | 50 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
+| `docs/known-issues.md` | `Known issues` | 54 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
 | `docs/now.md` | `Now` | 7 | — | Updated: 2026-10-30 Repo: branch neat @ 2e68348; run make brief for live status. Game: ../dragon-ju… |
 | `docs/reference/ddqn-1-5-chain.md` | `1-5 DDQN chain — selected two-model can…` | 7 | `selected for evaluation, not…` | Built: 2026-10-29 |
 | `docs/reference/deployed-model-58.md` | `Deployed AI model: 58-value student` | 15 | `deployed and frozen for the d…` | Built: 2026-10-26 Runtime artifact: godot/src/resources/ai/studentobs58256.json |
 | `docs/reference/glossary.md` | `Glossary` | 5 | — | Terms used across PLaiGROUND docs and run artifacts. When a term also exists in the game vault, the… |
-| `docs/reference/level-ledger.md` | `Level ledger` | 4 | `active` | Last updated: 2026-10-30 |
+| `docs/reference/level-ledger.md` | `Level ledger` | 5 | `active` | Last updated: 2026-10-30 |
 | `docs/reference/observation-contracts.md` | `Observation and reset contracts` | 19 | — | Python-side summary of the game's training contract. The canonical definitions live in the game rep… |
 | `docs/reference/reward-contract.md` | `Reward contract` | 12 | `shipped 2026-10-28` | Owner: godot/src/player/controllers/playeraitrainingcontroller.gd Raw telemetry: getdynamicinfo() a… |
 | `docs/reference/run-artifacts.md` | `Run artifacts` | 6 | — | runs/ is generated and gitignored. This page is the committed index of what each active run directo… |
 | `docs/runbooks/new-level.md` | `New-level pipeline` | 12 | `active` | Last updated: 2026-10-30 |
-| `docs/status.md` | `Status` | 6 | — | Current state: now.md. This file is the chronological log; sections below the header may be histori… |
+| `docs/status.md` | `Status` | 8 | — | Current state: now.md. This file is the chronological log; sections below the header may be histori… |
 | `src/README.md` | `Source layout` | 4 | — | src/ is the installable Python package root. Entry points live outside it. |
 
 ## Query this map

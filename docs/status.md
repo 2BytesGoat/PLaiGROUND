@@ -141,10 +141,52 @@ provisional gates, 1-3 finishes but misses its gate, and 1-2, 1-4, 1-5, 1-6,
 [`../experiments/0122_ddqn_1_9_single_route/README.md`](../experiments/0122_ddqn_1_9_single_route/README.md)
 and [`reference/level-ledger.md`](reference/level-ledger.md).
 
-**Next level:** 1-10 (DOUBLE_SHORT), par 3.0336 / provisional gate 3.3336. The
-1-10 level analysis still needs to be exported. The NEAT population seed is
-`runs/neat_transfer_1_9_from_1_8/neat-checkpoint-89`; the expert base is the
-selected 1-9 `ddqn_2060360_steps.zip`. See the ledger for the handoff.
+**1-10 NEAT and coverage expert (0125-0129, 2026-10-30).** The final 1-9
+population transferred to 1-10 (DOUBLE_SHORT). The first segment stopped at
+generation 91 on the clean-route target: 30 clean routes but best **4.9500 s**.
+It was resumed from checkpoint 91 for 40 more generations with the clean-route
+stop disabled and an early stop at the provisional gate; it finished at
+generation 131 without reaching the gate.
+
+```text
+finishers:          387
+strict clean:       311 routes
+filtered:           109 routes / 22 clusters
+train / holdout:    81 / 28 routes
+state starts:       24 train / 6 holdout
+eval union:         25 states
+best train:         4.7000 s
+best holdout:       4.7833 s
+provisional gate:   3.3336 s — not reached
+```
+
+The best clean route is a ~63-cell detour from the map's ~42-cell flow line.
+The game's bundled AI also finishes 1-10 at **4.48 s**, and the game docs list
+1-10 as a known ~22% slow level, so the 3.0336 s par is beyond current
+controllers.
+
+The 100k DDQN (0126) from the 1-9 **2.060360M** checkpoints selected
+**2.122840M**:
+
+```text
+canonical:          1/1, 5.3667 s, 0 deaths/timeouts (repeat exact)
+eval pool:          22/25, 3 deaths, 0 timeouts, spawn 25/25
+eval best/median:   4.8333 / 7.8333 s
+```
+
+The three missing states are `[8,25]` f1, `[9,25]` f1, and `[26,20]` f1; they
+die at 11/11/31 steps. A 200k low-LR continuation (0128) reached **5.3000 s**
+canonical but fell to 19-21/25 coverage. A targeted suffix repair (0129) reached
+the NEAT-best **4.7000 s** but covered only 17-20/25 and did not fix the three
+target starts; it is a speed alternative, not selected. The speed gate remains
+open. See
+[`../experiments/0126_ddqn_1_10_feasible_starts/README.md`](../experiments/0126_ddqn_1_10_feasible_starts/README.md)
+and [`reference/level-ledger.md`](reference/level-ledger.md).
+
+**Next level:** 1-11 (ORIGINS), par 3.4176 / provisional gate 3.7176. Export
+the 1-11 level analysis first. The NEAT population seed is
+`runs/neat_transfer_1_10_from_1_9/neat-checkpoint-131`; the expert base is the
+selected 1-10 `ddqn_2122840_steps.zip`. See the ledger for the handoff.
 
 **Fresh lean_stick 191 chain (2026-10-29; 1-1..1-5 selected as a two-model chain; 1-6 any-start expert 32/32, 4.60 canonical, 4.28 gate open).** The expanded
 191 fine-tune (0053) reproduced the earlier signal-arm failure pattern: 1-3
@@ -1241,6 +1283,37 @@ re-measured here.
    evaluator, archive-coverage tool, and per-spawn DQN evaluator are removed.
    The 0002 training process is stopped. See
    [`audit/2026-10-28-training-harness-composition.md`](audit/2026-10-28-training-harness-composition.md).
+
+## Campaign distillation capture (0130, 2026-10-30)
+
+The end-of-campaign distillation data capture is complete; training is handed
+to the next session. `0130` recorded the selected 1-1 → 1-10 experts' times on
+their NEAT starts, all clean NEAT route paths/actions, canonical 1-11 → 1-16
+teacher paths, and one DAgger round for 1-11/1-12/1-14. The candidate index is
+`runs/distill_campaign_student/dataset_final2/index.json`.
+
+Preliminary raw-191 → 1024 → 512 student (`final_raw191_wide`) finishes 13/16
+canonical levels at the selected-expert times; 1-11 (timeout), 1-12 (death), and
+1-14 (timeout) remain. The 1-14 path is the deployed 58-input student under
+legacy held-jump semantics; no 58 teacher finished 1-14 with true held-jump
+semantics. The 1-11 true path (PPO, 9.8167 s) is slower than the legacy deployed
+path (8.2500 s), but the true path is the one that matches a 191
+`lean_stick` deployment. See
+[`../experiments/0130_distill_campaign_student/README.md`](../experiments/0130_distill_campaign_student/README.md).
+
+### Final shared student (2026-10-30)
+
+The final one-hot 957 candidate is
+`cand_verified_onehot957_512_false_ddqn2_w11x2_s2` (seed 2, `1-11=2`). It
+finishes **16/16** canonical levels with a **12/16** strict score and an
+**82.4833 s** sum. The strict misses are 1-3 (5.2333), 1-8 (4.5000), 1-12
+(6.0167), and 1-14 (8.1833); the 1-8/1-12 gaps are one action-repeat frame.
+1-14 uses false held-jump semantics; the other levels use true semantics. The
+candidate is Python-side only: the game JSON runtime still accepts only legacy
+58 or multi-hot inputs. The bundled 58-value policy remains the production
+fallback until a `lean_stick` one-hot runtime or multi-hot distillation pass is
+completed. The 7x7 encoder diagnostic was negative (holdout 96.79% vs flat
+96.89%, with 1-9/1-10/1-11 failures) and is deferred.
 
 ## Known issues
 

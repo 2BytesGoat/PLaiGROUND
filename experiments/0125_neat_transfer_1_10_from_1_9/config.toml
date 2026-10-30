@@ -1,0 +1,67 @@
+# 0125 — 1-10 NEAT transfer from the final 1-9 population.
+
+[experiment]
+id = "0125"
+name = "neat_transfer_1_10_from_1_9"
+status = "stopped"
+started = "2026-10-30"
+completed = "2026-10-30"
+
+[workflow]
+name = "genetic.neat"
+
+[game]
+repo = "../dragon-jump-remaster"
+branch = "prepare-for-expo"
+commit = "50dcc66"
+allow_dirty = false
+
+[env]
+level = "1-10"
+population = 384
+parallel = 8
+action_repeat = 4
+speedup = 12.0
+max_steps = 300
+
+[observation]
+encoding = "legacy_stick"
+size = 61
+note = "The held 61-value contract carries over from the 1-9 population; the eventual DDQN replays routes in lean_stick 191."
+
+[action]
+reassert_held_jump = true
+
+[fitness]
+time_weight = 20.0
+formula = "finisher fitness = game reward - 20 * run_time"
+
+[source]
+source_experiment = "0121"
+resume_checkpoint = "runs/neat_transfer_1_9_from_1_8/neat-checkpoint-89"
+source_level = "1-9"
+source_generation = 89
+note = "Use the final 1-9 population. Only the population transfers; the 1-9 archive stays level-specific."
+
+[targets]
+user_time = 3.0336
+acceptable_time = 3.3336
+note = "Provisional: 1-10 par time plus 0.30 s. Clean-route and feasible-start coverage are the first gates."
+
+[collection]
+record_paths = true
+generations = 50
+min_clean_routes = 25
+checkpoint_interval = 1
+rebalance_every = 2
+rebalance_final = true
+port = 29000
+seed = 42
+note = "Stop at 25 clean routes or 50 generations. If strict clean stays at zero, seed a high-mutation cleanup from the best 1-10 route clusters."
+
+[output]
+dir = "runs/neat_transfer_1_10_from_1_9"
+archive_dir = "runs/neat_transfer_1_10_from_1_9/archive"
+
+[run]
+command = "caffeinate -dimsu .venv/bin/python scripts/genetic/01_neat.py --level 1-10 --obs-encoding legacy_stick --reassert-held-jump --resume runs/neat_transfer_1_9_from_1_8/neat-checkpoint-89 --output-dir runs/neat_transfer_1_10_from_1_9 --archive-dir runs/neat_transfer_1_10_from_1_9/archive --generations 50 --parallel 8 --action-repeat 4 --speedup 12 --max-steps 300 --record-paths --checkpoint-interval 1 --rebalance-every 2 --rebalance-final --min-clean-routes 25 --time-fitness-weight 20 --port 29000"
