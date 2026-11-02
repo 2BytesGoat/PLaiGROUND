@@ -28,3 +28,6 @@ runs/
 
 # Archived experiment outputs (large)
 archive/runs/
+
+# repo-brief local cache (map and profile are committed)
+.repo-brief/cache.json

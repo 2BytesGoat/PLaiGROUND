@@ -27,17 +27,18 @@ disagree with `docs/now.md`, `docs/reference/level-ledger.md`, or
 
 ## Search and context
 
-- Start a task with `make context q="<task>"` (or
-  `.venv/bin/python tools/context.py "<task>"`). It ranks code symbols,
-  experiments, docs, and local run artifacts before a repo-wide grep.
-- `make index` regenerates `docs/code-map.md` (committed) and
-  `.cache/repo-index.json` (local, gitignored). `make index-check` fails if the
-  map is stale; run it after adding or renaming modules, experiments, or docs.
-- Use `docs/now.md` for **now**, `docs/code-map.md` for **where**,
+- Start a task with `make context q="<task>"`. It ranks committed code,
+  experiments, docs, decisions and open work before a repo-wide grep. It does
+  not rank `runs/`; use `make brief` and `make run RUN=<name>` for run state.
+- `make index` regenerates `.repo-brief/map.md` (committed). `make index-check`
+  fails if the map's structure is stale; run it after adding or renaming
+  modules, experiments, or docs. `repo-brief` is the submodule at
+  `tools/vendor/repo-brief`; after a fresh clone run
+  `git submodule update --init tools/vendor/repo-brief`.
+- Use `docs/now.md` for **now**, `.repo-brief/map.md` for **where**,
   `docs/index.md` for task routing, and `docs/known-issues.md` for traps.
-- `runs/` is local and gitignored. The index records top-level run metadata and
-  eval summaries; use `docs/reference/run-artifacts.md` for the curated
-  inventory.
+- `runs/` is local and gitignored. `docs/reference/run-artifacts.md` is the
+  curated inventory; `make brief` reads the live tree.
 
 ## Token discipline
 
@@ -99,6 +100,10 @@ The game source lives in a sibling repository:
 | `docs/runbooks/` | Living procedures such as the new-level pipeline. |
 | `docs/reference/` | Contracts, glossary, deployed model, level ledger, run-artifact inventory. |
 | `docs/audit/` | Dated investigations and reviews. |
+| `docs/project/decisions.md` | Dated decisions; earlier ones live in the audits. |
+| `docs/meta/` | Writing conventions and the verbatim capture tier. |
+| `.repo-brief/map.md` | Generated per-file map; `make index` rewrites it. |
+| `tools/brief_adapter.py` | What repo-brief reads here: sources, open work, front doors. |
 | `docs/now.md` | One-page current state; the first read for agents. |
 | `opencode.jsonc` | Project OpenCode caps: tool-output size and explore-subagent steps. |
 | `environments/` | Game binaries / macOS source shim. Gitignored contents except `.gitkeep`. |
@@ -141,6 +146,17 @@ The game source lives in a sibling repository:
   clean untracked files unless the user explicitly asks.
 - Run `.venv/bin/python -m unittest discover -s tests` after changing the
   socket client, info decoding, wrappers, or level data tooling.
+- CI runs `make preflight PYTHON=python3` on pull requests and pushes to `main`;
+  run `make preflight` before opening one.
+
+## Owner input
+
+What the owner says is recorded twice: their words verbatim in
+`docs/meta/capture/YYYY-MM-DD.md` (append-only, tagged `C-YYYY-MM-DD-NN`), and
+the meaning in a dated decision, backlog row or status line that links back to
+the tag. If the two disagree, the quote wins. The `document` skill owns the loop
+and `docs/meta/writing.md` holds the conventions; `capture/` is excluded from
+`context` and the map, so an aside never reads as guidance.
 
 ## Environment and game-side footguns
 

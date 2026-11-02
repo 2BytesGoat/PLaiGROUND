@@ -1,0 +1,3 @@
+[submodule "tools/vendor/repo-brief"]
+	path = tools/vendor/repo-brief
+	url = https://github.com/GianiStatie/repo-brief.git

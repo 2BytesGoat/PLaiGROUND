@@ -1,0 +1,26 @@
+name: preflight
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # repo-brief is stdlib-only, so this needs no project dependencies.
+      - name: map, profile, front doors, dates, references
+        run: make preflight PYTHON=python3

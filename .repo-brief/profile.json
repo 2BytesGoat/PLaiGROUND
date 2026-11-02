@@ -1,0 +1,49 @@
+{
+  "adapter": "tools/brief_adapter.py",
+  "detected": {
+    "archived": [
+        "archive"
+    ],
+    "autoloads": {},
+    "changelog": "",
+    "ci": [
+        ".github/workflows/preflight.yml"
+    ],
+    "decisions_dir": "",
+    "decisions_file": "docs/project/decisions.md",
+    "index": "docs/index.md",
+    "languages": [
+        {
+            "files": 170,
+            "language": "markdown"
+        },
+        {
+            "files": 153,
+            "language": "python"
+        },
+        {
+            "files": 1,
+            "language": "shell"
+        }
+    ],
+    "manifests": [
+        "pyproject.toml"
+    ],
+    "open_work": [],
+    "parsers": [
+        ".md",
+        ".py"
+    ],
+    "source_root": "src/plaiground",
+    "status": "docs/status.md",
+    "test_dirs": [
+        "tests"
+    ],
+    "total_files": 493
+},
+  "judgments": {
+    "decisions": "",
+    "open_work": "",
+    "canonical": []
+  }
+}

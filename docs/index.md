@@ -18,7 +18,8 @@ development/research repo, not part of the shipped game.
 | See the current branch, active experiment, and verified results | [`now.md`](now.md) → `make brief` |
 | Read the chronological history | [`status.md`](status.md) |
 | Watch the selected 1-1 → 1-4 policy in the game | `make watch` (see [`../README.md`](../README.md) § Watch the selected policy) |
-| Find code, symbols, experiments, or runs | `make context q="<task>"` → [`code-map.md`](code-map.md) |
+| Find code, symbols, or experiments | `make context q="<task>"` → [`.repo-brief/map.md`](../.repo-brief/map.md) |
+| Read a dated decision | [`project/decisions.md`](project/decisions.md) |
 | Find a file, script, or run artifact | this page → [`../src/README.md`](../src/README.md) → [`reference/run-artifacts.md`](reference/run-artifacts.md) |
 | Understand the game ↔ Python architecture | [`architecture.md`](architecture.md) |
 | Know what is broken, stale, or confusing | [`known-issues.md`](known-issues.md) |
@@ -47,13 +48,13 @@ development/research repo, not part of the shipped game.
 ## Search and context
 
 `make context q="<task>"` is the first read-only call for a task. It ranks
-matching Python symbols, experiments, docs, and local runs, then suggests the
-next files to read. `make search q="<text>"` is the bounded text search; it
-skips `runs/`, `data/`, `.cache/`, binaries, and caps output. `make brief` and
-`make run RUN=<name>` summarize the repo and one run without ad-hoc Python.
-`make index` regenerates [`code-map.md`](code-map.md) and the local
-`.cache/repo-index.json`; `make index-check` fails if the committed map is
-stale.
+matching Python symbols, experiments, docs, decisions and open work, then
+suggests the next files to read. It does not rank `runs/`. `make search q="<text>"`
+is the bounded text search; it skips `runs/`, `data/`, `.cache/`, binaries, and
+caps output. `make brief` and `make run RUN=<name>` summarize the repo and one
+run without ad-hoc Python. `make index` regenerates the committed
+[`.repo-brief/map.md`](../.repo-brief/map.md); `make index-check` fails if the
+map's structure is stale.
 
 ## Experiments
 
@@ -150,7 +151,7 @@ stale.
 | `tests/` | Protocol, preprocessing, model, runner, evaluation, route, pool, and experiment tests. |
 | `runs/` | Generated artifacts (gitignored): checkpoints, eval summaries, logs, per-run userdata. |
 | `archive/2026-10-27-cleanup/` | Historical scripts/runs/docs. Start at its `README.md`. |
-| `docs/code-map.md` | Generated Python/experiment/doc map; do not hand-edit. |
+| `.repo-brief/map.md` | Generated Python/experiment/doc map; do not hand-edit. |
 | `docs/runbooks/` | Living procedures, including the new-level pipeline. |
 | `docs/reference/level-ledger.md` | Selected expert, canonical time, and gate per level. |
 | `docs/` | Architecture, contracts, audits, and historical experiment deep-dives. |
@@ -175,8 +176,11 @@ stale.
 - **Dates** are ISO (`2026-10-28`) and refer to local dev time.
 - **Run artifacts are not committed.** Link them by path and record the result in
   docs; `runs/` is gitignored.
-- **The code map is generated.** `docs/code-map.md` comes from `make index`;
+- **The code map is generated.** `.repo-brief/map.md` comes from `make index`;
   update the source docs/experiments instead of hand-editing the map.
+- **CI runs preflight.** Pull requests and pushes to `main` run
+  `make preflight`; a stale map, a missing front door, or a broken reference
+  fails the check.
 - **Cross-repo claims** should name the game branch/commit when they depend on
   game code. The game vault is the source of truth for game behavior.
 - **Investigation notes** go in `docs/audit/`; living issues go in

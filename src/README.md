@@ -46,8 +46,8 @@ uv pip install --python .venv/bin/python -e . --no-deps
 | `scripts/reinforcement/03_ddqn.py` | Double-DQN train from an experiment manifest. |
 | `tools/level.py` | Route tiers, filtered pools, eval union, and per-level status. |
 | `tools/evaluate.py` | Shared PPO/DQN canonical + start-set evaluation. |
-| `tools/repo_index.py` | Generate `docs/code-map.md` and `.cache/repo-index.json`. |
-| `tools/context.py` | Rank code, experiments, docs, and runs for a task query. |
+| `tools/brief_adapter.py` | repo-brief structure: sources, open work, front doors. |
+| `tools/brief.py` | Repo/run status behind `make brief` and `make run`. |
 | `tools/extract_route_starts.py` | NEAT checkpoint -> clean-start DQN pool. |
 | `tools/filter_routes.py` | Route dedupe/clustering/holdout split. |
 | `tools/build_start_pool.py` | Validated train/holdout start pools. |

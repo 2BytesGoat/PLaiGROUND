@@ -106,9 +106,10 @@ changing these areas. Resolved issues stay there for history.
 | `make brief` | branch, game commit, running jobs, selected levels, recent runs |
 | `make run RUN=<name>` | one run's checkpoints, eval summaries, and log tail |
 | `make search q="..."` | capped text search; skips `runs/`, `data/`, binaries |
-| `make context q="..."` | ranked code, docs, experiments, and runs |
+| `make context q="..."` | ranked code, docs, experiments and open work |
 | `make level-status LEVEL=1-9` | one level's experiments and data summaries |
-| `make index` / `make index-check` | regenerate / verify the code map |
+| `make index` / `make index-check` | regenerate / verify `.repo-brief/map.md` |
+| `make preflight` | map, profile, front doors, dates, and references |
 
 ## Where to look
 
@@ -119,5 +120,6 @@ changing these areas. Resolved issues stay there for history.
 | Full new-level procedure | [`runbooks/new-level.md`](runbooks/new-level.md) |
 | Architecture | [`architecture.md`](architecture.md) |
 | Traps and drift | [`known-issues.md`](known-issues.md) |
-| Code map (where) | [`code-map.md`](code-map.md) — query it, do not read it |
+| Code map (where) | [`.repo-brief/map.md`](../.repo-brief/map.md) — query it, do not read it |
+| Decisions | [`project/decisions.md`](project/decisions.md) |
 | History | [`status.md`](status.md) |

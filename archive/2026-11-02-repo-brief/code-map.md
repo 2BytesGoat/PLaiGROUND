@@ -6,8 +6,8 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 
 ## Stats
 
-- 99 source modules, 28 test modules, 77 classes, 388 top-level functions, 381 methods
-- 131 experiment manifests, 44 docs
+- 100 source modules, 28 test modules, 77 classes, 401 top-level functions, 381 methods
+- 132 experiment manifests, 45 docs
 - Local run artifacts are indexed in `.cache/repo-index.json`; use `make context q="..."` or [`reference/run-artifacts.md`](reference/run-artifacts.md).
 
 ## Source by area
@@ -17,7 +17,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `scripts/` | 9 |
 | `src/` | 58 |
 | `tests/` | 28 |
-| `tools/` | 32 |
+| `tools/` | 33 |
 
 ### scripts/
 
@@ -31,7 +31,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `scripts/reinforcement/01_ppo.py` | — | — | 9 | Train or evaluate a PPO policy. |
 | `scripts/reinforcement/02_dqn.py` | — | — | 9 | Extract, train, or evaluate the route-spawn DQN. |
 | `scripts/reinforcement/03_ddqn.py` | — | — | 9 | Train a Double DQN policy from an experiment manifest. |
-| `scripts/supervised/03_distill_student.py` | — | `load_dataset`, `split_arrays`, `summarize` +3 | 456 | Train one level-agnostic student from captured teacher rollouts. |
+| `scripts/supervised/03_distill_student.py` | — | `load_dataset`, `split_arrays`, `summarize` +3 | 559 | Train one level-agnostic student from captured teacher rollouts. |
 
 ### src/
 
@@ -151,6 +151,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `tools/diagnose_dqn.py` | — | `_spawn_for`, `_q_values`, `main` | 182 | Diagnose deterministic DQN rollouts with Q-value and action telemetry. |
 | `tools/evaluate.py` | — | `main` | 44 | Evaluate a saved PPO/DQN checkpoint from an experiment manifest. |
 | `tools/evaluate_student.py` | — | `load_start_pool`, `spawns_for`, `make_env` +3 | 226 | Evaluate a distilled PyTorch student on canonical and held-out starts. |
+| `tools/export_student_json.py` | — | `_json_float`, `_json_floats`, `_sha256` +10 | 568 | Export a leanstick one-hot student to the game's versioned JSON runtime. |
 | `tools/extract_route_starts.py` | — | `parse_args`, `_required_path`, `main` | 92 | Extract clean-start state pools from NEAT checkpoint snapshots. |
 | `tools/filter_routes.py` | — | `parse_args`, `main` | 73 | CLI for post-processing clean NEAT routes. |
 | `tools/init_ddqn_from_student.py` | `SpaceEnv` | `parse_args`, `main` | 98 | Write a DDQN checkpoint initialized from a distilled student MLP. |
@@ -301,6 +302,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `0130` | `distill_campaign_student` | `data-captured; training pending` | — | — | — |
 | `0131` | `ddqn_1_14_student_warmstart` | `running` | `reinforcement.ddqn` | `1-14` | — |
 | `0132` | `ddqn_1_14_student_warmstart_legacy` | `running` | `reinforcement.ddqn` | `1-14` | — |
+| `0133` | `ddqn_1_14_student_canonical_nudge` | `running` | `reinforcement.ddqn` | `1-14` | — |
 
 ## Docs
 
@@ -327,6 +329,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/audit/2026-10-29-reward-fitness-audit.md` | `Reward / NEAT fitness audit — 2026-10-29` | 7 | — | Why did the 17.6 s, backtracking 1-4 genome beat the 4.9833 s clean genome in NEAT fitness? |
 | `docs/audit/2026-10-29-run-reliability.md` | `Run reliability audit — 2026-10-29` | 20 | — | Scope: the active 1-1 .. 1-6 DQN/DDQN and NEAT runs, plus the shared evaluation, replay-collection,… |
 | `docs/audit/2026-10-30-1-8-expert.md` | `Audit — 1-8 (DOUBLE_JUMP) NEAT transfer…` | 8 | `complete; 1-8 expert selected` | Date: 2026-10-30 Game: ../dragon-jump-remaster at 50dcc66, clean Level analysis: ../dragon-jump-rem… |
+| `docs/audit/2026-10-31-student-hold-and-powerups.md` | `Audit — student jump-hold timing and mi…` | 15 | `open follow-up; diagnosis com…` | Date: 2026-10-31 Model: runs/distillcampaignstudent/students/candverifiedonehot957512falseddqn2w11x… |
 | `docs/blog-diversity-as-utility.md` | `The Utility of the B-Team` | 12 | `idea` | Updated: 2026-10-29 |
 | `docs/blog-growing-a-hand.md` | `Growing a Hand` | 12 | `idea` | Updated: 2026-10-27 |
 | `docs/experiments/compact-policy-deployment.md` | `Compact policy options for JSON deploym…` | 12 | `proposed; no compact student…` | Date: 2026-10-28 Related: ../../experiments/0001ppocleanstart11/README.md |
@@ -338,8 +341,8 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/experiments/ppo-distillation.md` | `PPO policy distillation` | 14 | `deployed/reference — the sele…` | game baseline; the older 128-hidden/experiment results are historical. Last updated: 2026-10-27 |
 | `docs/experiments/ppo-pilot.md` | `PPO pilot` | 12 | `active/reference — the 794 se…` | Historical note (2026-10-28). The legacy PPO flags in this document (--init-student, --eval-stochas… |
 | `docs/index.md` | `PLaiGROUND — docs index` | 8 | — | PLaiGROUND is the external Python/RL lab for Dragon Jump. It connects to the game's training mode o… |
-| `docs/known-issues.md` | `Known issues` | 54 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
-| `docs/now.md` | `Now` | 7 | — | Updated: 2026-10-30 Repo: branch neat @ 2e68348; run make brief for live status. Game: ../dragon-ju… |
+| `docs/known-issues.md` | `Known issues` | 55 | — | Living list of traps, stale claims, and unfinished work. For the full DQN investigation see audit/2… |
+| `docs/now.md` | `Now` | 7 | — | Updated: 2026-10-31 Repo: branch neat @ fc747ea (dirty: untracked tools/exportstudentjson.py); run… |
 | `docs/reference/ddqn-1-5-chain.md` | `1-5 DDQN chain — selected two-model can…` | 7 | `selected for evaluation, not…` | Built: 2026-10-29 |
 | `docs/reference/deployed-model-58.md` | `Deployed AI model: 58-value student` | 15 | `deployed and frozen for the d…` | Built: 2026-10-26 Runtime artifact: godot/src/resources/ai/studentobs58256.json |
 | `docs/reference/glossary.md` | `Glossary` | 5 | — | Terms used across PLaiGROUND docs and run artifacts. When a term also exists in the game vault, the… |
@@ -348,7 +351,7 @@ This is the *where* layer: Python modules, symbols, experiment manifests, and do
 | `docs/reference/reward-contract.md` | `Reward contract` | 12 | `shipped 2026-10-28` | Owner: godot/src/player/controllers/playeraitrainingcontroller.gd Raw telemetry: getdynamicinfo() a… |
 | `docs/reference/run-artifacts.md` | `Run artifacts` | 6 | — | runs/ is generated and gitignored. This page is the committed index of what each active run directo… |
 | `docs/runbooks/new-level.md` | `New-level pipeline` | 12 | `active` | Last updated: 2026-10-30 |
-| `docs/status.md` | `Status` | 8 | — | Current state: now.md. This file is the chronological log; sections below the header may be histori… |
+| `docs/status.md` | `Status` | 10 | — | Current state: now.md. This file is the chronological log; sections below the header may be histori… |
 | `src/README.md` | `Source layout` | 4 | — | src/ is the installable Python package root. Entry points live outside it. |
 
 ## Query this map

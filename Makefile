@@ -24,30 +24,27 @@ SEARCH_DIR ?= .
 SEARCH_GLOB ?=
 SEARCH_ALL ?=
 RUN ?=
+ARGS ?=
+T ?=
 
-.PHONY: install test compile smoke-ppo index index-check context brief run search level-data level-status watch help
+# repo-brief owns index/context/preflight/graph/archive/writing/skill. The
+# fragment is included at the bottom so its targets win; set REPO_BRIEF to a
+# checkout to develop against it instead of the submodule.
+REPO_BRIEF ?= tools/vendor/repo-brief
+
+.PHONY: install test compile smoke-ppo brief run search level-data level-status watch help
 
 install:
 	$(UV) pip install --python $(PYTHON) -e . --no-deps
 
 test:
-	$(PYTHON) -m unittest discover -s tests
+	$(PYTHON) -m unittest $(if $(T),$(T),discover -s tests)
 
 compile:
 	$(PYTHON) -m compileall -q src/plaiground scripts tools
 
 smoke-ppo:
 	$(PYTHON) scripts/reinforcement/01_ppo.py --help
-
-index:
-	$(PYTHON) tools/repo_index.py
-
-index-check:
-	$(PYTHON) tools/repo_index.py --check
-
-context:
-	@if [ -z "$(q)" ]; then echo 'usage: make context q="<task>"'; exit 2; fi
-	$(PYTHON) tools/context.py "$(q)"
 
 brief:
 	$(PYTHON) tools/brief.py
@@ -81,11 +78,18 @@ watch:
 help:
 	@echo "make install      install package editable into .venv"
 	@echo "make test         run Python unit tests"
+	@echo "make test T=tests/test_x.py  run one test file"
 	@echo "make compile      byte-compile package and entry points"
 	@echo "make smoke-ppo    show the PPO entry point help"
-	@echo "make index        regenerate docs/code-map.md and .cache/repo-index.json"
-	@echo "make index-check  fail if docs/code-map.md is stale"
-	@echo 'make context q="..."  search code, experiments, docs, and runs'
+	@echo "make index        regenerate the committed .repo-brief/map.md"
+	@echo "make index-check  fail if the map's structure is stale"
+	@echo 'make context q="..."  rank code, experiments, docs and decisions'
+	@echo 'make context ARGS=--brief q="..."  one-screen start'
+	@echo "make graph        dependency view; graph <area> or ARGS='--task <query>'"
+	@echo "make preflight    map, profile, front doors, dates, references"
+	@echo "make archive      review finished docs; ARGS='--apply <path>'"
+	@echo "make writing      write docs/meta/writing.md from detection"
+	@echo "make skill        install or verify the document skill"
 	@echo "make brief        repo state: branch, game, running jobs, ledger, recent runs"
 	@echo "make run RUN=...  one run's checkpoints, evals, and log tail"
 	@echo 'make search q="..." [SEARCH_DIR=.] [SEARCH_GLOB=*.py]  bounded search'
@@ -93,3 +97,7 @@ help:
 	@echo "make level-data LEVEL=1-9 LEVEL_RUN=runs/... LEVEL_GEN=46  build tiers/pools"
 	@echo "make watch        play the 1.555M 1-1..1-4 chain in the game window"
 	@echo "                  WATCH_LEVEL=1-4 WATCH_SPEEDUP=2 WATCH_MODEL=<checkpoint>"
+
+# Included last: the fragment owns index/context/preflight/graph/archive/
+# writing/skill, so its definitions must come after anything in this file.
+-include $(REPO_BRIEF)/make/repo-brief.mk
