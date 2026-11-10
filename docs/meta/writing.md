@@ -10,6 +10,7 @@
 | Open work | docs/known-issues.md, docs/now.md |
 | Front doors | docs/index.md, docs/now.md, docs/status.md, docs/known-issues.md, docs/reference/level-ledger.md, docs/project/decisions.md |
 | Capture | docs/meta/capture/YYYY-MM-DD.md |
+| Tool notes | docs/meta/repo-brief-notes.md |
 | Archive | archive |
 | Context | `repo-brief context --brief "<query>"` (or this repo's wrapper) |
 
