@@ -23,6 +23,7 @@ from typing import Optional
 import numpy as np
 from gymnasium import spaces
 
+from .runtime import ensure_training_override
 from .utils import ActionSpaceProcessor, convert_macos_path
 
 
@@ -607,6 +608,7 @@ class GodotEnv:
     ):
         # --fixed-fps {framerate}
         path = convert_macos_path(env_path) if platform == "darwin" else env_path
+        ensure_training_override(path)
 
         launch_cmd = [path, f"--port={port}", f"--env_seed={seed}"]
 

@@ -8,9 +8,12 @@ Local report: `runs/distill_campaign_student/DATA_REPORT.md`
 
 > **Selected candidate:** `cand_verified_onehot957_512_false_ddqn2_w11x2_s2`
 > (one-hot 957, 512×512, seed 2). It finishes **16/16** canonical levels and
-> passes **12/16** strict times. The game runtime still needs a `lean_stick`
-> one-hot spec or a `multi_hot`/legacy distillation pass; the bundled 58-value
-> JSON model remains the production fallback.
+> passes **12/16** strict times. As of 2026-10-31 it is exported to the game
+> working tree as `student_lean_stick_512.json` against an uncommitted spec v7
+> `lean_stick` runtime. It is not committed or gated; the bundled 58-value JSON
+> model remains the committed fallback. The in-game hold/powerup follow-ups are
+> in
+> [`../../docs/audit/2026-10-31-student-hold-and-powerups.md`](../../docs/audit/2026-10-31-student-hold-and-powerups.md).
 
 ## What was captured
 

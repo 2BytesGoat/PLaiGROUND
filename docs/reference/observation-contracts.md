@@ -158,6 +158,11 @@ remain frozen.
   [`known-issues.md`](../known-issues.md#held-stick-action-semantics-in-exported-models).
 - `action_repeat=4` by default: one decision per four physics frames, 15
   decisions/s at 60 Hz.
+- Held jump is also the powerup cast input: `FallState` consumes a powerup
+  whenever `wants_to_jump` is true while falling. A held action that stays `1`
+  through a fall therefore auto-casts at Fall entry. Do not read cast counts as
+  deliberate mid-air use; see
+  [`../audit/2026-10-31-student-hold-and-powerups.md`](../audit/2026-10-31-student-hold-and-powerups.md).
 - `max_decisions=150` = 600 physics ticks = 10 s of game time.
 - `speedup` scales wall-clock physics ticks and `Engine.time_scale`; per-tick
   simulation and run times are unchanged.

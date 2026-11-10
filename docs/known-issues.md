@@ -28,6 +28,11 @@ history. Read the matching section below before touching the area.
 - **Changing `action_repeat` breaks the old-level anchor** (high).
 - **Single-model 1-5 training damages 1-4 and late 1-2** (high).
 - **Checkpoint selection is manual and finals regress** (high).
+- **Student holds jump too long and powerups are under-taught** (high) — long
+  holds are teacher style, not an inference bug; a held jump auto-casts at Fall
+  entry. Read
+  [`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md)
+  before changing `action_repeat`, the action space, or the export.
 - **Canonical eval is one deterministic trace** (medium) — it is not a
   robustness measure.
 - **NEAT fitness does not rank fast finishers first** (medium).
@@ -273,11 +278,14 @@ gate.
 ### 11. Game docs say state snapshots are unsupported; the code supports them
 
 The game's `docs/technical/training.md` says only position and facing are
-restored. The committed controller (`bb76299`) accepts a `state` dictionary and
-restores grounded velocity, `run_time`, `best_run_time`, `run_active`, and
-`started_walking`; `archive/2026-10-27-cleanup/src/30_trajectory_holdout.py` has
-a `state_from_info()` helper. The docs are stale. The limitation is narrower
-than “no snapshots”: no jump states, powerups, or dissolve timers.
+restored. The controller accepts a `state` dictionary and restores grounded
+velocity, `run_time`, `best_run_time`, `run_active`, and `started_walking`,
+plus a `world_state` snapshot for held powerups and dissolve/moving/reset
+objects; `archive/2026-10-27-cleanup/src/30_trajectory_holdout.py` has a
+`state_from_info()` helper. The game docs and
+[`architecture.md`](architecture.md) were stale on the powerup/dissolve part.
+The remaining limitation is narrower: mid-jump start states are not supported.
+See [`audit/2026-10-28-clean-start-state-capture.md`](audit/2026-10-28-clean-start-state-capture.md).
 
 ### 12. Game provenance can drift from the manifest
 
@@ -661,28 +669,33 @@ the speed gate as open.
 encoding, keeps training/evaluation/preview on one `Run.reassert_held_jump`
 property, and fails fast when Godot reports a different value.
 
-**Godot export TODO:** when the bundled/inference policy is a held-stick model,
-`PlayerAIModelController` must set `reassert_held_jump` from the exported model
-metadata (or the held-stick encoding), not only `obs_encoding`. Otherwise an
-exported 1-4 policy can be evaluated or shipped with legacy edge-triggered jump
-semantics. Add an export gate for a held-stick model that checks the flag and a
-short ceiling-stick replay.
+**Godot export check (working tree, 2026-10-31):** `PlayerAIModelController`
+now reads `policy.should_reassert_held_jump(level_name)`, and the runtime tests
+cover the true and 1-14 false cases. Keep this wired to exported metadata, not
+only `obs_encoding`; otherwise an exported held-stick policy can be evaluated
+or shipped with legacy edge-triggered jump semantics. The export gate should
+also check the flag and a short ceiling-stick replay.
 
-## Shared one-hot student is not a game artifact — high
+## Shared one-hot student: game runtime in progress — high
 
 The first shared student that finishes all 16 canonical levels is
 `cand_verified_onehot957_512_false_ddqn2_w11x2_s2` (one-hot 957, 512×512, seed
-2; 16/16 finish, 12/16 strict, 82.4833 s sum). It is not a drop-in game model:
-`MLPPolicy` currently supports only legacy 58 or multi-hot dense JSON weights,
-while this checkpoint consumes `lean_stick` 191 transformed to the fitted
-957 one-hot vector. The bundled `student_obs58_256.json` remains the production
-fallback until one of these lands:
+2; 16/16 finish, 12/16 strict, 82.4833 s sum).
 
-1. a game-side `lean_stick` + one-hot spec and transform, or
-2. a multi-hot/legacy distillation pass from this candidate.
+As of **2026-10-31** the game working tree (`prepare-for-expo` @ `50dcc66`,
+dirty) contains an uncommitted spec v7 `lean_stick` + one-hot runtime and an
+exported `student_lean_stick_512.json` (191 observations → 957 inputs,
+`action_repeat=4`, `reassert_held_jump=true` with a 1-14 exemption). The golden
+fixture and runtime tests exist. The committed/bundled fallback is still
+`student_obs58_256.json`.
 
-Do not overwrite the bundled model or claim the new candidate is deployed until
-that gate passes. See
+Do **not** claim the new candidate is deployed until the working tree is
+committed and passes the all-16 in-game gate plus the powerup gate in
+[`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md).
+A multi-hot/legacy distillation pass from this candidate remains the fallback
+if the spec v7 runtime is not kept.
+
+See also
 [`../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md`](../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md).
 
 ## 1-14 canonical requires legacy held-jump semantics — high
@@ -695,6 +708,31 @@ semantics override, not just a model swap. This is a deployment decision, not a
 data-cleaning detail. A true-semantics 1-14 policy remains future work
 (frame-stack/history or a richer observation), because the single-frame 191
 observation has exact duplicate states with conflicting successful actions.
+
+## Student hold timing and mid-air powerups — high
+
+The 16/16 shared student has two behaviours that look wrong in play: it holds
+jump too long and it does not reliably use powerups mid-air. Both are in the
+data, not just the inference path:
+
+- The teachers hold jump for long runs (43 decisions on 1-10, 26 on 1-7,
+  18 on 1-4). With `reassert_held_jump=true` that is a wall-jump / bunny-hop
+  chain, not one over-long jump. The student matches canonical teacher actions
+  on 9/16 levels exactly; its residual errors are 3 late releases / 115 and
+  6 missed presses / 116, concentrated on 1-14 and 1-16.
+- `FallState` casts a powerup whenever `wants_to_jump` is true while falling.
+  A held jump therefore auto-casts at Fall entry. Cast examples are sparse:
+  zero in 1-1..1-7, 36 in 1-8, 6 in 1-9, 23 in 1-10, and only 1-2 per level in
+  1-11..1-16. The useful "release, wait, press at fall height" pattern is
+  almost absent from the dataset.
+
+Do not blame `action_repeat=4` alone: the teacher data is also 4-frame, so the
+student cannot learn sub-decision release timing from it. Changing it is a new
+data-collection + retrain experiment, and it breaks the old-level anchor.
+
+The follow-up plan (trace first, then temporal features and targeted powerup
+demonstrations) is in
+[`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md).
 
 ## 7x7 grid encoder diagnostic — deferred
 

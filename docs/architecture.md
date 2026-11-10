@@ -86,13 +86,17 @@ The game emits a flat float vector. PLaiGROUND mirrors the schema in
 | `legacy` | 58 | deployed 58/256 student, NEAT, DQN, most PPO baselines | 7×7 tile IDs + 9 player/route values. |
 | `multi_hot` | 754 | 754 PPO teachers/students | 7×7×15 semantic grid + 19 player/route values. |
 | `multi_hot_sensor` | 794 | 794 sensor PPO lineage | 754 + 20 head-ray distances + 20 hit flags. |
-| `raw` | 342 | validation only; Python encoder pending | 7×7 tile IDs + tile states, player state, 8-way collisions, 8-way flow. |
+| `lean` | 188 | PPO clean-start / lean baselines | 7×7 tile IDs, rotations, phases + 9 player values + collisions + flow. |
+| `lean_stick` | 191 | DDQN experts, shared student | `lean` 188 + on-ceiling, jump-held, stick-active. |
+| `raw` | 342 | validation only | 7×7 tile IDs + tile states, player state, 8-way collisions, 8-way flow. |
 
-> **Observation change (2026-10-28, in progress):** the `raw` encoding is
-> implemented and validated (1-1 and 1-8); Python feature encoders and the
-> reset/powerup restore are still pending. The 58 runtime encoder stays in
-> Godot; the 754/794 layouts above remain the current reference until the
-> cutover. See
+> **Observation change (2026-10-31):** `lean` 188 and `lean_stick` 191 are the
+> active model-facing encodings; `lean_stick` is transformed to the fitted
+> 957 one-hot for the shared student and exported to the game as spec v7.
+> `raw` 342 is validation-only. Grounded reset plus held-powerup/world-state
+> restore is implemented; mid-jump start states remain unsupported. See
+> [`reference/observation-contracts.md`](reference/observation-contracts.md)
+> and
 > [`audit/2026-10-28-raw-state-observation-decision.md`](audit/2026-10-28-raw-state-observation-decision.md).
 
 Action space is binary `{idle, jump}`. The default control cadence is
@@ -114,10 +118,10 @@ The game's training reset supports three useful forms:
    force-starts the run; there is no idle state or forced first jump.
 3. **Grounded state snapshot** — an optional `state` dictionary with position,
    velocity, state name, `run_time`, `best_run_time`, `run_active`, and
-   `started_walking`. The game supports this for grounded, powerup-free states;
-   jump states, powerup stacks, and dissolve timers are not supported. This is
-   the preferred form for mid-route DQN/PPO checkpoints because the run clock is
-   preserved.
+   `started_walking`. Grounded starts can also restore held powerups and the
+   dynamic `world_state` snapshot (powerups, dissolve/moving/reset objects).
+   Mid-jump start states remain unsupported. This is the preferred form for
+   mid-route DQN/PPO checkpoints because the run clock is preserved.
 
 The clean-start target extends this contract to one flat reset dict: the
 physical fields and source-checkpoint `run_time` are top-level, and the general

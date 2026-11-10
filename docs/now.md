@@ -1,9 +1,12 @@
 # Now
 
-**Updated:** 2026-10-30
-**Repo:** branch `neat` @ `2e68348`; run `make brief` for live status.
-**Game:** `../dragon-jump-remaster` branch `prepare-for-expo` @ `50dcc66`;
-run `make brief` for live status.
+**Updated:** 2026-10-31
+**Repo:** branch `neat` @ `fc747ea` (dirty: untracked
+`tools/export_student_json.py`); run `make brief` for live status.
+**Game:** `../dragon-jump-remaster` branch `prepare-for-expo` @ `229422d`
+(working tree: exported `student_lean_stick_512.json`, new golden fixture, and
+an untracked `student_lean_stick_512_baseline.json`; run `make brief` for live
+status).
 
 > This is the current-state page. [`status.md`](status.md) is the chronological
 > log and contains historical sections that may contradict this page.
@@ -23,14 +26,33 @@ runs/distill_campaign_student/students/cand_verified_onehot957_512_false_ddqn2_w
 finish 16/16; strict 12/16; sum 82.4833 s
 ```
 
-The four strict misses are 1-3 (+1.9666), 1-8 (+0.0333), 1-12 (+0.0500), and
-1-14 (+1.2500). 1-14 is evaluated with `reassert_held_jump=false`; the other
-levels use true semantics. The 1-8 and 1-12 misses are one action-repeat frame.
+A 1-3 DAgger repair (`0134`) now improves the shared student to **13/16 strict
+and 80.2833 s**, still 16/16 finish:
 
-The game runtime still only accepts legacy 58 or multi-hot dense JSON models,
-so this checkpoint is **not yet a drop-in game artifact**. The bundled
-`student_obs58_256.json` remains the production fallback (16/16, 78.583 s sum)
-until a `lean_stick` one-hot runtime or multi-hot distillation pass lands. See
+```text
+runs/distill_campaign_student/students/cand_dagger_1_3_13of16/student.pt
+1-3 5.2333 -> 3.2667; 1-14 8.1833 -> 7.4500
+remaining strict misses: 1-8 (+0.5166), 1-12 (+0.0500), 1-14 (+0.5167)
+```
+
+The repair is exported to the game working tree as
+`student_lean_stick_512.json`; the previous export is retained as
+`student_lean_stick_512_baseline.json`. It is not committed and has not passed
+the in-game all-16/powerup gate. The four baseline strict misses were 1-3
+(+1.9666), 1-8 (+0.0333), 1-12 (+0.0500), and 1-14 (+1.2500). 1-14 is evaluated
+with `reassert_held_jump=false`; the other levels use true semantics. The 1-8
+and 1-12 baseline misses were one action-repeat frame.
+
+The selected student is now exported to the **game working tree** as
+`student_lean_stick_512.json`, using the uncommitted spec v7 `lean_stick` +
+one-hot runtime. It is **not committed or gated**; the committed fallback is
+still `student_obs58_256.json` (16/16, 78.583 s sum). In-game review found two
+follow-ups: jump holds stay on too long (mostly teacher style; residual late
+releases on 1-14/1-16) and mid-air powerups are under-taught (a held jump
+auto-casts at Fall entry; there are only 1-2 deliberate cast examples per late
+level). See
+[`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md)
+and
 [`../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md`](../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md).
 
 - The 1-1..1-4 chain is the selected `0073` 1.555M model, not four independent
@@ -64,17 +86,19 @@ until a `lean_stick` one-hot runtime or multi-hot distillation pass lands. See
 
 ## Next 3
 
-1. **Decide the shipping path for the selected student.** Either add a
-   `lean_stick` + fitted one-hot spec to the game `MLPPolicy`, or distill this
-   candidate into a `multi_hot`/legacy student that the existing JSON runtime
-   accepts. Do not overwrite the bundled 58-value model before that gate passes.
-2. **Do not retrain for canonical coverage right now.** The current candidate is
-   16/16 finish. The remaining work is timing: 1-3 and 1-14 are material; 1-8
-   and 1-12 are one frame. Treat strict timing as the next quality pass.
-3. **Keep the 7x7 encoder deferred.** It did not improve the canonical set
-   (1-9/1-10/1-11 failures) and would require a new game-side convolution
-   runtime. Revisit only if the flat model plateaus or strict 1-3 becomes the
-   primary objective.
+1. **Trace the exported student in game vs Python** on 1-8, 1-12, 1-14, plus
+   the 1-9/1-10/1-16 canaries. Compare per-decision actions, release/cast
+   timestamps, and the first-action offset. Settle the
+   `_first_action_pending` one-decision hypothesis before touching the model.
+2. **Add temporal features and powerup demonstrations in one retrain.** Add
+   `hold_age`, `fall_age`/`air_age`, and `last_action` (optionally
+   `time_since_powerup`), plus targeted mid-air cast examples from the
+   heuristic/scripted states. Keep `action_repeat=4` for this pass; do not
+   change it without a separate experiment.
+3. **Keep canonical 16/16 as the regression gate.** Do not overwrite the
+   committed 58-value fallback or claim the new model is shipped until the
+   working-tree runtime is committed and the all-16 in-game + powerup gates
+   pass. Keep the 7x7 encoder deferred.
 
 ## Active traps
 
@@ -95,6 +119,10 @@ changing these areas. Resolved issues stay there for history.
 - **1-10 fast-route and coverage states conflict** (high): the 4.70 s route
   covers 20/25; the 5.37 s coverage expert covers 22/25.
 - **Checkpoint selection is manual and finals regress** (high).
+- **Student holds jump too long and powerups are under-taught** (high): long
+  holds are teacher style; held jump auto-casts at Fall entry. Read
+  [`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md)
+  before changing `action_repeat`, the action space, or the export.
 - **Canonical eval is one deterministic trace** (medium): it is not a
   robustness measure.
 - **NEAT fitness does not rank fast finishers first** (medium).
@@ -117,6 +145,7 @@ changing these areas. Resolved issues stay there for history.
 |---|---|
 | Current state | this page |
 | Selected expert and gate | [`reference/level-ledger.md`](reference/level-ledger.md) |
+| Student hold/powerup follow-up | [`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md) |
 | Full new-level procedure | [`runbooks/new-level.md`](runbooks/new-level.md) |
 | Architecture | [`architecture.md`](architecture.md) |
 | Traps and drift | [`known-issues.md`](known-issues.md) |

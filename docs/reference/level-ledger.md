@@ -11,6 +11,12 @@ The gate column is the provisional `par + 0.30 s` unless a level has an
 explicit user target. A selected time above that number is not silently a
 failure; the status column records the exception.
 
+> **Shared-student follow-up (2026-10-31):** the 16/16 distilled student is
+> exported to the game working tree but is not committed or gated. Its open
+> hold-timing and mid-air powerup issues are tracked in
+> [`../audit/2026-10-31-student-hold-and-powerups.md`](../audit/2026-10-31-student-hold-and-powerups.md).
+> Those issues do not change the per-level expert selections below.
+
 | Level | Par / +0.30 | Route source | Selected model | Canonical | Accepted coverage | Status |
 |---|---:|---|---|---:|---|---|
 | 1-1 | 2.2944 / 2.5944 | 1-1 NEAT lineage | `0073` 1.555M chain | **1.5667** | 12/12 train, 8/8 holdout | selected chain member |

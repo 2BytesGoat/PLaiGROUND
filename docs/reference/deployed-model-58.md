@@ -8,10 +8,14 @@ Runtime artifact: `godot/src/resources/ai/student_obs58_256.json`
 > [`../index.md`](../index.md) · Run artifacts:
 > [`run-artifacts.md`](run-artifacts.md).
 
-> **Still the production model.** A new shared `lean_stick`/one-hot candidate
-> now finishes 16/16 canonical levels, but it is Python-side only and requires a
-> game runtime change or a multi-hot/legacy distillation pass. Do not replace
-> this JSON model until that gate passes. See
+> **Still the committed production model.** A new shared `lean_stick`/one-hot
+> candidate finishes 16/16 canonical levels. As of 2026-10-31 the game working
+> tree has an uncommitted spec v7 `lean_stick` runtime and an exported
+> `student_lean_stick_512.json`, but it is not committed or gated. Do not
+> replace this JSON model until the all-16 in-game gate and the powerup gate
+> pass. The open hold/powerup follow-ups are in
+> [`../audit/2026-10-31-student-hold-and-powerups.md`](../audit/2026-10-31-student-hold-and-powerups.md).
+> See also
 > [`../../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md`](../../experiments/0130_distill_campaign_student/SHIPPING_CANDIDATE.md).
 
 This is the model currently used by `WATCH AI` and campaign AI in Dragon Jump.

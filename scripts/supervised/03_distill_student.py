@@ -225,6 +225,36 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional compatible student.pt to fine-tune from.",
     )
+    parser.add_argument(
+        "--freeze-trunk",
+        action="store_true",
+        help=(
+            "Freeze every layer except the final linear layer. Useful for a "
+            "small behavior repair that must not shift shared features."
+        ),
+    )
+    parser.add_argument(
+        "--anchor-student",
+        type=Path,
+        default=None,
+        help="Optional student.pt used as a KL anchor during fine-tuning.",
+    )
+    parser.add_argument(
+        "--anchor-weight",
+        type=float,
+        default=1.0,
+        help="Weight of the anchor KL term (default 1.0).",
+    )
+    parser.add_argument(
+        "--anchor-skip-level",
+        action="append",
+        default=[],
+        metavar="LEVEL",
+        help=(
+            "Do not anchor samples from this level, e.g. --anchor-skip-level "
+            "1-3. May be repeated."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -267,6 +297,44 @@ def main() -> int:
                 )
         model.load_state_dict(source["state_dict"])
         print(f"[init] fine-tuning from {args.init_student}")
+
+    if args.freeze_trunk:
+        if hasattr(model, "net"):
+            final_layer = model.net[-1]
+        elif hasattr(model, "head"):
+            final_layer = model.head[-1]
+        else:
+            raise SystemExit("--freeze-trunk does not know this model layout")
+        trainable = {id(parameter) for parameter in final_layer.parameters()}
+        for parameter in model.parameters():
+            parameter.requires_grad = id(parameter) in trainable
+        print("[init] froze trunk; training the final layer only")
+
+    anchor_model = None
+    if args.anchor_student is not None:
+        anchor_source = torch.load(
+            args.anchor_student, map_location="cpu", weights_only=False
+        )
+        for key, expected in (
+            ("input_dim", input_dim),
+            ("hidden", hidden),
+            ("input_kind", args.input_kind),
+        ):
+            if anchor_source.get(key) != expected:
+                raise SystemExit(
+                    f"{args.anchor_student}: incompatible {key} "
+                    f"({anchor_source.get(key)!r} != {expected!r})"
+                )
+        anchor_model = StudentMLP(input_dim, hidden).to(args.device)
+        anchor_model.load_state_dict(anchor_source["state_dict"])
+        anchor_model.eval()
+        for parameter in anchor_model.parameters():
+            parameter.requires_grad = False
+        print(
+            f"[anchor] KL anchor from {args.anchor_student} "
+            f"weight={args.anchor_weight:g} "
+            f"skip={args.anchor_skip_level or 'none'}"
+        )
 
     action_counts = np.bincount(fit["actions"], minlength=2).astype(np.float64)
     class_weights = action_counts.sum() / (2.0 * np.maximum(action_counts, 1.0))
@@ -320,6 +388,12 @@ def main() -> int:
     sample_weight_tensor = torch.as_tensor(
         sample_weights, dtype=torch.float32, device=args.device
     )
+    anchor_skip_tensor = None
+    if anchor_model is not None and args.anchor_skip_level:
+        skip_mask = np.isin(fit["levels"], args.anchor_skip_level)
+        anchor_skip_tensor = torch.as_tensor(
+            skip_mask, dtype=torch.bool, device=args.device
+        )
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
@@ -348,6 +422,7 @@ def main() -> int:
     for epoch in range(1, args.epochs + 1):
         model.train()
         total_loss = 0.0
+        total_anchor = 0.0
         total = 0
         for batch_x, batch_y, batch_indices in fit_loader:
             batch_x = batch_x.to(args.device)
@@ -358,9 +433,30 @@ def main() -> int:
             per_sample = criterion(logits, batch_y)
             weights = sample_weight_tensor[batch_indices]
             loss = (per_sample * weights).mean()
+            anchor_value = 0.0
+            if anchor_model is not None:
+                with torch.no_grad():
+                    anchor_logits = anchor_model(batch_x)
+                anchor_kl = nn.functional.kl_div(
+                    nn.functional.log_softmax(logits, dim=1),
+                    nn.functional.softmax(anchor_logits, dim=1),
+                    reduction="none",
+                ).sum(dim=1)
+                if anchor_skip_tensor is not None:
+                    anchor_mask = ~anchor_skip_tensor[batch_indices]
+                    anchor_loss = (
+                        anchor_kl[anchor_mask].mean()
+                        if bool(anchor_mask.any())
+                        else anchor_kl.new_zeros(())
+                    )
+                else:
+                    anchor_loss = anchor_kl.mean()
+                loss = loss + args.anchor_weight * anchor_loss
+                anchor_value = float(anchor_loss.item())
             loss.backward()
             optimizer.step()
             total_loss += float(loss.item()) * len(batch_y)
+            total_anchor += anchor_value * len(batch_y)
             total += len(batch_y)
         model.eval()
         with torch.no_grad():
@@ -377,6 +473,7 @@ def main() -> int:
         row = {
             "epoch": epoch,
             "train_loss": total_loss / max(total, 1),
+            "anchor_loss": total_anchor / max(total, 1),
             "val_loss": validation_loss,
             "val_accuracy": validation_accuracy,
         }
@@ -392,9 +489,15 @@ def main() -> int:
         else:
             stale += 1
         if epoch == 1 or epoch % 10 == 0 or epoch == args.epochs:
+            anchor_text = (
+                f"anchor_loss={row['anchor_loss']:.4f} "
+                if anchor_model is not None
+                else ""
+            )
             print(
                 f"[epoch {epoch:03d}] train_loss={row['train_loss']:.4f} "
-                f"val_loss={row['val_loss']:.4f} val_acc={validation_accuracy:.4f}"
+                f"{anchor_text}val_loss={row['val_loss']:.4f} "
+                f"val_acc={validation_accuracy:.4f}"
             )
         if stale >= args.patience and epoch >= 50:
             print(f"[early-stop] no improvement for {args.patience} epochs")

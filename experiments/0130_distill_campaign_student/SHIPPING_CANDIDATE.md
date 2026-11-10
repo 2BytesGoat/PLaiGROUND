@@ -1,14 +1,23 @@
-# 0130 — shipping candidate (Python-side)
+# 0130 — shipping candidate
 
-Status: **16/16 canonical finish; 12/16 strict**  
+Status: **16/16 canonical finish; 12/16 strict; game working-tree export (ungated)**
 Selected: 2026-10-30  
 Campaign: [`README.md`](README.md)  
 Checkpoint: `runs/distill_campaign_student/students/cand_verified_onehot957_512_false_ddqn2_w11x2_s2/student.pt`
 Stable copy: `runs/distill_campaign_student/students/selected_shipping/student.pt`
 
 This is the first shared student in the campaign that finishes every canonical
-level. It is a Python-side `lean_stick` model, not yet a drop-in replacement for
-the game's bundled legacy/multi-hot JSON policy.
+level. On 2026-10-31 it was exported to the game working tree as
+`student_lean_stick_512.json` against an uncommitted spec v7 `lean_stick` +
+one-hot runtime. It is **not committed or gated**; the committed fallback is
+still the legacy 58-value JSON policy.
+
+In-game review found two follow-ups: jump holds stay on too long (mostly
+teacher style; residual late releases on 1-14/1-16) and mid-air powerups are
+under-taught (held jump auto-casts at Fall entry; very few deliberate cast
+examples). Read
+[`../../docs/audit/2026-10-31-student-hold-and-powerups.md`](../../docs/audit/2026-10-31-student-hold-and-powerups.md)
+before changing the action semantics, `action_repeat`, or the observation.
 
 ## Model
 

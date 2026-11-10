@@ -5,14 +5,16 @@
 > ledger. Use `now.md` and
 > [`reference/level-ledger.md`](reference/level-ledger.md) for decisions.
 
-**Updated:** 2026-10-30
+**Updated:** 2026-10-31
 **Branch:** `neat`
-**HEAD:** `2e68348` — `enough for the day`
-**Working tree:** clean at `2e68348` before the 2026-10-30 docs/tooling pass;
-that pass adds `docs/now.md`, the `brief`/`search` tools, and doc pointers.
+**HEAD:** `fc747ea` — `fast forward, no perfect experts`
+**Working tree:** dirty at `fc747ea`: untracked `tools/export_student_json.py`;
+the game working tree and the student export are described below.
 **Game source:** `../dragon-jump-remaster` (`prepare-for-expo`, HEAD `50dcc66`
-`add tool to generate steam auth`, clean tree; the training/observation code is
-unchanged since the `fe7821d` commit recorded by the active manifests. The raw/
+`add tool to generate steam auth`, **dirty 7 files**: uncommitted spec v7
+`lean_stick` runtime, `student_lean_stick_512.json`, and tests); apart from
+those runtime/export changes, the training/observation code is unchanged since
+the `fe7821d` commit recorded by the active manifests. The raw/
 lean observation, force-start, reward, terminal-death, clean-start world-state,
 and the 2026-10-29 hold-aware contract (`legacy_stick` 61-value observation plus
 encoding-aware `reassert_held_jump`) are committed. World-state/powerup restore
@@ -409,8 +411,8 @@ not only a start-coverage problem. Keep the 1.705M 4.5667 model as the
 canonical reference and the 1.815M model as the any-start teacher. The next
 speed options are a proper 2-frame attempt or a faster clean NEAT route; do not
 re-use the non-reproducible 3.3/4.07 replays as deterministic targets. See
-[`../audit/2026-10-29-1-6-ddqn-investigation.md`](../audit/2026-10-29-1-6-ddqn-investigation.md),
-[`../audit/2026-10-29-run-reliability.md`](../audit/2026-10-29-run-reliability.md),
+[`audit/2026-10-29-1-6-ddqn-investigation.md`](audit/2026-10-29-1-6-ddqn-investigation.md),
+[`audit/2026-10-29-run-reliability.md`](audit/2026-10-29-run-reliability.md),
 and
 [`../experiments/0097_ddqn_1_6_feasible_starts/README.md`](../experiments/0097_ddqn_1_6_feasible_starts/README.md).
 
@@ -1315,6 +1317,33 @@ fallback until a `lean_stick` one-hot runtime or multi-hot distillation pass is
 completed. The 7x7 encoder diagnostic was negative (holdout 96.79% vs flat
 96.89%, with 1-9/1-10/1-11 failures) and is deferred.
 
+### Student hold/powerup follow-up (2026-10-31)
+
+The selected student is now exported to the **game working tree** as
+`student_lean_stick_512.json` against an uncommitted spec v7 `lean_stick` +
+one-hot runtime. It is not committed or gated; the committed fallback remains
+`student_obs58_256.json`.
+
+In-game review flagged two behaviours: the policy holds jump longer than
+expected, and it does not appear to use powerups deliberately in mid-air. The
+data says the long hold is mostly teacher style (43-decision `1` runs on 1-10,
+26 on 1-7, 18 on 1-4; held-jump reassert chains wall jumps). The student matches
+canonical teacher actions on 9/16 paths; its residual release/press errors are
+3/115 and 6/116, concentrated on 1-14 (the edge-triggered strict outlier) and
+1-16.
+
+Powerup use is a real data gap. `FallState` casts whenever `wants_to_jump` is
+true while falling, so a held jump auto-casts at Fall entry. Cast examples are
+zero in 1-1..1-7, 36 in 1-8, 6 in 1-9, 23 in 1-10, and only 1-2 per level in
+1-11..1-16; there is almost no deliberate "release, wait, press at fall height"
+example. `action_repeat=4` is a timing quantum, not the root cause.
+
+Plan: trace game vs Python first (1-3/1-9/1-10/1-14/1-16), then add temporal
+scalars (`hold_age`, `fall_age`, `last_action`) and targeted powerup
+demonstrations in one retrain, keeping `action_repeat=4`. A separate experiment
+can test action repeat only if the trace implicates it. See
+[`audit/2026-10-31-student-hold-and-powerups.md`](audit/2026-10-31-student-hold-and-powerups.md).
+
 ## Known issues
 
 See [`known-issues.md`](known-issues.md) for the living list. The highest-impact
@@ -1323,3 +1352,43 @@ clock drift, the all-or-nothing extraction, and the checkpoint-vs-route holdout
 ambiguity. The old per-spawn evaluation cost and the separate DQN
 evaluator/patience surface are resolved; evaluation is now
 `tools/evaluate.py`.
+
+## 1-3 DAgger repair (0134, 2026-10-31)
+
+The 1-3 strict miss was a route divergence, not a capacity problem: the shared
+student matched 93.8% of teacher actions but took 77 decisions instead of 49.
+One DAgger round with the `0073` 1.555M expert (8 agents, `epsilon=0.1`, 698
+transitions), followed by a 15-epoch fine-tune at LR `3e-5` with `1-3=2`,
+fixed it exactly.
+
+```text
+baseline:   12/16 strict, 82.4833 s
+candidate:  13/16 strict, 80.2833 s
+1-3:        5.2333 -> 3.2667
+1-14:       8.1833 -> 7.4500
+remaining:  1-8 4.9833, 1-12 6.0167, 1-14 7.4500
+```
+
+Candidate:
+`runs/distill_campaign_student/students/cand_dagger_1_3_13of16/student.pt`.
+It is exported to the game working tree as `student_lean_stick_512.json`
+(previous export retained as `student_lean_stick_512_baseline.json`) but is not
+committed and has not passed the in-game all-16/powerup gate. The exporter
+verified encoder/forward parity and the game `test_mlp_policy.gd` suite passes
+8/8. See
+[`../experiments/0134_dagger_1_3_student_repair/README.md`](../experiments/0134_dagger_1_3_student_repair/README.md).
+
+Negative follow-ups in the same session:
+
+- `0133` 1-14 canonical DDQN warm start: every checkpoint timed out or died.
+  The student's logits are not calibrated Q-values, so the Q-head copy is not
+  behavior-preserving.
+- Stronger 1-8 weighting and a frozen-trunk head-only fine-tune did not recover
+  the original 1-8 time; the regression is in the shared trunk.
+- A combined 1-3/1-12/1-14 anchored fine-tune fixed 1-3 but timed out on 1-14
+  and killed 1-16; discarded.
+- A one-frame 1-12 anchored fine-tune did not move 1-12.
+
+`scripts/supervised/03_distill_student.py` gained opt-in `--freeze-trunk`,
+`--anchor-student`, `--anchor-weight`, and `--anchor-skip-level` flags for these
+repairs. Defaults are unchanged.

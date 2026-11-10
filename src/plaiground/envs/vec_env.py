@@ -45,6 +45,7 @@ class MultiAgentGodotVecEnv(VecEnv):
         show_window: bool = False,
         profile_training: bool = False,
         training_no_cosmetics: bool = False,
+        training_lightweight: bool | None = None,
         spawn_pool: Optional[list[dict]] = None,
         spawn_seed: int = 0,
         preprocessor: Any | None = None,
@@ -80,6 +81,10 @@ class MultiAgentGodotVecEnv(VecEnv):
             extra_env_kwargs["profile_training"] = "true"
         if training_no_cosmetics:
             extra_env_kwargs["training_no_cosmetics"] = "true"
+        if training_lightweight is not None:
+            extra_env_kwargs["training_lightweight"] = (
+                "true" if training_lightweight else "false"
+            )
         if reassert_held_jump:
             extra_env_kwargs["reassert_held_jump"] = "true"
         self._envs: list[GodotEnv] = []
