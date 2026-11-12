@@ -14,11 +14,11 @@
     "index": "docs/index.md",
     "languages": [
         {
-            "files": 170,
+            "files": 175,
             "language": "markdown"
         },
         {
-            "files": 153,
+            "files": 158,
             "language": "python"
         },
         {
@@ -35,11 +35,14 @@
         ".py"
     ],
     "source_root": "src/plaiground",
+    "source_roots": [
+        "src/plaiground"
+    ],
     "status": "docs/status.md",
     "test_dirs": [
         "tests"
     ],
-    "total_files": 493
+    "total_files": 505
 },
   "judgments": {
     "decisions": "",

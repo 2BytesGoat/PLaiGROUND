@@ -1,0 +1,999 @@
+{
+  "about": "Written by repo-brief. `detected` is rewritten by every scan. `folders` and `choices` are yours, and a scan keeps them: `repo-brief tools --set ID GROUP`.",
+  "choices": {},
+  "detected": [
+    {
+      "args": [
+        "--dir",
+        "--glob",
+        "--include-runs",
+        "--files-only",
+        "--all",
+        "--max-matches",
+        "--max-per-file",
+        "--max-files",
+        "--max-bytes",
+        "-i",
+        "--ignore-case",
+        "-F",
+        "--fixed-strings",
+        "--json"
+      ],
+      "evidence": [
+        "reads only"
+      ],
+      "group": "inspect",
+      "guess": "inspect",
+      "id": "script:tools/search.py",
+      "kind": "script",
+      "name": "search",
+      "path": "tools/search.py",
+      "summary": "Bounded text search for agents and humans."
+    },
+    {
+      "args": [
+        "--level",
+        "--group-by",
+        "--canonical-only",
+        "--min-episodes"
+      ],
+      "evidence": [
+        "reads only"
+      ],
+      "group": "inspect",
+      "guess": "inspect",
+      "id": "script:tools/summarize_episodes.py",
+      "kind": "script",
+      "name": "summarize_episodes",
+      "path": "tools/summarize_episodes.py",
+      "summary": "Report training episodes by start source, with a canonical-only mode."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (open('w'), in src/plaiground/envs/godot.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/baselines/00_random.py",
+      "kind": "script",
+      "name": "00_random",
+      "path": "scripts/baselines/00_random.py",
+      "summary": "Run the random-action smoke baseline."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (open('w'), in src/plaiground/envs/godot.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/baselines/01_heuristic.py",
+      "kind": "script",
+      "name": "01_heuristic",
+      "path": "scripts/baselines/01_heuristic.py",
+      "summary": "Run the course-era if/else heuristic baseline."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (mkdir, in src/plaiground/algorithms/genetic/neat/trainer.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/genetic/01_neat.py",
+      "kind": "script",
+      "name": "01_neat",
+      "path": "scripts/genetic/01_neat.py",
+      "summary": "Train, evaluate, or play a NEAT genome."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs a command (subprocess, in src/plaiground/algorithms/genetic/neat/all_levels.py)",
+        "writes files (mkdir, in src/plaiground/algorithms/genetic/neat/all_levels.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/genetic/02_neat_all_levels.py",
+      "kind": "script",
+      "name": "02_neat_all_levels",
+      "path": "scripts/genetic/02_neat_all_levels.py",
+      "summary": "Train one independent NEAT population per campaign level."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "writes files (mkdir, in src/plaiground/algorithms/genetic/neat/lineage.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/genetic/03_neat_lineage.py",
+      "kind": "script",
+      "name": "03_neat_lineage",
+      "path": "scripts/genetic/03_neat_lineage.py",
+      "summary": "Carry one NEAT population through campaign levels in order."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/algorithms/reinforcement/ppo.py)",
+        "writes files (mkdir, in src/plaiground/envs/factory.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/reinforcement/01_ppo.py",
+      "kind": "script",
+      "name": "01_ppo",
+      "path": "scripts/reinforcement/01_ppo.py",
+      "summary": "Train or evaluate a PPO policy."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/algorithms/reinforcement/dqn.py)",
+        "writes files (mkdir, in src/plaiground/envs/factory.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/reinforcement/02_dqn.py",
+      "kind": "script",
+      "name": "02_dqn",
+      "path": "scripts/reinforcement/02_dqn.py",
+      "summary": "Extract, train, or evaluate the route-spawn DQN."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/algorithms/reinforcement/ddqn.py)",
+        "writes files (mkdir, in src/plaiground/experiments/runner.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/reinforcement/03_ddqn.py",
+      "kind": "script",
+      "name": "03_ddqn",
+      "path": "scripts/reinforcement/03_ddqn.py",
+      "summary": "Train a Double DQN policy from an experiment manifest."
+    },
+    {
+      "args": [
+        "--data-dir",
+        "--output-dir",
+        "--input-kind",
+        "--hidden",
+        "--epochs",
+        "--batch-size",
+        "--learning-rate",
+        "--weight-decay",
+        "--patience",
+        "--seed",
+        "--device",
+        "--no-level-balance",
+        "--level-weight",
+        "--init-student",
+        "--freeze-trunk",
+        "--anchor-student",
+        "--anchor-weight",
+        "--anchor-skip-level"
+      ],
+      "evidence": [
+        "uses a training library (torch)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:scripts/supervised/03_distill_student.py",
+      "kind": "script",
+      "name": "03_distill_student",
+      "path": "scripts/supervised/03_distill_student.py",
+      "summary": "Train one level-agnostic student from captured teacher rollouts."
+    },
+    {
+      "args": [
+        "--agents-per-process",
+        "--processes",
+        "--level",
+        "--steps-per-agent",
+        "--repeat",
+        "--warmup",
+        "--max-decisions",
+        "--action-repeat",
+        "--speedup",
+        "--obs-encoding",
+        "--reward-profile",
+        "--profile",
+        "--no-cosmetics",
+        "--no-worker-cap",
+        "--seed",
+        "--action-seed",
+        "--base-port",
+        "--env-path",
+        "--output-dir",
+        "--dry-run"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/vec_env.py)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/benchmark_env_throughput.py",
+      "kind": "script",
+      "name": "benchmark_env_throughput",
+      "path": "tools/benchmark_env_throughput.py",
+      "summary": "Benchmark agents per Godot process and process scaling."
+    },
+    {
+      "args": [
+        "--level",
+        "--config",
+        "--population",
+        "--generations",
+        "--parallel",
+        "--speedup",
+        "--max-steps",
+        "--action-repeat",
+        "--seed",
+        "--output-dir",
+        "--dry-run"
+      ],
+      "evidence": [
+        "runs a command (subprocess)",
+        "writes files (open('w'))"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/benchmark_neat.py",
+      "kind": "script",
+      "name": "benchmark_neat",
+      "path": "tools/benchmark_neat.py",
+      "summary": "Benchmark NEAT throughput across parallelism and speedup settings."
+    },
+    {
+      "args": [
+        "--env-path",
+        "--start-model",
+        "--out",
+        "--timesteps",
+        "--agents-per-process",
+        "--processes",
+        "--n-steps",
+        "--batch-size",
+        "--epochs",
+        "--level",
+        "--speedup",
+        "--action-repeat",
+        "--base-port",
+        "--seed",
+        "--device",
+        "--no-worker-cap"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/benchmark_ppo_ab.py",
+      "kind": "script",
+      "name": "benchmark_ppo_ab",
+      "path": "tools/benchmark_ppo_ab.py",
+      "summary": "Run a fixed-length PPO continuation as a training-throughput A/B."
+    },
+    {
+      "args": [
+        "--run",
+        "--json"
+      ],
+      "evidence": [
+        "runs Godot"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/brief.py",
+      "kind": "script",
+      "name": "brief",
+      "path": "tools/brief.py",
+      "summary": "Print a compact, read-only brief of the repo or one run."
+    },
+    {
+      "args": [
+        "--config",
+        "--expert-data",
+        "--output",
+        "--max-replayed-run-time",
+        "--max-replay-gain"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/algorithms/reinforcement/replay.py)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/build_expert_buffer.py",
+      "kind": "script",
+      "name": "build_expert_buffer",
+      "path": "tools/build_expert_buffer.py",
+      "summary": "Build a fixed 1-4 expert replay buffer from successful NEAT routes."
+    },
+    {
+      "args": [
+        "--config",
+        "--expert-data",
+        "--start-pool",
+        "--output",
+        "--repeat",
+        "--suffix"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/algorithms/reinforcement/replay.py)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/build_start_expert_buffer.py",
+      "kind": "script",
+      "name": "build_start_expert_buffer",
+      "path": "tools/build_start_expert_buffer.py",
+      "summary": "Build a small expert buffer for the starts in a clean-start pool."
+    },
+    {
+      "args": [
+        "--filtered-dir",
+        "--archive-dir",
+        "--analysis",
+        "--output-dir",
+        "--level",
+        "--min-time-to-exit",
+        "--canonical-weight",
+        "--state-weight",
+        "--eval-pool-name"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (mkdir, in src/plaiground/data/start_pool.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/build_start_pool.py",
+      "kind": "script",
+      "name": "build_start_pool",
+      "path": "tools/build_start_pool.py",
+      "summary": "Build train/holdout clean-start pools and their eval union."
+    },
+    {
+      "args": [
+        "--level",
+        "--steps",
+        "--seed",
+        "--speedup",
+        "--port",
+        "--out"
+      ],
+      "evidence": [
+        "runs Godot",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/check_observation.py",
+      "kind": "script",
+      "name": "check_observation",
+      "path": "tools/check_observation.py",
+      "summary": "Smoke-check the raw local-state observation from Godot."
+    },
+    {
+      "args": [
+        "--level",
+        "--student",
+        "--teacher",
+        "--teacher-kind",
+        "--preprocessing",
+        "--output-dir",
+        "--agents",
+        "--epsilon",
+        "--split",
+        "--port",
+        "--teacher-port",
+        "--max-decisions",
+        "--action-repeat",
+        "--speedup",
+        "--timeout",
+        "--show",
+        "--no-reassert-held-jump",
+        "--teacher-reassert-held-jump"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_dagger.py",
+      "kind": "script",
+      "name": "collect_dagger",
+      "path": "tools/collect_dagger.py",
+      "summary": "Collect DAgger-style corrections around a distilled student."
+    },
+    {
+      "args": [
+        "--level",
+        "--model",
+        "--preprocessing",
+        "--output-dir",
+        "--episodes",
+        "--agents",
+        "--epsilon",
+        "--label-policy",
+        "--seed",
+        "--split",
+        "--port",
+        "--max-decisions",
+        "--action-repeat",
+        "--speedup",
+        "--timeout",
+        "--show",
+        "--no-reassert-held-jump"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_ddqn_paths.py",
+      "kind": "script",
+      "name": "collect_ddqn_paths",
+      "path": "tools/collect_ddqn_paths.py",
+      "summary": "Collect finish-validated rollouts from a DDQN policy for distillation."
+    },
+    {
+      "args": [
+        "--level",
+        "--model",
+        "--pool",
+        "--preprocessing",
+        "--output-dir",
+        "--max-decisions",
+        "--action-repeat",
+        "--speedup",
+        "--port",
+        "--timeout",
+        "--show",
+        "--no-reassert-held-jump"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_distill_data.py",
+      "kind": "script",
+      "name": "collect_distill_data",
+      "path": "tools/collect_distill_data.py",
+      "summary": "Collect teacher rollouts for the campaign distillation pass."
+    },
+    {
+      "args": [
+        "--config",
+        "--model",
+        "--transitions",
+        "--epsilon",
+        "--output",
+        "--device",
+        "--rare-buffer",
+        "--gap-quantile"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_dqn_buffer.py",
+      "kind": "script",
+      "name": "collect_dqn_buffer",
+      "path": "tools/collect_dqn_buffer.py",
+      "summary": "Collect and save a DQN replay buffer without training."
+    },
+    {
+      "args": [
+        "--config",
+        "--routes",
+        "--finishers",
+        "--output",
+        "--limit",
+        "--show"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/experiments/runner.py)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_expert_routes.py",
+      "kind": "script",
+      "name": "collect_expert_routes",
+      "path": "tools/collect_expert_routes.py",
+      "summary": "Replay successful NEAT routes in the current observation environment."
+    },
+    {
+      "args": [
+        "--level",
+        "--model",
+        "--preprocessing",
+        "--output-dir",
+        "--episodes",
+        "--epsilon",
+        "--seed",
+        "--split",
+        "--port",
+        "--replay-port",
+        "--max-decisions",
+        "--action-repeat",
+        "--speedup",
+        "--timeout",
+        "--show",
+        "--reassert-held-jump",
+        "--teacher-reassert-held-jump"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_noisy_teacher_paths.py",
+      "kind": "script",
+      "name": "collect_noisy_teacher_paths",
+      "path": "tools/collect_noisy_teacher_paths.py",
+      "summary": "Collect finish-validated noisy teacher rollouts for late-level distillation."
+    },
+    {
+      "args": [
+        "--level",
+        "--model",
+        "--preprocessing",
+        "--output-dir",
+        "--split",
+        "--port",
+        "--replay-port",
+        "--max-decisions",
+        "--action-repeat",
+        "--speedup",
+        "--timeout",
+        "--show",
+        "--reassert-held-jump",
+        "--teacher-reassert-held-jump"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/collect_teacher_paths.py",
+      "kind": "script",
+      "name": "collect_teacher_paths",
+      "path": "tools/collect_teacher_paths.py",
+      "summary": "Collect a canonical 58-input teacher path and its 191-input replay."
+    },
+    {
+      "args": [],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/evaluation/rollout.py)",
+        "writes files (mkdir, in src/plaiground/evaluation/rollout.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/evaluate.py",
+      "kind": "script",
+      "name": "evaluate",
+      "path": "tools/evaluate.py",
+      "summary": "Evaluate a saved PPO/DQN checkpoint from an experiment manifest."
+    },
+    {
+      "args": [
+        "--checkpoint",
+        "--level",
+        "--canonical",
+        "--holdout-pool",
+        "--output",
+        "--port",
+        "--action-repeat",
+        "--max-decisions",
+        "--speedup",
+        "--timeout",
+        "--show",
+        "--no-reassert-held-jump"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/evaluate_student.py",
+      "kind": "script",
+      "name": "evaluate_student",
+      "path": "tools/evaluate_student.py",
+      "summary": "Evaluate a distilled PyTorch student on canonical and held-out starts."
+    },
+    {
+      "args": [
+        "--checkpoint",
+        "--preprocessing",
+        "--output",
+        "--model-name",
+        "--action-repeat",
+        "--reassert-held-jump",
+        "--reassert-held-jump-false-level",
+        "--auto-start-run",
+        "--verify-samples",
+        "--verify-seed",
+        "--golden-data-dir",
+        "--golden-output"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/export_student_json.py",
+      "kind": "script",
+      "name": "export_student_json",
+      "path": "tools/export_student_json.py",
+      "summary": "Export a lean_stick one-hot student to the game's versioned JSON runtime."
+    },
+    {
+      "args": [
+        "--config",
+        "--routes",
+        "--finishers",
+        "--level-analysis",
+        "--min-time-to-exit",
+        "--output-dir"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/experiments/runner.py)",
+        "writes files (mkdir, in src/plaiground/data/route_starts.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/extract_route_starts.py",
+      "kind": "script",
+      "name": "extract_route_starts",
+      "path": "tools/extract_route_starts.py",
+      "summary": "Extract clean-start state pools from NEAT checkpoint snapshots."
+    },
+    {
+      "args": [
+        "--routes",
+        "--output-dir",
+        "--level",
+        "--jaccard",
+        "--max-per-cluster",
+        "--holdout-fraction",
+        "--seed"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (mkdir, in src/plaiground/data/route_filter.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/filter_routes.py",
+      "kind": "script",
+      "name": "filter_routes",
+      "path": "tools/filter_routes.py",
+      "summary": "CLI for post-processing clean NEAT routes."
+    },
+    {
+      "args": [
+        "--config",
+        "--student",
+        "--output",
+        "--device"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/init_ddqn_from_student.py",
+      "kind": "script",
+      "name": "init_ddqn_from_student",
+      "path": "tools/init_ddqn_from_student.py",
+      "summary": "Write a DDQN checkpoint initialized from a distilled student MLP."
+    },
+    {
+      "args": [
+        "--level",
+        "--run-dir",
+        "--generation",
+        "--analysis",
+        "--archive-dir",
+        "--output-root",
+        "--quality",
+        "--min-routes",
+        "--tag",
+        "--no-all-success",
+        "--jaccard",
+        "--max-per-cluster",
+        "--holdout-fraction",
+        "--seed",
+        "--canonical-weight",
+        "--state-weight",
+        "--min-time-to-exit",
+        "--json"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (mkdir, in src/plaiground/data/level_data.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/level.py",
+      "kind": "script",
+      "name": "level",
+      "path": "tools/level.py",
+      "summary": "Prepare and inspect one Dragon Jump level's expert pipeline."
+    },
+    {
+      "args": [
+        "--level",
+        "--strata",
+        "--clean-routes",
+        "--output",
+        "--prefix-count",
+        "--seed",
+        "--canonical-weight",
+        "--medium-weight",
+        "--hard-weight",
+        "--prefix-weight",
+        "--focus-cells",
+        "--focus-weight",
+        "--focus-seed"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/make_ppo_start_pool.py",
+      "kind": "script",
+      "name": "make_ppo_start_pool",
+      "path": "tools/make_ppo_start_pool.py",
+      "summary": "Build a weighted PPO start pool from level strata and clean NEAT routes."
+    },
+    {
+      "args": [
+        "--checkpoint",
+        "--routes",
+        "--output-prefix",
+        "--jaccard",
+        "--max-per-cluster",
+        "--seed",
+        "--speed-quota",
+        "--median-quota",
+        "--slow-quota",
+        "--exploration-quota"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/stable_baselines_wrapper.py)",
+        "writes files (mkdir, in src/plaiground/algorithms/genetic/neat/portfolio.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/rebalance_neat.py",
+      "kind": "script",
+      "name": "rebalance_neat",
+      "path": "tools/rebalance_neat.py",
+      "summary": "Rebalance a NEAT checkpoint around a portfolio of route/time representatives."
+    },
+    {
+      "args": [
+        "--experiment",
+        "--run-dir",
+        "--command"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch, in src/plaiground/experiments/runner.py)",
+        "writes files (mkdir, in src/plaiground/experiments/provenance.py)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/record_provenance.py",
+      "kind": "script",
+      "name": "record_provenance",
+      "path": "tools/record_provenance.py",
+      "summary": "Write code/game provenance metadata for an experiment run."
+    },
+    {
+      "args": [
+        "--checkpoint",
+        "--weights",
+        "--output-dir"
+      ],
+      "evidence": [
+        "uses a training library (torch)",
+        "writes files (mkdir)"
+      ],
+      "group": "dev",
+      "guess": "dev",
+      "id": "script:tools/soup_students.py",
+      "kind": "script",
+      "name": "soup_students",
+      "path": "tools/soup_students.py",
+      "summary": "Average compatible distilled-student checkpoints into one model soup."
+    },
+    {
+      "args": [
+        "--config",
+        "--model",
+        "--start-pool",
+        "--start-index",
+        "--tag",
+        "--output-dir",
+        "--device"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (torch)",
+        "writes files (mkdir)"
+      ],
+      "group": "debug",
+      "guess": "debug",
+      "id": "script:tools/diagnose_dqn.py",
+      "kind": "script",
+      "name": "diagnose_dqn",
+      "path": "tools/diagnose_dqn.py",
+      "summary": "Diagnose deterministic DQN rollouts with Q-value and action telemetry."
+    },
+    {
+      "args": [
+        "--config",
+        "--model",
+        "--start-pool",
+        "--start-index",
+        "--speedup",
+        "--headless",
+        "--episodes",
+        "--tag",
+        "--device",
+        "--verbose"
+      ],
+      "evidence": [
+        "runs Godot",
+        "uses a training library (stable_baselines3, in src/plaiground/envs/factory.py)",
+        "writes files (mkdir, in src/plaiground/envs/factory.py)"
+      ],
+      "group": "debug",
+      "guess": "debug",
+      "id": "script:tools/watch.py",
+      "kind": "script",
+      "name": "watch",
+      "path": "tools/watch.py",
+      "summary": "Preview a saved PPO or DQN checkpoint in the game window."
+    },
+    {
+      "args": [
+        "--level",
+        "--routes",
+        "--finishers",
+        "--expert-metadata",
+        "--output",
+        "--include-unclean"
+      ],
+      "evidence": [
+        "writes files (mkdir)"
+      ],
+      "group": "manual",
+      "guess": "manual",
+      "id": "script:tools/capture_neat_paths.py",
+      "kind": "script",
+      "name": "capture_neat_paths",
+      "path": "tools/capture_neat_paths.py",
+      "summary": "Capture clean NEAT routes and the selected expert's time on their starts."
+    },
+    {
+      "args": [
+        "--project",
+        "--out",
+        "--name",
+        "--godot",
+        "--force"
+      ],
+      "evidence": [
+        "writes files (shutil.rmtree)"
+      ],
+      "group": "manual",
+      "guess": "manual",
+      "id": "script:tools/make_godot_source_app.py",
+      "kind": "script",
+      "name": "make_godot_source_app",
+      "path": "tools/make_godot_source_app.py",
+      "summary": "Create a macOS ``.app`` shim that runs a Godot project from source."
+    },
+    {
+      "args": [
+        "--config",
+        "--genome",
+        "--population",
+        "--seed",
+        "--output-prefix"
+      ],
+      "evidence": [
+        "writes files (mkdir)"
+      ],
+      "group": "manual",
+      "guess": "manual",
+      "id": "script:tools/seed_neat_checkpoint.py",
+      "kind": "script",
+      "name": "seed_neat_checkpoint",
+      "path": "tools/seed_neat_checkpoint.py",
+      "summary": "Seed a NEAT population from one or more archived finisher genomes."
+    },
+    {
+      "args": [
+        "--level",
+        "--level-analysis",
+        "--coverage-dir",
+        "--output-dir",
+        "--medium-min",
+        "--medium-max"
+      ],
+      "evidence": [
+        "writes files (mkdir)"
+      ],
+      "group": "manual",
+      "guess": "manual",
+      "id": "script:tools/start_strata.py",
+      "kind": "script",
+      "name": "start_strata",
+      "path": "tools/start_strata.py",
+      "summary": "Stratify standable starts by shortest-path distance to the exit."
+    }
+  ],
+  "folders": [
+    "tools",
+    "scripts"
+  ]
+}
